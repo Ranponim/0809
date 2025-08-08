@@ -1,0 +1,200 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Implement Input Parser and Main Interface",
+        "description": "Create the main entry point function `analyze_cell_performance_with_llm` and implement the parser for all input arguments. This includes parsing the time range string and handling optional parameters with their default values.",
+        "details": "The time range parser must handle the 'yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm' format and raise a clear exception for invalid formats. The function should correctly process the request dictionary, setting defaults for `threshold`, `output_dir`, `backend_url`, `db`, `table`, and `columns` if not provided.",
+        "testStrategy": "Unit test the time range parser with valid, invalid, and edge-case strings. Test the main function's argument handling to ensure defaults are applied correctly and provided values override them.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Develop PostgreSQL Connection and Aggregation Module",
+        "description": "Implement the functionality to connect to PostgreSQL and execute aggregation queries. This module will fetch and average data for the n-1 and n periods based on the provided time ranges.",
+        "details": "Use `psycopg2` for the connection. Support DB credentials from both function arguments and environment variables (e.g., `DB_HOST`). The query must be parameterized to prevent SQL injection and should perform `GROUP BY cell_name` and `AVG(kpi_value)`. The function should return a pandas DataFrame for each period.",
+        "testStrategy": "Test the DB connection logic with correct and incorrect credentials. Mock the DB to test query construction. With a test DB, verify that the aggregation query correctly calculates averages for the specified time ranges.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement Data Processing and Analysis Logic",
+        "description": "Create a data processing pipeline that takes the two aggregated DataFrames (for n-1 and n), merges them, and calculates analytical columns.",
+        "details": "The pipeline will merge the data, pivot it to have 'N-1' and 'N' as columns, and then compute 'rate(%)' using `((N - N-1) / N-1) * 100`. It must handle cases where N-1 is 0. It will also add a boolean 'anomaly' column based on `abs(rate) >= threshold`.",
+        "testStrategy": "Unit test the calculation logic with various data scenarios: positive/negative changes, no change, zero values for N-1, and values that are exactly on the anomaly threshold.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Generate Overall Comparison Chart",
+        "description": "Create a function to generate a single comparison chart (e.g., bar chart) that visualizes the N-1 vs. N average values for all cells. The output must be a base64 encoded image string.",
+        "details": "Use `matplotlib` with the 'Agg' backend to ensure it can run in a headless environment. The chart should be clearly labeled. The function will take the processed DataFrame from task 3 as input.",
+        "testStrategy": "Generate a chart with sample data and verify that the output is a valid base64 string. Decode the string and visually inspect the image to ensure it accurately represents the input data.",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Construct Dynamic LLM Prompt",
+        "description": "Develop a function to generate the prompt for the LLM analysis. The prompt must include all necessary context, data, and instructions for the desired JSON output.",
+        "details": "The prompt must state the 'same environment' assumption, request an 'integrated cell-level analysis', include a formatted summary of the data table, and specify the exact required output JSON structure (`overall_summary`, `key_findings`, etc.).",
+        "testStrategy": "Unit test the prompt generation function. Verify that for a given input DataFrame, the prompt correctly includes all contextual text, the data table, and the JSON schema definition.",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement LLM Client with Failover and JSON Parsing",
+        "description": "Build a client to communicate with the vLLM API. It must support a list of endpoints and implement failover logic. It also needs to reliably extract the JSON object from the LLM's response.",
+        "details": "The client will target the 'Gemma-3-27B' model. If a request to an endpoint fails, it should automatically retry with the next endpoint in the list. The response parser must safely extract the JSON content, even if it's surrounded by explanatory text (e.g., from the first '{' to the last '}').",
+        "testStrategy": "Mock the API endpoint to test the failover mechanism. Test the JSON extractor with various response formats: clean JSON, JSON wrapped in text, and malformed responses.",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Develop HTML Report Generator",
+        "description": "Create a function to generate a static HTML report containing the complete analysis results.",
+        "details": "The report must include sections for the LLM's summary, findings, actions, cell details, and the embedded base64 comparison chart. The HTML should use a responsive layout and be compatible with standard Korean fonts.",
+        "testStrategy": "Generate a sample report and open it in a browser to verify that all sections are rendered correctly, the data is accurate, and the embedded chart is displayed properly.",
+        "priority": "medium",
+        "dependencies": [
+          4,
+          6
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement Backend POST Functionality",
+        "description": "Create a function to send the analysis results as a JSON payload to a specified backend URL via an HTTP POST request.",
+        "details": "The function must construct the JSON payload exactly as defined in the PRD. It should handle network errors (timeouts, connection errors) and non-2xx HTTP status codes gracefully, logging the failure without terminating the main analysis workflow.",
+        "testStrategy": "Use a mock HTTP server to test successful POSTs and various failure scenarios. Verify that the payload structure matches the specification and that failures are logged correctly.",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          6,
+          7
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Integrate Modules into Main Controller",
+        "description": "Orchestrate the entire workflow by integrating all previously developed modules (parsing, DB, processing, LLM, reporting, POST) into the main `analyze_cell_performance_with_llm` function.",
+        "details": "This task involves managing the data flow between components and implementing the top-level error handling. The function must return the final output dictionary in the format specified for the MCP tool interface.",
+        "testStrategy": "Perform end-to-end tests for the main success path. Also, test major failure scenarios (e.g., DB failure, LLM failure) to ensure the controller handles them robustly and returns the appropriate status and message.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          3,
+          6,
+          7,
+          8
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement Robust Logging",
+        "description": "Integrate structured logging throughout the application to record key events, errors, and debugging information.",
+        "details": "Use Python's standard `logging` module. Log informational messages for major steps (e.g., 'Fetching data for n-1', 'Calling LLM API'). Log errors with full stacktraces for any exceptions caught. Ensure sensitive data like passwords is not logged.",
+        "testStrategy": "Run the application through various success and failure paths. Review the log output to confirm that messages are clear, levels are appropriate, and no sensitive information is leaked.",
+        "priority": "medium",
+        "dependencies": [
+          9
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Ensure Code Quality and Add Documentation",
+        "description": "Review and refactor the entire codebase to ensure it adheres to PEP 8 standards, is well-documented, and is maintainable.",
+        "details": "Add docstrings to all modules and functions explaining their purpose, arguments, and return values. Add inline comments for complex or non-obvious logic. Use automated tools like `black` or `flake8` to enforce style.",
+        "testStrategy": "Run code formatting and linting tools across the project. Conduct a peer code review focusing on readability, maintainability, and the quality of documentation.",
+        "priority": "low",
+        "dependencies": [
+          10
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Optimize and Benchmark Database Query",
+        "description": "Analyze and optimize the database aggregation query to meet the performance requirement of handling large datasets within 5 seconds.",
+        "details": "This task requires ensuring that the `time` and `cell_name` columns in the `measurements` table are indexed. Use `EXPLAIN ANALYZE` to inspect the query plan and identify potential bottlenecks.",
+        "testStrategy": "Create a large test dataset (e.g., >1M rows) in a test PostgreSQL instance. Benchmark the execution time of the aggregation query to confirm it meets the performance target.",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Exception Handling Strategy",
+        "description": "Implement a robust exception handling strategy for external dependencies such as the database, LLM API, and backend POST endpoint.",
+        "details": "Wrap external calls in try-except blocks. For critical failures (like DB connection), the process should terminate with a clear error. For non-critical failures (like backend POST), the process should log the error and continue to produce the primary output (HTML report).",
+        "testStrategy": "Systematically test failure modes: invalid DB credentials, unreachable LLM endpoint, invalid backend URL. Verify that the application behaves as specified for each case, either failing gracefully or continuing with a logged warning.",
+        "priority": "high",
+        "dependencies": [
+          9
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Final Acceptance Testing",
+        "description": "Perform a final round of end-to-end testing against all specified Acceptance Criteria (AC) and test scenarios from the PRD.",
+        "details": "This involves executing the full workflow for each scenario listed in the PRD: normal case, no data for a period, DB connection failure, LLM API failure, and backend POST failure. The results will be validated against the expected outcomes.",
+        "testStrategy": "Execute the predefined test plan based on the PRD's AC and test scenarios. Document the results to confirm that all requirements have been met before final delivery.",
+        "priority": "high",
+        "dependencies": [
+          11,
+          12,
+          13
+        ],
+        "status": "done",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-08-08T16:22:51.535Z",
+      "updated": "2025-08-08T16:29:37.812Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

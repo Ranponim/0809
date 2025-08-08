@@ -1,0 +1,130 @@
+제목: Cell 성능 LLM 분석기 리팩토링 PRD (시간범위 입력 + PostgreSQL 집계 + 통합 분석 + HTML/백엔드 POST)
+
+요약
+- 기존: PEG별 JSON 입력 → 내부 LLM 분석 → PEG 단위 리포트
+- 변경: LLM/사용자 입력은 시간 범위(n-1, n). 주어진 시간 범위로 PostgreSQL에서 셀 단위 평균을 집계하고, 전체 PEG 데이터를 통합하여 셀 기준으로 종합 성능을 분석한다.
+- 가정: n-1과 n은 동일한 시험환경에서 수행되었다고 상정하여 분석한다.
+- 출력: HTML 리포트 생성 + FastAPI 백엔드로 JSON POST 전송. MCP 도구로 호출 가능.
+
+배경 및 목적
+- 운영 중인 네트워크에서 다양한 PEG 측정이 동일한 환경에서 반복 수행된다. PEG별이 아니라 셀 기준으로 전체 PEG 결과를 통합해 네트워크 전반의 성능 변화를 평가하는 것이 목표.
+- 리팩토링을 통해 분석 입력을 시간 범위로 단순화하고, DB에서 직접 집계하여 자동화·재현성을 향상.
+
+범위
+- 포함: 입력 파서(시간 범위), PostgreSQL 집계, 데이터 처리(변화율/이상치), LLM 프롬프트 생성(통합 분석), LLM 호출/페일오버, HTML 리포트 생성, 백엔드 POST(JSON), MCP 도구 인터페이스.
+- 제외: 백엔드 FastAPI 서버 구현 자체, 데이터 적재 파이프라인, 권한/계정 관리 UI.
+
+용어 정의
+- n-1, n: 비교 대상이 되는 두 기간. 입력 형식은 "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm".
+- anomaly: 변화율(|rate|)이 임계치(threshold) 이상인 경우 True.
+
+입력 사양
+- 필수
+  - n_minus_1: 문자열 (예: "2025-07-01_00:00~2025-07-01_23:59")
+  - n: 문자열 (예: "2025-07-02_00:00~2025-07-02_23:59")
+- 선택
+  - threshold: float, 기본 30.0 (변화율 임계치, %)
+  - output_dir: 문자열, 기본 ./analysis_output (HTML 출력 경로)
+  - backend_url: 문자열 (FastAPI POST URL)
+  - db: 객체 {host, port, user, password, dbname}
+  - table: 문자열, 기본 'measurements'
+  - columns: 객체 {time: 'ts', cell: 'cell_name', value: 'kpi_value'}
+
+데이터 소스 및 스키마
+- 데이터: PostgreSQL 테이블 `measurements`(기본)
+  - time(ts, TIMESTAMP/TIMESTAMPTZ)
+  - cell(cell_name, TEXT)
+  - value(kpi_value, NUMERIC/DOUBLE PRECISION)
+- 쿼리: 기간 내 row를 cell로 GROUP BY, 평균(AVG) 산출
+
+기능 요구사항
+1) 시간 범위 파싱
+  - "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm" 형식을 파싱해 (start_dt, end_dt) 반환.
+  - 유효성 오류 시 명확한 로그 및 예외 메시지 제공.
+
+2) DB 연결/조회
+  - psycopg2로 PostgreSQL 연결 (환경변수 fallback 지원: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
+  - 파라미터로 받은 테이블/컬럼명 사용
+  - 각 기간(n-1, n)에 대해 cell별 AVG(value) 집계
+  - 결과 DataFrame 스키마: [cell_name, avg_value, period]
+
+3) 데이터 처리/시각화
+  - n-1/n 병합 Pivot: index=cell_name, columns=period → ['N-1', 'N']
+  - rate(%) 계산: ((N - N-1) / N-1) * 100, N-1=0은 NaN 처리
+  - anomaly: abs(rate) >= threshold
+  - 전체 셀 N-1 vs N 비교 차트(단일 이미지) base64 생성
+
+4) LLM 프롬프트 생성(통합 분석)
+  - 프롬프트에 명시: “n-1과 n은 동일한 시험환경에서 수행되었다고 가정”
+  - PEG 단위가 아닌 “전체 PEG 통합 데이터로 셀 단위 종합 분석” 요청
+  - 입력 표(요약)를 포함하고, 다음 JSON 출력 요구
+    {
+      "overall_summary": "...",
+      "key_findings": ["..."],
+      "recommended_actions": ["..."],
+      "cells_with_significant_change": {"CELL": "설명"}
+    }
+
+5) LLM 호출/페일오버
+  - vLLM chat/completions API 사용, 모델 "Gemma-3-27B"
+  - 엔드포인트 리스트 순차 시도, 실패 시 다음 엔드포인트로 이동
+  - 응답 텍스트에서 JSON만 안전하게 추출 (첫 '{' ~ 마지막 '}')
+
+6) HTML 리포트 생성
+  - 섹션: 종합 요약, 핵심 관찰, 권장 조치, 셀 상세(있을 경우), 전체 비교 차트
+  - 반응형 그리드, 한글 폰트 호환, headless 렌더링(backend 환경) 고려
+
+7) 백엔드 POST 전송
+  - backend_url 제공 시 JSON payload POST
+  - payload 예:
+    {
+      "status": "success",
+      "n_minus_1": "...",
+      "n": "...",
+      "threshold": 30.0,
+      "analysis": {...},
+      "stats": [{"cell_name": "...", "N-1": 0, "N": 0, "rate(%)": 0.0, "anomaly": false}],
+      "chart_overall_base64": "...",
+      "report_path": "...",
+      "assumption_same_environment": true
+    }
+  - 실패 시에도 메인 분석은 계속 진행하고 로그 남김.
+
+8) MCP 도구 인터페이스
+  - 이름: analyze_cell_performance_with_llm
+  - 입력: 상단 입력 사양과 동일한 request dict
+  - 출력: {status, message, report_path, backend_response?, analysis, stats}
+
+비기능 요구사항
+- 로깅: 함수별 INFO/ERROR 로그 필수. 예외 시 stacktrace 기록. 민감정보(password)는 로그에 남기지 않음.
+- 코드 스타일: PEP 8 준수, 의미 있는 변수/함수명, 주요 로직에 주석.
+- 성능: 기간당 수십만 row 수준에서 5초 내 평균 집계 목표(환경에 따라 상이, 인덱스 전제).
+- 안정성: DB/LLM/백엔드 POST 실패에 대한 견고한 예외 처리.
+- 보안: DB 자격증명은 환경변수 또는 안전한 설정으로 주입.
+
+수용 기준(AC)
+1) n-1/n 시간 범위로 분석 요청 시 DB에서 평균 집계가 정상 수행된다.
+2) 처리 결과에 rate(%), anomaly가 정확히 계산된다.
+3) LLM 결과 JSON을 안정적으로 추출한다(비JSON 텍스트 포함 응답도 처리).
+4) HTML 리포트가 생성되고, 차트가 올바르게 표시된다.
+5) backend_url 제공 시 결과 JSON이 성공적으로 POST된다.
+6) 주요 오류 케이스에 대해 명확한 로그와 의미 있는 에러 메시지를 반환한다.
+
+테스트 시나리오(예)
+- 정상: 유효한 기간과 DB 설정으로 요청 → 성공 분석, HTML 생성, POST 성공
+- 데이터 없음: 특정 기간에 데이터가 없어 오류 메시지/경고 처리
+- DB 연결 실패: 잘못된 자격증명 → 연결 오류 반환
+- LLM 실패: 모든 엔드포인트 실패 → 연결 오류 반환
+- POST 실패: 500/타임아웃 → 분석 결과는 반환하되 POST 실패 로그
+
+의존성
+- pandas, matplotlib(Agg), psycopg2, requests, fastmcp
+
+마일스톤(개략)
+1) 입력 파서/DB 집계 구현
+2) 처리/시각화 구현
+3) 프롬프트/LLM 호출/페일오버
+4) HTML/POST 구현
+5) 통합 테스트 및 로깅 강화
+
+
