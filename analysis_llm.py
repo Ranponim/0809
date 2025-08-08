@@ -65,6 +65,7 @@ def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datet
     Returns:
         (start_dt, end_dt)
     """
+    # 사람이 읽는 시간 범위를 엄격한 포맷으로 변환해 하위 단계에서 일관되게 사용
     logging.info("parse_time_range() 호출: 입력 문자열 파싱 시작")
     try:
         start_str, end_str = range_text.split("~")
@@ -84,6 +85,7 @@ def get_db_connection(db: Dict[str, str]):
 
     db: {host, port, user, password, dbname}
     """
+    # 외부 DB 연결: 네트워크/권한/환경 변수 문제로 실패 가능성이 높으므로 상세 로그를 남긴다
     logging.info("get_db_connection() 호출: DB 연결 시도")
     try:
         conn = psycopg2.connect(
@@ -93,7 +95,8 @@ def get_db_connection(db: Dict[str, str]):
             password=db.get("password", os.getenv("DB_PASSWORD", "")),
             dbname=db.get("dbname", os.getenv("DB_NAME", "postgres")),
         )
-        logging.info("DB 연결 성공")
+        # 민감정보(password)는 로그에 남기지 않는다
+        logging.info("DB 연결 성공 (host=%s, dbname=%s)", db.get("host", "127.0.0.1"), db.get("dbname", "postgres"))
         return conn
     except Exception as e:
         logging.exception("DB 연결 실패: %s", e)
@@ -126,12 +129,18 @@ def fetch_cell_averages_for_period(
         GROUP BY {cell_col}
     """
     try:
+        # 동적 테이블/컬럼 구성이므로 실행 전에 구성값을 로그로 남겨 디버깅을 돕는다
+        logging.info(
+            "집계 SQL 실행: table=%s, time_col=%s, cell_col=%s, value_col=%s",
+            table, time_col, cell_col, value_col,
+        )
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(sql, (start_dt, end_dt))
             rows = cur.fetchall()
+        # 조회 결과를 DataFrame으로 변환 (비어있을 수 있음)
         df = pd.DataFrame(rows, columns=["cell_name", "avg_value"]) if rows else pd.DataFrame(columns=["cell_name", "avg_value"]) 
         df["period"] = period_label
-        logging.info("fetch_cell_averages_for_period() 건수: %d", len(df))
+        logging.info("fetch_cell_averages_for_period() 건수: %d (period=%s)", len(df), period_label)
         return df
     except Exception as e:
         logging.exception("기간별 평균 집계 쿼리 실패: %s", e)
@@ -147,15 +156,20 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame, threshold: fl
       - processed_df: [cell_name, 'N-1', 'N', 'rate(%)', 'anomaly']
       - charts: {'overall': base64_png}
     """
+    # 핵심 처리 단계: 병합 → 피벗 → 변화율/이상치 산출 → 차트 생성(Base64)
     logging.info("process_and_visualize() 호출: 데이터 병합 및 시각화 시작")
     try:
         all_df = pd.concat([n1_df, n_df], ignore_index=True)
+        logging.info("병합 데이터프레임 크기: %s행 x %s열", all_df.shape[0], all_df.shape[1])
         pivot = all_df.pivot(index="cell_name", columns="period", values="avg_value").fillna(0)
+        logging.info("피벗 결과 컬럼: %s", list(pivot.columns))
         if "N-1" not in pivot.columns or "N" not in pivot.columns:
             raise ValueError("N-1 또는 N 데이터가 부족합니다. 시간 범위 또는 원본 데이터를 확인하세요.")
         pivot["rate(%)"] = ((pivot["N"] - pivot["N-1"]) / pivot["N-1"].replace(0, float("nan"))) * 100
         pivot["anomaly"] = pivot["rate(%)"].abs() >= threshold
         processed_df = pivot.reset_index().round(2)
+        anomaly_count = int(processed_df["anomaly"].sum()) if not processed_df.empty else 0
+        logging.info("이상치 임계값: %.2f%%, 이상치 셀 수: %d", threshold, anomaly_count)
 
         # 차트: 모든 셀에 대해 N-1 vs N 비교 막대그래프 (단일 이미지)
         plt.figure(figsize=(10, 6))
@@ -168,11 +182,15 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame, threshold: fl
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        overall_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        png_bytes = buf.read()
+        overall_b64 = base64.b64encode(png_bytes).decode('utf-8')
         plt.close()
         charts = {"overall": overall_b64}
 
-        logging.info("process_and_visualize() 완료: processed_df=%d행, 차트 1개", len(processed_df))
+        logging.info(
+            "process_and_visualize() 완료: processed_df=%d행, 차트 1개 (PNG %d bytes)",
+            len(processed_df), len(png_bytes)
+        )
         return processed_df, charts
     except Exception as e:
         logging.exception("process_and_visualize() 실패: %s", e)
@@ -193,6 +211,7 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
         "cells_with_significant_change": {"CELL_A": "설명", ...}
       }
     """
+    # LLM 입력은 맥락/가정/출력 요구사항을 명확히 포함해야 일관된 답변을 유도할 수 있다
     logging.info("create_llm_analysis_prompt_overall() 호출: 프롬프트 생성 시작")
     data_preview = processed_df.to_string(index=False)
     prompt = f"""
@@ -229,6 +248,7 @@ def query_llm(prompt: str) -> dict:
     """내부 vLLM 서버로 분석 요청. 응답 본문에서 JSON만 추출.
     실패 시 다음 엔드포인트로 페일오버.
     """
+    # 장애 대비를 위해 복수 엔드포인트로 페일오버. 응답에서 JSON 블록만 추출
     logging.info("query_llm() 호출: vLLM 분석 요청 시작")
     endpoints = [
         'http://10.251.204.93:10000',
@@ -241,6 +261,7 @@ def query_llm(prompt: str) -> dict:
         "max_tokens": 4096,
     }
     json_payload = json.dumps(payload)
+    logging.info("LLM 요청 준비: endpoints=%d, prompt_length=%d", len(endpoints), len(prompt))
 
     for endpoint in endpoints:
         try:
@@ -284,7 +305,11 @@ def query_llm(prompt: str) -> dict:
                 continue
 
             analysis_result = json.loads(cleaned_json_str)
-            logging.info("LLM 분석 결과 수신 성공 (%s)", endpoint)
+            # 결과 구조를 빠르게 파악할 수 있도록 주요 키를 기록
+            logging.info(
+                "LLM 분석 결과 수신 성공 (%s): keys=%s",
+                endpoint, list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)
+            )
             return analysis_result
         except json.JSONDecodeError as e:
             logging.error("JSON 파싱 실패: %s", e)
@@ -299,6 +324,7 @@ def query_llm(prompt: str) -> dict:
 # --- HTML 리포트 생성 (통합 분석 전용) ---
 def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], output_dir: str) -> str:
     """통합 분석 리포트를 HTML로 생성합니다."""
+    # 3개 탭 구조(요약/상세/차트)로 시각적 가독성을 높인다
     logging.info("generate_multitab_html_report() 호출: HTML 생성 시작")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -319,6 +345,14 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
     detailed_html = "".join(detailed_parts)
 
     charts_html = ''.join([f'<div class="chart-item"><img src="data:image/png;base64,{b64_img}" alt="{label} Chart"></div>' for label, b64_img in charts.items()])
+
+    logging.info(
+        "리포트 구성요소: findings=%d, actions=%d, detailed_cells=%d, charts=%d",
+        len(llm_analysis.get('key_findings', [])),
+        len(llm_analysis.get('recommended_actions', [])),
+        len(detail_map),
+        len(charts),
+    )
 
     html_template = f"""
     <!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>Cell 종합 분석 리포트</title>
@@ -381,6 +415,7 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
 # --- 백엔드 POST ---
 def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optional[dict]:
     """분석 JSON 결과를 FastAPI 백엔드로 POST 전송합니다."""
+    # 네트워크 오류/타임아웃 대비. 상태코드/본문 파싱 결과를 기록해 원인 추적을 용이하게 함
     logging.info("post_results_to_backend() 호출: %s", url)
     try:
         resp = requests.post(url, json=payload, timeout=timeout)
@@ -425,9 +460,16 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         table = request.get('table', 'measurements')
         columns = request.get('columns', {"time": "ts", "cell": "cell_name", "value": "kpi_value"})
 
+        # 파라미터 요약 로그: 민감정보는 기록하지 않음
+        logging.info(
+            "요청 요약: threshold=%.2f, output_dir=%s, backend_url=%s, table=%s, columns=%s",
+            threshold, output_dir, bool(backend_url), table, columns
+        )
+
         # 시간 범위 파싱
         n1_start, n1_end = parse_time_range(n1_text)
         n_start, n_end = parse_time_range(n_text)
+        logging.info("시간 범위: N-1(%s~%s), N(%s~%s)", n1_start, n1_end, n_start, n_end)
 
         # DB 조회
         conn = get_db_connection(db)
@@ -438,15 +480,23 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             conn.close()
             logging.info("DB 연결 종료")
 
+        logging.info("집계 결과 크기: n-1=%d행, n=%d행", len(n1_df), len(n_df))
+        if len(n1_df) == 0 or len(n_df) == 0:
+            logging.warning("한쪽 기간 데이터가 비어있음: 분석 신뢰도가 낮아질 수 있음")
+
         # 처리 & 시각화
         processed_df, charts_base64 = process_and_visualize(n1_df, n_df, threshold)
+        logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
         # LLM 프롬프트 & 분석
         prompt = create_llm_analysis_prompt_overall(processed_df, n1_text, n_text)
+        logging.info("프롬프트 길이: %d자", len(prompt))
         llm_analysis = query_llm(prompt)
+        logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
 
         # HTML 리포트 작성
         report_path = generate_multitab_html_report(llm_analysis, charts_base64, output_dir)
+        logging.info("리포트 경로: %s", report_path)
 
         # 백엔드 POST payload 구성
         result_payload = {
@@ -460,10 +510,12 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             "report_path": report_path,
             "assumption_same_environment": True,
         }
+        logging.info("payload 준비 완료: stats_rows=%d", len(result_payload.get("stats", [])))
 
         backend_response = None
         if backend_url:
             backend_response = post_results_to_backend(backend_url, result_payload)
+            logging.info("백엔드 응답 타입: %s", type(backend_response))
 
         logging.info("=" * 20 + " Cell 성능 분석 로직 실행 종료 (성공) " + "=" * 20)
         return {
