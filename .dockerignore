@@ -1,0 +1,14 @@
+.git
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+node_modules/
+dist/
+build/
+.taskmaster/
+analysis_output_test/
+Dockerfile
+.dockerignore
+

@@ -18,6 +18,68 @@ python -m pip install -r requirements.txt
 ### 요구 사항
 - Python 3.10+
 - PostgreSQL 접근 권한 (읽기)
+  
+> 컨테이너 환경(권장 실행): Ubuntu 22.04, Python 3.12.4, uv 사전 설치, MCPO(dev deps) 사전 설치
+
+## Docker 환경 (Ubuntu 22.04 + Python 3.12.4)
+
+### 이미지 빌드
+```bash
+docker build -t mcpo-backend:py312-ubuntu22.04 .
+```
+
+### 실행 및 기본 검증
+```bash
+# 컨테이너 진입
+docker run --rm -it mcpo-backend:py312-ubuntu22.04 bash
+
+# Python/uv 확인
+python --version        # 3.12.4
+uv --version
+
+# 앱 경로 및 파일 확인
+ls -la /app/backend
+
+# MCPO(dev deps) 설치 확인
+cd /opt/mcpo
+uv run python -c "import sys; print(sys.version)"
+```
+
+### 컨테이너 내 주요 경로
+- 앱 소스: `/app/backend`
+- MCPO 리포지토리: `/opt/mcpo` (빌드 시 `uv sync --dev` 완료)
+
+### 프로젝트 의존성
+- 루트의 `requirements.txt`가 존재하면 빌드 과정에서 자동 설치됩니다.
+
+### (선택) 개발용 볼륨 마운트 실행
+코드 변경을 즉시 반영하려면(재빌드 없이) 현재 디렉토리를 마운트하여 실행하세요.
+
+```powershell
+docker run --rm -it -v ${PWD}:/app/backend mcpo-backend:py312-ubuntu22.04 bash
+```
+
+### Compose 사용
+```bash
+# 빌드 + 실행
+docker compose up -d --build
+
+# 셸 진입
+docker compose exec backend bash
+
+# 종료 및 정리
+docker compose down
+```
+
+### 이미지 이름
+- `mcpo-backend:py312-ubuntu22.04`
+
+### 문제 해결
+- Docker Desktop이 실행 중인지 확인하세요. 미실행 시 PowerShell에서 다음을 실행:
+  - `Start-Process -FilePath "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`
+- Windows에서 이미지 확인: `docker images | findstr mcpo-backend`
+- Compose 경고(`version is obsolete`)는 `docker-compose.yml`에서 `version` 키 제거로 해소했습니다.
+
 
 ## 구성
 ### 데이터베이스 설정
