@@ -84,7 +84,7 @@ docker compose down
 ## 구성
 ### 데이터베이스 설정
 - 기본 테이블: `measurements`
-- 기본 컬럼 매핑: `time`→`ts`, `cell`→`cell_name`, `value`→`kpi_value`
+- 기본 컬럼 매핑: `time`→`datetime`, `cell`→`cellid`, `value`→`value`
 - 환경변수 폴백: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 
 ## 사용 방법 (MCP 툴)
@@ -95,12 +95,11 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
 {
   "n_minus_1": "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm",
   "n": "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm",
-  "threshold": 30.0,
   "output_dir": "./analysis_output",
   "backend_url": "http://your-backend/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "measurements",
-  "columns": {"time": "ts", "cell": "cell_name", "value": "kpi_value"}
+  "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
 }
 ```
 
@@ -118,7 +117,7 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
     "cells_with_significant_change": {"CELL_NAME": "..."}
   },
   "stats": [
-    {"cell_name": "...", "N-1": 0.0, "N": 0.0, "rate(%)": 0.0, "anomaly": false}
+    {"cell_name": "...", "N-1": 0.0, "N": 0.0, "rate(%)": 0.0}
   ]
 }
 ```
