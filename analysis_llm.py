@@ -13,12 +13,11 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
 {
   "n_minus_1": "2025-07-01_00:00~2025-07-01_23:59",
   "n": "2025-07-02_00:00~2025-07-02_23:59",
-  "threshold": 30.0,
   "output_dir": "./analysis_output",
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "measurements",
-  "columns": {"time": "ts", "cell": "cell_name", "value": "kpi_value"}
+  "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
 }
 """
 
@@ -119,9 +118,9 @@ def fetch_cell_averages_for_period(
     반환 컬럼: [cell_name, period, avg_value]
     """
     logging.info("fetch_cell_averages_for_period() 호출: %s ~ %s, period=%s", start_dt, end_dt, period_label)
-    time_col = columns.get("time", "ts")
-    cell_col = columns.get("cell", "cell_name")
-    value_col = columns.get("value", "kpi_value")
+    time_col = columns.get("time", "datetime")
+    cell_col = columns.get("cell", "cellid")
+    value_col = columns.get("value", "value")
 
     sql = f"""
         SELECT {cell_col} AS cell_name, AVG({value_col}) AS avg_value
@@ -148,16 +147,16 @@ def fetch_cell_averages_for_period(
         raise
 
 
-# --- 처리: N-1/N 병합 + 변화율/이상치 산출 + 차트 생성 ---
-def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame, threshold: float) -> Tuple[pd.DataFrame, Dict[str, str]]:
+# --- 처리: N-1/N 병합 + 변화율/차트 생성 ---
+def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
-    두 기간의 집계 데이터를 병합해 변화율/이상치를 계산하고, 종합 비교 차트를 생성합니다.
+    두 기간의 집계 데이터를 병합해 변화율을 계산하고, 종합 비교 차트를 생성합니다.
 
     반환:
-      - processed_df: [cell_name, 'N-1', 'N', 'rate(%)', 'anomaly']
+      - processed_df: [cell_name, 'N-1', 'N', 'rate(%)']
       - charts: {'overall': base64_png}
     """
-    # 핵심 처리 단계: 병합 → 피벗 → 변화율/이상치 산출 → 차트 생성(Base64)
+    # 핵심 처리 단계: 병합 → 피벗 → 변화율 산출 → 차트 생성(Base64)
     logging.info("process_and_visualize() 호출: 데이터 병합 및 시각화 시작")
     try:
         all_df = pd.concat([n1_df, n_df], ignore_index=True)
@@ -167,10 +166,7 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame, threshold: fl
         if "N-1" not in pivot.columns or "N" not in pivot.columns:
             raise ValueError("N-1 또는 N 데이터가 부족합니다. 시간 범위 또는 원본 데이터를 확인하세요.")
         pivot["rate(%)"] = ((pivot["N"] - pivot["N-1"]) / pivot["N-1"].replace(0, float("nan"))) * 100
-        pivot["anomaly"] = pivot["rate(%)"].abs() >= threshold
         processed_df = pivot.reset_index().round(2)
-        anomaly_count = int(processed_df["anomaly"].sum()) if not processed_df.empty else 0
-        logging.info("이상치 임계값: %.2f%%, 이상치 셀 수: %d", threshold, anomaly_count)
 
         # 차트: 모든 셀에 대해 N-1 vs N 비교 막대그래프 (단일 이미지)
         plt.figure(figsize=(10, 6))
@@ -216,21 +212,27 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
     logging.info("create_llm_analysis_prompt_overall() 호출: 프롬프트 생성 시작")
     data_preview = processed_df.to_string(index=False)
     prompt = f"""
-당신은 3GPP 이동통신망 최적화 분야의 최고 전문가입니다. 다음 표는 전체 PEG 데이터를 통합하여 셀 단위로 집계한 결과이며, 두 기간은 동일한 시험환경에서 수행되었다고 가정합니다.
+당신은 3GPP 이동통신망 최적화를 전공한 MIT 박사급 전문가입니다. 다음 표는 전체 PEG 데이터를 통합하여 셀 단위로 집계한 결과이며, 두 기간은 동일한 시험환경에서 수행되었다고 가정합니다.
 
 [입력 데이터 개요]
 - 기간 n-1: {n1_range}
 - 기간 n: {n_range}
-- 컬럼 의미: cell_name, N-1, N, rate(%), anomaly(True=유의미 변화)
+- 표 컬럼: cell_name, N-1(평균 value), N(평균 value), rate(%)
+- 요약 테이블의 원본 스키마 예시: id(int), datetime(ts), value(double), version(text), family_name(text), cellid(text), peg_name(text), host(text), ne(text)
+  (평균은 value에 대해서만 산출됨)
 
 [데이터 표]
 {data_preview}
 
-[분석 요청]
-- 전체적인 네트워크 성능 경향을 요약하세요.
-- 유의미한 변화가 있는 셀을 중심으로, 변화의 방향과 잠재 원인을 설명하세요.
-- 동일 시험환경 가정 하에서 해석 시 주의사항을 언급하세요.
-- 즉시 수행 가능한 개선 조치와 추가 검증 제안을 제시하세요.
+[분석 지침]
+- 3GPP TS/TR 권고와 운용 관행에 근거하여 전문적으로 해석하세요. (예: TS 36.300/38.300, TR 36.902 등)
+- 변화율의 크기와 방향을 정량적으로 해석하고, 셀/PEG 특성, 주파수/대역폭, 스케줄링, 간섭, 핸드오버, 로드, 백홀 등 잠재 요인을 체계적으로 가정-검증 형태로 제시하세요.
+- 동일 환경 가정에서 성립하지 않을 수 있는 교란 요인(라우팅 변경, 소프트웨어 버전, 파라미터 롤백, 단말 믹스 변화 등)을 명시하세요.
+- 원인-영향 사슬을 간결하게 제시하고, 관찰 가능한 검증 로그/지표를 함께 제안하세요.
+
+[출력 요구]
+- 간결하지만 고신뢰 요약을 제공하고, 핵심 관찰과 즉시 실행 가능한 개선/추가 검증 액션을 분리해 주세요.
+- 출력은 반드시 아래 JSON 스키마를 정확히 따르세요.
 
 [출력 형식(JSON)]
 {{
@@ -703,12 +705,11 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
     요청 파라미터:
       - n_minus_1: "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm"
       - n: "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm"
-      - threshold: float (기본 30.0)
       - output_dir: str (기본 ./analysis_output)
       - backend_url: str (선택)
       - db: {host, port, user, password, dbname}
       - table: str (기본 'measurements')
-      - columns: {time: 'ts', cell: 'cell_name', value: 'kpi_value'}
+      - columns: {time: 'datetime', cell: 'cellid', value: 'value'}
     """
     logging.info("=" * 20 + " Cell 성능 분석 로직 실행 시작 " + "=" * 20)
     try:
@@ -718,18 +719,17 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         if not n1_text or not n_text:
             raise ValueError("'n_minus_1'와 'n' 시간 범위를 모두 제공해야 합니다.")
 
-        threshold = float(request.get('threshold', 30.0))
         output_dir = request.get('output_dir', os.path.abspath('./analysis_output'))
         backend_url = request.get('backend_url')
 
         db = request.get('db', {})
         table = request.get('table', 'measurements')
-        columns = request.get('columns', {"time": "ts", "cell": "cell_name", "value": "kpi_value"})
+        columns = request.get('columns', {"time": "datetime", "cell": "cellid", "value": "value"})
 
         # 파라미터 요약 로그: 민감정보는 기록하지 않음
         logging.info(
-            "요청 요약: threshold=%.2f, output_dir=%s, backend_url=%s, table=%s, columns=%s",
-            threshold, output_dir, bool(backend_url), table, columns
+            "요청 요약: output_dir=%s, backend_url=%s, table=%s, columns=%s",
+            output_dir, bool(backend_url), table, columns
         )
 
         # 시간 범위 파싱
@@ -751,7 +751,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             logging.warning("한쪽 기간 데이터가 비어있음: 분석 신뢰도가 낮아질 수 있음")
 
         # 처리 & 시각화
-        processed_df, charts_base64 = process_and_visualize(n1_df, n_df, threshold)
+        processed_df, charts_base64 = process_and_visualize(n1_df, n_df)
         logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
         # LLM 프롬프트 & 분석
@@ -769,7 +769,6 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             "status": "success",
             "n_minus_1": n1_text,
             "n": n_text,
-            "threshold": threshold,
             "analysis": llm_analysis,
             "stats": processed_df.to_dict(orient='records'),
             "chart_overall_base64": charts_base64.get("overall"),
