@@ -12,6 +12,7 @@ from fastapi import Body
 from dotenv import load_dotenv
 import logging
 import time
+import math
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -105,14 +106,43 @@ class AnalysisResultRecord(Base):
 
 Base.metadata.create_all(bind=engine)
 
+def _sanitize_for_json(value: Any) -> Any:
+    """JSON 직렬화 호환을 위해 NaN/Infinity 값을 None으로 정규화한다.
+    dict/list 등 중첩 구조를 재귀적으로 순회한다.
+    """
+    try:
+        if isinstance(value, float):
+            # 비유한수 값(NaN, +/-Infinity)은 JSON 표준 미준수 → None으로 교체
+            return value if math.isfinite(value) else None
+        if isinstance(value, dict):
+            return {k: _sanitize_for_json(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_sanitize_for_json(v) for v in value]
+        return value
+    except Exception:
+        # 예외 시 원본을 안전하게 반환 (로깅은 호출부에서 수행)
+        return value
+
 def _record_to_model(rec: AnalysisResultRecord) -> AnalysisResult:
+    # 저장된 JSON 문자열에 비표준 NaN 토큰이 포함되어 있어도 Python json.loads 는 파싱하나,
+    # 응답 직렬화 시 allow_nan=False 정책으로 인해 오류가 발생할 수 있으므로 정규화한다.
+    try:
+        raw_analysis = json.loads(rec.analysis_json or "{}")
+        raw_stats = json.loads(rec.stats_json or "[]")
+    except Exception as e:
+        logging.warning("레코드 JSON 로드 실패(id=%s): %s", rec.id, e)
+        raw_analysis, raw_stats = {}, []
+
+    safe_analysis = _sanitize_for_json(raw_analysis)
+    safe_stats = _sanitize_for_json(raw_stats)
+
     return AnalysisResult(
         id=rec.id,
         status=rec.status,
         n_minus_1=rec.n_minus_1,
         n=rec.n,
-        analysis=json.loads(rec.analysis_json or "{}"),
-        stats=json.loads(rec.stats_json or "[]"),
+        analysis=safe_analysis,
+        stats=safe_stats,
         chart_overall_base64=rec.chart_overall_base64,
         report_path=rec.report_path,
         created_at=rec.created_at.isoformat(),
@@ -217,12 +247,23 @@ async def post_analysis_result(payload: dict):
         created_dt = datetime.utcnow()
         logging.info("POST /api/analysis-result 호출: created_at=%s", created_dt.isoformat())
         with SessionLocal() as s:
+            # NaN/Infinity 값 방지: DB 저장 전 정규화 후 직렬화
+            analysis_obj = _sanitize_for_json(payload.get("analysis") or {})
+            stats_obj = _sanitize_for_json(payload.get("stats") or [])
+            try:
+                analysis_json = json.dumps(analysis_obj, ensure_ascii=False, allow_nan=False)
+                stats_json = json.dumps(stats_obj, ensure_ascii=False, allow_nan=False)
+            except ValueError as ve:
+                # 여전히 직렬화 실패 시 상세 로그 및 400 반환
+                logging.error("분석결과 직렬화 실패(NaN 포함 가능): %s", ve)
+                raise HTTPException(status_code=400, detail=f"Invalid numeric values in analysis/stats: {ve}")
+
             rec = AnalysisResultRecord(
                 status=str(payload.get("status", "success")),
                 n_minus_1=payload.get("n_minus_1"),
                 n=payload.get("n"),
-                analysis_json=json.dumps(payload.get("analysis") or {}),
-                stats_json=json.dumps(payload.get("stats") or []),
+                analysis_json=analysis_json,
+                stats_json=stats_json,
                 chart_overall_base64=payload.get("chart_overall_base64"),
                 report_path=payload.get("report_path"),
                 created_at=created_dt,
