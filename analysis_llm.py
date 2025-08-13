@@ -55,22 +55,54 @@ mcp = FastMCP(name="Cell LLM 종합 분석기")
 
 
 # --- 유틸: 시간 범위 파서 ---
+def _get_default_tzinfo() -> datetime.tzinfo:
+    """
+    환경 변수 `DEFAULT_TZ_OFFSET`(예: "+09:00")를 읽어 tzinfo를 생성합니다.
+    설정이 없거나 형식이 잘못되면 UTC를 반환합니다.
+    """
+    offset_text = os.getenv("DEFAULT_TZ_OFFSET", "+09:00").strip()
+    try:
+        sign = 1 if offset_text.startswith("+") else -1
+        hh_mm = offset_text[1:].split(":")
+        hours = int(hh_mm[0]) if len(hh_mm) > 0 else 0
+        minutes = int(hh_mm[1]) if len(hh_mm) > 1 else 0
+        delta = datetime.timedelta(hours=hours * sign, minutes=minutes * sign)
+        return datetime.timezone(delta)
+    except Exception:
+        logging.warning("DEFAULT_TZ_OFFSET 파싱 실패, UTC 사용: %s", offset_text)
+        return datetime.timezone.utc
+
 def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datetime]:
     """
-    "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm" 문자열을 파싱하여 (start, end) datetime 튜플을 반환합니다.
+    "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm" 또는 단일 날짜 "yyyy-mm-dd" 를 받아
+    (start, end) datetime 튜플을 반환합니다.
+
+    - 범위 형식: 주어진 시각 범위 그대로 사용
+    - 단일 날짜: 해당 날짜의 00:00 ~ 23:59:59 로 확장
 
     Args:
-        range_text: 시간 범위 문자열
+        range_text: 시간 범위 문자열 또는 단일 날짜 문자열
 
     Returns:
         (start_dt, end_dt)
     """
     # 사람이 읽는 시간 범위를 엄격한 포맷으로 변환해 하위 단계에서 일관되게 사용
-    logging.info("parse_time_range() 호출: 입력 문자열 파싱 시작")
+    logging.info("parse_time_range() 호출: 입력 문자열 파싱 시작: %s", range_text)
     try:
-        start_str, end_str = range_text.split("~")
-        start_dt = datetime.datetime.strptime(start_str.strip(), "%Y-%m-%d_%H:%M")
-        end_dt = datetime.datetime.strptime(end_str.strip(), "%Y-%m-%d_%H:%M")
+        tzinfo = _get_default_tzinfo()
+        if "~" in range_text:
+            start_str, end_str = range_text.split("~")
+            start_dt = datetime.datetime.strptime(start_str.strip(), "%Y-%m-%d_%H:%M")
+            end_dt = datetime.datetime.strptime(end_str.strip(), "%Y-%m-%d_%H:%M")
+            # 타임존 정보 부여
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=tzinfo)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=tzinfo)
+        else:
+            day = datetime.datetime.strptime(range_text.strip(), "%Y-%m-%d").date()
+            start_dt = datetime.datetime.combine(day, datetime.time(0, 0, 0, tzinfo=tzinfo))
+            end_dt = datetime.datetime.combine(day, datetime.time(23, 59, 59, tzinfo=tzinfo))
         logging.info("parse_time_range() 성공: %s ~ %s", start_dt, end_dt)
         return start_dt, end_dt
     except Exception as e:
@@ -113,32 +145,33 @@ def fetch_cell_averages_for_period(
     period_label: str,
 ) -> pd.DataFrame:
     """
-    주어진 기간에 대해 셀 단위 평균값을 집계합니다. PEG는 구분하지 않고 전체 데이터를 통합합니다.
+    주어진 기간에 대해 PEG 단위 평균값을 집계합니다.
 
-    반환 컬럼: [cell_name, period, avg_value]
+    반환 컬럼: [peg_name, period, avg_value]
     """
     logging.info("fetch_cell_averages_for_period() 호출: %s ~ %s, period=%s", start_dt, end_dt, period_label)
     time_col = columns.get("time", "datetime")
-    cell_col = columns.get("cell", "cellid")
+    # README 스키마 기준: peg_name 컬럼 사용. columns 사전에 'peg' 또는 'peg_name' 키가 있으면 우선 사용
+    peg_col = columns.get("peg") or columns.get("peg_name", "peg_name")
     value_col = columns.get("value", "value")
 
     sql = f"""
-        SELECT {cell_col} AS cell_name, AVG({value_col}) AS avg_value
+        SELECT {peg_col} AS peg_name, AVG({value_col}) AS avg_value
         FROM {table}
         WHERE {time_col} BETWEEN %s AND %s
-        GROUP BY {cell_col}
+        GROUP BY {peg_col}
     """
     try:
         # 동적 테이블/컬럼 구성이므로 실행 전에 구성값을 로그로 남겨 디버깅을 돕는다
         logging.info(
-            "집계 SQL 실행: table=%s, time_col=%s, cell_col=%s, value_col=%s",
-            table, time_col, cell_col, value_col,
+            "집계 SQL 실행: table=%s, time_col=%s, peg_col=%s, value_col=%s",
+            table, time_col, peg_col, value_col,
         )
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(sql, (start_dt, end_dt))
             rows = cur.fetchall()
         # 조회 결과를 DataFrame으로 변환 (비어있을 수 있음)
-        df = pd.DataFrame(rows, columns=["cell_name", "avg_value"]) if rows else pd.DataFrame(columns=["cell_name", "avg_value"]) 
+        df = pd.DataFrame(rows, columns=["peg_name", "avg_value"]) if rows else pd.DataFrame(columns=["peg_name", "avg_value"]) 
         df["period"] = period_label
         logging.info("fetch_cell_averages_for_period() 건수: %d (period=%s)", len(df), period_label)
         return df
@@ -150,10 +183,10 @@ def fetch_cell_averages_for_period(
 # --- 처리: N-1/N 병합 + 변화율/차트 생성 ---
 def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
-    두 기간의 집계 데이터를 병합해 변화율을 계산하고, 종합 비교 차트를 생성합니다.
+    두 기간의 PEG 집계 데이터를 병합해 diff/pct_change 를 계산하고, 비교 차트를 생성합니다.
 
     반환:
-      - processed_df: [cell_name, 'N-1', 'N', 'rate(%)']
+      - processed_df: ['peg_name', 'avg_n_minus_1', 'avg_n', 'diff', 'pct_change']
       - charts: {'overall': base64_png}
     """
     # 핵심 처리 단계: 병합 → 피벗 → 변화율 산출 → 차트 생성(Base64)
@@ -161,19 +194,26 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.D
     try:
         all_df = pd.concat([n1_df, n_df], ignore_index=True)
         logging.info("병합 데이터프레임 크기: %s행 x %s열", all_df.shape[0], all_df.shape[1])
-        pivot = all_df.pivot(index="cell_name", columns="period", values="avg_value").fillna(0)
+        pivot = all_df.pivot(index="peg_name", columns="period", values="avg_value").fillna(0)
         logging.info("피벗 결과 컬럼: %s", list(pivot.columns))
         if "N-1" not in pivot.columns or "N" not in pivot.columns:
             raise ValueError("N-1 또는 N 데이터가 부족합니다. 시간 범위 또는 원본 데이터를 확인하세요.")
-        pivot["rate(%)"] = ((pivot["N"] - pivot["N-1"]) / pivot["N-1"].replace(0, float("nan"))) * 100
-        processed_df = pivot.reset_index().round(2)
+        # 명세 컬럼 구성
+        out = pd.DataFrame({
+            "peg_name": pivot.index,
+            "avg_n_minus_1": pivot["N-1"],
+            "avg_n": pivot["N"],
+        })
+        out["diff"] = out["avg_n"] - out["avg_n_minus_1"]
+        out["pct_change"] = (out["diff"] / out["avg_n_minus_1"].replace(0, float("nan"))) * 100
+        processed_df = out.round(2)
 
         # 차트: 모든 셀에 대해 N-1 vs N 비교 막대그래프 (단일 이미지)
         plt.figure(figsize=(10, 6))
-        processed_df.set_index("cell_name")[['N-1', 'N']].plot(kind='bar', ax=plt.gca())
-        plt.title("All Cells: Period N vs N-1", fontsize=12)
+        processed_df.set_index("peg_name")[['avg_n_minus_1', 'avg_n']].plot(kind='bar', ax=plt.gca())
+        plt.title("All PEGs: Period N vs N-1", fontsize=12)
         plt.ylabel("Average Value")
-        plt.xlabel("Cell Name")
+        plt.xlabel("PEG Name")
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         buf = io.BytesIO()
@@ -212,14 +252,14 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
     logging.info("create_llm_analysis_prompt_overall() 호출: 프롬프트 생성 시작")
     data_preview = processed_df.to_string(index=False)
     prompt = f"""
-당신은 3GPP 이동통신망 최적화를 전공한 MIT 박사급 전문가입니다. 다음 표는 전체 PEG 데이터를 통합하여 셀 단위로 집계한 결과이며, 두 기간은 동일한 시험환경에서 수행되었다고 가정합니다.
+    당신은 3GPP 이동통신망 최적화를 전공한 MIT 박사급 전문가입니다. 다음 표는 PEG 단위로 집계한 결과이며, 두 기간은 동일한 시험환경에서 수행되었다고 가정합니다.
 
 [입력 데이터 개요]
 - 기간 n-1: {n1_range}
 - 기간 n: {n_range}
-- 표 컬럼: cell_name, N-1(평균 value), N(평균 value), rate(%)
-- 요약 테이블의 원본 스키마 예시: id(int), datetime(ts), value(double), version(text), family_name(text), cellid(text), peg_name(text), host(text), ne(text)
-  (평균은 value에 대해서만 산출됨)
+    - 표 컬럼: peg_name, avg_n_minus_1, avg_n, diff, pct_change
+    - 원본 스키마 예시: id(int), datetime(ts), value(double), version(text), family_name(text), cellid(text), peg_name(text), host(text), ne(text)
+      (평균은 value 컬럼 기준)
 
 [데이터 표]
 {data_preview}
