@@ -4,5 +4,6 @@ uvicorn
 SQLAlchemy
 pydantic
 psycopg2-binary
+python-dotenv
 
 

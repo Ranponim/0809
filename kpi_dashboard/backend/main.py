@@ -9,12 +9,16 @@ import os
 import psycopg2
 import psycopg2.extras
 from fastapi import Body
+from dotenv import load_dotenv
 import logging
 import time
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 app = FastAPI(title="3GPP KPI Management API", version="1.0.0")
+
+# 환경 변수 로드 (.env)
+load_dotenv()
 
 # CORS 설정
 app.add_middleware(
