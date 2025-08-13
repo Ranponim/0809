@@ -89,7 +89,8 @@ def test_preferences_and_derived_pegs():
         "description": "for e2e",
         "config": {
             "defaultKPIs": ["availability", "rrc"],
-            "defaultEntities": ["LHK078ML1", "LHK078MR1"],
+            "defaultNEs": ["nvgnb#10000", "nvgnb#20000"],
+            "defaultCellIDs": ["2010", "2011"],
             "availableKPIs": [
                 {"value": "availability", "label": "Availability (%)", "threshold": 99.0},
                 {"value": "rrc", "label": "RRC Success Rate (%)", "threshold": 98.5},

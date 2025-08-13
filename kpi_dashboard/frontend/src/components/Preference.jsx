@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog.jsx'
 import { Settings, Save, Upload, Download, Trash2, Plus } from 'lucide-react'
 import apiClient from '@/lib/apiClient.js'
+import { toast } from 'sonner'
 
 const Preference = () => {
   const [preferences, setPreferences] = useState([])
@@ -19,6 +20,10 @@ const Preference = () => {
   })
   const [loading, setLoading] = useState(true)
   const [derivedEditor, setDerivedEditor] = useState('{\n  "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"\n}')
+  const [mappingEditor, setMappingEditor] = useState('{
+  "availability": { "peg_like": ["Accessibility_%"] },
+  "rrc": { "peg_like": ["RRC_%"] }
+}')
 
   useEffect(() => {
     fetchPreferences()
@@ -42,7 +47,9 @@ const Preference = () => {
         dashboardLayout: 'grid',
         defaultKPIs: ['availability', 'rrc', 'erab'],
         defaultDateRange: 7,
-        defaultEntities: ['LHK078ML1', 'LHK078MR1'],
+        // 엔티티 기반 대신 NE/CellID 기본값을 사용
+        defaultNEs: ['nvgnb#10000', 'nvgnb#20000'],
+        defaultCellIDs: ['2010', '2011'],
         chartSettings: {
           showGrid: true,
           showLegend: true,
@@ -264,6 +271,32 @@ const Preference = () => {
                   </div>
 
                   <div>
+                    <h4 className="font-medium mb-2">Options Reference</h4>
+                    <pre className="bg-gray-50 p-3 rounded text-sm overflow-auto">
+{`{
+  "dashboardLayout": "grid", // options: "grid", "masonry", "single"
+  "defaultKPIs": ["availability", "rrc", "erab"],
+  "defaultDateRange": 7,       // days. options: 1, 7, 14, 30, 90
+  "defaultNEs": ["nvgnb#10000", "nvgnb#20000"],   // array of strings
+  "defaultCellIDs": ["2010", "2011"],            // array of strings
+  "availableKPIs": [                                 // KPI picker list
+    { "value": "availability", "label": "Availability (%)", "threshold": 99.0 },
+    { "value": "rrc", "label": "RRC Success Rate (%)", "threshold": 98.5 }
+  ],
+  "chartSettings": {
+    "showGrid": true,     // boolean
+    "showLegend": true,   // boolean
+    "lineWidth": 2        // integer (1..4)
+    // optional: "palette": "default"  // options: "default", "pastel", "vivid"
+  },
+  "derived_pegs": {        // optional: custom formulas, name: expression
+    "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"
+  }
+}`}
+                    </pre>
+                  </div>
+
+                  <div>
                     <h4 className="font-medium mb-2">Derived PEGs (JSON)</h4>
                     <Textarea
                       value={derivedEditor}
@@ -302,29 +335,95 @@ const Preference = () => {
                       </Button>
                     </div>
                   </div>
+
+                  <div>
+                    <h4 className="font-medium mb-2">KPI Mappings (JSON)</h4>
+                    <Textarea
+                      value={mappingEditor}
+                      onChange={(e)=>setMappingEditor(e.target.value)}
+                      rows={8}
+                      placeholder={'{\n  "availability": { "peg_names": ["Accessibility_Attempts","Accessibility_Success"] },\n  "rrc": { "peg_like": ["RRC_%"] }\n}'}
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={async ()=>{
+                          try {
+                            const parsed = JSON.parse(mappingEditor)
+                            const nextCfg = { ...(selectedPreference?.config||{}), kpiMappings: parsed }
+                            await apiClient.put(`/api/preferences/${selectedPreference.id}`, {
+                              name: selectedPreference.name,
+                              description: selectedPreference.description,
+                              config: nextCfg
+                            })
+                            setSelectedPreference(prev => ({ ...(prev||{}), config: nextCfg }))
+                            toast.success('KPI mappings saved')
+                          } catch (e) {
+                            console.error('Invalid JSON or save failed', e)
+                            toast.error('Save failed')
+                          }
+                        }}
+                      >
+                        Save KPI Mappings
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={()=>{
+                          try {
+                            const obj = (selectedPreference?.config?.kpiMappings) || {}
+                            setMappingEditor(JSON.stringify(obj, null, 2))
+                          } catch(e) {
+                            setMappingEditor('{}')
+                          }
+                        }}
+                      >
+                        Load from Preference
+                      </Button>
+                    </div>
+                  </div>
                   
                   <div className="flex gap-2">
-                    <Button className="flex items-center gap-2">
+                    <Button
+                      className="flex items-center gap-2"
+                      onClick={async () => {
+                        try {
+                          if (!selectedPreference) return
+                          await apiClient.put(`/api/preferences/${selectedPreference.id}`, {
+                            name: selectedPreference.name,
+                            description: selectedPreference.description,
+                            config: selectedPreference.config || {}
+                          })
+                          toast.success('Preference saved')
+                          // 목록 갱신 및 선택 유지
+                          await fetchPreferences()
+                          const updated = (preferences || []).find(p => p.id === selectedPreference.id)
+                          if (updated) setSelectedPreference(updated)
+                        } catch (e) {
+                          console.error('Failed to save preference', e)
+                          toast.error('Save failed')
+                        }
+                      }}
+                    >
                       <Save className="h-4 w-4" />
-                      Apply to Dashboard
+                      Save Preference
                     </Button>
-                  </div>
-                  <div className="text-xs text-gray-500">현재 선택한 Preference를 대시보드에 적용하려면 아래 버튼을 누르세요.</div>
-                  <div className="flex gap-2 mt-2">
                     <Button
                       variant="default"
                       onClick={() => {
                         try {
                           if (!selectedPreference) return
                           localStorage.setItem('activePreference', JSON.stringify(selectedPreference))
+                          toast.success('Applied to Dashboard')
                         } catch (e) {
-                          console.error('Failed to set activePreference', e)
+                          console.error('Failed to apply to dashboard', e)
+                          toast.error('Apply failed')
                         }
                       }}
                     >
-                      Set as Active Preference
+                      Apply to Dashboard
                     </Button>
                   </div>
+                  <div className="text-xs text-gray-500">변경사항을 저장하려면 Save Preference, 대시보드에 적용하려면 Apply to Dashboard를 누르세요.</div>
                 </div>
               </CardContent>
             </Card>

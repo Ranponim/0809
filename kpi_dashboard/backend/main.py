@@ -328,15 +328,17 @@ async def kpi_query(payload: dict = Body(...)):
         # 실제 DB 프록시 시도
         db = payload.get("db") or {}
         table = payload.get("table") or "summary"
-        columns = payload.get("columns") or {"time": "datetime", "peg_name": "peg_name", "value": "value"}
+        columns = payload.get("columns") or {"time": "datetime", "peg_name": "peg_name", "value": "value", "ne": "ne", "cellid": "cellid"}
         time_col = columns.get("time", "datetime")
         peg_col = columns.get("peg_name", "peg_name")
         value_col = columns.get("value", "value")
+        ne_col = columns.get("ne", "ne")
+        cell_col = columns.get("cell") or columns.get("cellid", "cellid")
 
         # 식별자 검증 (SQL Injection 방지): 영문/숫자/_ 만 허용
         def _valid_ident(name: str) -> bool:
             return bool(name) and name.replace('_','a').replace('0','0').replace('1','1').isalnum() and all(c.isalnum() or c=='_' for c in name)
-        if not all(map(_valid_ident, [table, time_col, peg_col, value_col])):
+        if not all(map(_valid_ident, [table, time_col, peg_col, value_col, ne_col, cell_col])):
             raise ValueError("Invalid identifiers in table/columns")
 
         # 날짜 문자열(YYYY-MM-DD) → 하루 범위
@@ -347,18 +349,51 @@ async def kpi_query(payload: dict = Body(...)):
             raise ValueError("start_date/end_date 형식은 YYYY-MM-DD 이어야 합니다")
 
         ids = [t.strip() for t in str(entity_ids).split(",") if t.strip()]
-        logging.info("/api/kpi/query 매개변수: kpi_type=%s, ids=%d, 기간=%s~%s", kpi_type, len(ids), start_date, end_date)
+        # 확장 필터: ne, cellid (문자열 또는 배열)
+        def _to_list(raw):
+            if raw is None:
+                return []
+            if isinstance(raw, str):
+                return [t.strip() for t in raw.split(',') if t.strip()]
+            if isinstance(raw, list):
+                return [str(t).strip() for t in raw if str(t).strip()]
+            return [str(raw).strip()]
+
+        ne_filters = _to_list(payload.get("ne"))
+        cellid_filters = _to_list(payload.get("cellid") or payload.get("cell"))
+        # KPI 매핑: exact peg_names, like patterns (ILIKE)
+        kpi_peg_names = _to_list(payload.get("kpi_peg_names") or payload.get("peg_names"))
+        kpi_peg_like = _to_list(payload.get("kpi_peg_like") or payload.get("peg_patterns"))
+        logging.info("/api/kpi/query 매개변수: kpi_type=%s, ids=%d, ne=%d, cellid=%d, 기간=%s~%s",
+                     kpi_type, len(ids), len(ne_filters), len(cellid_filters), start_date, end_date)
 
         # SQL: 시간(hour) 버킷으로 평균값 집계. entity_id는 peg_name으로 대응
         sql = (
             f"SELECT date_trunc('hour', {time_col}) AS ts, {peg_col} AS entity_id, AVG({value_col}) AS avg_value "
             f"FROM {table} "
             f"WHERE {time_col} BETWEEN %s AND %s "
-            f"  AND {peg_col} = ANY(%s) "
-            f"GROUP BY ts, {peg_col} "
-            f"ORDER BY ts ASC"
         )
-        params = (start_dt, end_dt, ids)
+        params = [start_dt, end_dt]
+        # entity_ids는 레거시. KPI 매핑이 제공되면 entity_ids 대신 우선 적용
+        if kpi_peg_names:
+            sql += f" AND {peg_col} = ANY(%s) "
+            params.append(kpi_peg_names)
+        elif ids:
+            sql += f" AND {peg_col} = ANY(%s) "
+            params.append(ids)
+        if kpi_peg_like:
+            like_clauses = " OR ".join([f"{peg_col} ILIKE %s" for _ in kpi_peg_like])
+            sql += f" AND ({like_clauses}) "
+            # 패턴에 %가 없으면 포함 검색으로 자동 래핑
+            for p in kpi_peg_like:
+                params.append(p if ('%' in p or '_' in p) else f"%{p}%")
+        if ne_filters:
+            sql += f" AND {ne_col} = ANY(%s) "
+            params.append(ne_filters)
+        if cellid_filters:
+            sql += f" AND {cell_col} = ANY(%s) "
+            params.append(cellid_filters)
+        sql += f" GROUP BY ts, {peg_col} ORDER BY ts ASC"
 
         # 간단 재시도(최대 3회)
         attempt = 0
@@ -373,7 +408,7 @@ async def kpi_query(payload: dict = Body(...)):
                     password=db.get("password"), dbname=db.get("dbname")
                 )
                 with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                    cur.execute(sql, params)
+                    cur.execute(sql, tuple(params))
                     rows = cur.fetchall()
                 conn.close()
                 break
@@ -462,6 +497,11 @@ async def get_kpi_statistics_batch(payload: dict = Body(...)):
             raise HTTPException(status_code=400, detail="start_date, end_date, kpi_types는 필수입니다")
 
         entities = [t.strip() for t in str(entity_ids).split(",") if t.strip()]
+        # 확장 필터 전달(향후 DB 프록시 통합 시 사용할 수 있도록 수집)
+        ne_filters = payload.get("ne")
+        cellid_filters = payload.get("cellid") or payload.get("cell")
+        if ne_filters or cellid_filters:
+            logging.info("배치 필터: ne=%s, cellid=%s", ne_filters, cellid_filters)
         result: Dict[str, List[Dict[str, Any]]] = {}
         logging.info("POST /api/kpi/statistics/batch: types=%d, ids=%d, interval=%s, 기간=%s~%s", len(kpi_types), len(entities), interval_minutes, start_date, end_date)
         for kt in kpi_types:
@@ -566,6 +606,155 @@ async def get_cells():
             {"id": "LHK078ML1_SIMPANGRAMBONGL04", "name": "Seoul-Gangnam-003"}
         ]
     }
+
+@app.post("/api/db/ping")
+async def db_ping(payload: dict = Body(...)):
+    """프런트엔드에서 제공한 DB 설정으로 연결이 가능한지 즉시 확인한다.
+    - 입력: {"db": {host, port, user, password, dbname}}
+    - 성공: {"ok": true}
+    - 실패: 400 + detail 메시지
+    """
+    logging.info("POST /api/db/ping 호출")
+    db = payload.get("db") or {}
+    try:
+        conn = psycopg2.connect(
+            host=db.get("host"),
+            port=db.get("port", 5432),
+            user=db.get("user"),
+            password=db.get("password"),
+            dbname=db.get("dbname"),
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        logging.info("DB ping 성공: host=%s db=%s", db.get("host"), db.get("dbname"))
+        return {"ok": True}
+    except Exception as e:
+        logging.warning("DB ping 실패: %s", e)
+        raise HTTPException(status_code=400, detail=f"DB connection failed: {e}")
+
+def _valid_ident(name: str) -> bool:
+    return bool(name) and name.replace('_','a').replace('0','0').replace('1','1').isalnum() and all(c.isalnum() or c=='_' for c in name)
+
+@app.post("/api/master/ne-list")
+async def list_ne(payload: dict = Body(...)):
+    """지정된 테이블에서 NE 컬럼의 distinct 목록을 조회한다.
+    입력: { db, table, columns: {ne, time?}, q?, start_date?, end_date?, limit? }
+    반환: { items: ["nvgnb#10000", ...] }
+    """
+    db = payload.get("db") or {}
+    table = payload.get("table") or "summary"
+    columns = payload.get("columns") or {"ne": "ne", "time": "datetime"}
+    ne_col = columns.get("ne", "ne")
+    time_col = columns.get("time")
+    q = payload.get("q")
+    start_date = payload.get("start_date")
+    end_date = payload.get("end_date")
+    limit = int(payload.get("limit") or 50)
+    if limit <= 0 or limit > 1000:
+        limit = 50
+
+    if not _valid_ident(table) or not _valid_ident(ne_col) or (time_col and not _valid_ident(time_col)):
+        raise HTTPException(status_code=400, detail="Invalid identifiers in table/columns")
+
+    params = []
+    where = "WHERE TRUE"
+    if start_date and end_date and time_col:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+            where += f" AND {time_col} BETWEEN %s AND %s"
+            params.extend([start_dt, end_dt])
+        except Exception:
+            pass
+    if q:
+        where += f" AND {ne_col} ILIKE %s"
+        params.append(f"%{q}%")
+
+    sql = f"SELECT DISTINCT {ne_col} AS ne FROM {table} {where} ORDER BY {ne_col} ASC LIMIT %s"
+    params.append(limit)
+    try:
+        conn = psycopg2.connect(
+            host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
+            password=db.get("password"), dbname=db.get("dbname")
+        )
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        items = [r["ne"] for r in rows if r and r["ne"]]
+        return {"items": items}
+    except Exception as e:
+        logging.warning("NE distinct 조회 실패: %s", e)
+        raise HTTPException(status_code=400, detail=f"failed: {e}")
+
+@app.post("/api/master/cellid-list")
+async def list_cellid(payload: dict = Body(...)):
+    """지정된 테이블에서 cellid 컬럼의 distinct 목록을 조회한다.
+    입력: { db, table, columns: {cellid, time?}, q?, start_date?, end_date?, limit? }
+    반환: { items: ["2010", ...] }
+    """
+    db = payload.get("db") or {}
+    table = payload.get("table") or "summary"
+    columns = payload.get("columns") or {"cellid": "cellid", "time": "datetime"}
+    cell_col = columns.get("cell") or columns.get("cellid", "cellid")
+    time_col = columns.get("time")
+    q = payload.get("q")
+    start_date = payload.get("start_date")
+    end_date = payload.get("end_date")
+    limit = int(payload.get("limit") or 50)
+    if limit <= 0 or limit > 1000:
+        limit = 50
+
+    if not _valid_ident(table) or not _valid_ident(cell_col) or (time_col and not _valid_ident(time_col)):
+        raise HTTPException(status_code=400, detail="Invalid identifiers in table/columns")
+
+    params = []
+    where = "WHERE TRUE"
+    if start_date and end_date and time_col:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+            where += f" AND {time_col} BETWEEN %s AND %s"
+            params.extend([start_dt, end_dt])
+        except Exception:
+            pass
+    if q:
+        where += f" AND {cell_col} ILIKE %s"
+        params.append(f"%{q}%")
+
+    sql = f"SELECT DISTINCT {cell_col} AS cellid FROM {table} {where} ORDER BY {cell_col} ASC LIMIT %s"
+    params.append(limit)
+    try:
+        conn = psycopg2.connect(
+            host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
+            password=db.get("password"), dbname=db.get("dbname")
+        )
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        items = [r["cellid"] for r in rows if r and r["cellid"]]
+        return {"items": items}
+    except Exception as e:
+        logging.warning("cellid distinct 조회 실패: %s", e)
+        raise HTTPException(status_code=400, detail=f"failed: {e}")
 
 if __name__ == "__main__":
     import uvicorn

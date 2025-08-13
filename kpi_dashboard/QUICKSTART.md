@@ -54,9 +54,9 @@ npm run dev -- --host
 - 접속: http://localhost:5173
 
 ## 4. 기본 사용 흐름
-- Dashboard: Preference의 defaultKPIs/defaultEntities를 사용해 KPI 카드/엔티티가 동적으로 반영됩니다.
+- Dashboard: Preference의 defaultKPIs/defaultNEs/defaultCellIDs를 사용해 KPI 카드/필터가 동적으로 반영됩니다.
 - Summary Report: 최근 분석결과가 있으면 우선 표시, 없으면 mock.
-- Statistics: 기간/KPI/엔티티 ID 입력 후 Search → 시간축 기준 entity_id 비교 차트.
+- Statistics: 기간/KPI/NE/CellID 입력 후 Search → 시간축 기준 KPI 평균 시계열.
 - Advanced Chart: 기간1/기간2, 듀얼축, 임계값, 엔티티 입력 후 Generate → 비교/이중축 차트.
 
 ## 5. 빠른 API 테스트 예시
@@ -79,7 +79,8 @@ curl -X POST "http://localhost:8000/api/kpi/statistics/batch" -H "Content-Type: 
 ```json
 {
   "defaultKPIs": ["availability", "rrc", "erab"],
-  "defaultEntities": ["LHK078ML1", "LHK078MR1"],
+  "defaultNEs": ["nvgnb#10000", "nvgnb#20000"],
+  "defaultCellIDs": ["2010", "2011"],
   "availableKPIs": [
     { "value": "availability", "label": "Availability (%)", "threshold": 99.0 },
     { "value": "rrc", "label": "RRC Success Rate (%)", "threshold": 98.5 },

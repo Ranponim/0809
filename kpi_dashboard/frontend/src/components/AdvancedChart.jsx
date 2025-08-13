@@ -27,7 +27,8 @@ const AdvancedChart = () => {
     endDate1: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     startDate2: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate2: new Date().toISOString().split('T')[0],
-    entities: ['LHK078ML1', 'LHK078MR1'],
+    ne: '',
+    cellid: '',
     showSecondaryAxis: true,
     showComparison: true,
     showThreshold: true,
@@ -77,20 +78,29 @@ const AdvancedChart = () => {
     try {
       setLoading(true)
       console.info('[AdvancedChart] Generate with config:', chartConfig)
+      // KPI 매핑 로드 (없으면 기본집계 경로)
+      let kpiMap = {}
+      try {
+        const raw = localStorage.getItem('activePreference')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          kpiMap = parsed?.config?.kpiMappings || {}
+        }
+      } catch {}
       
-      // Fetch primary KPI data for both periods
+      // Fetch primary/secondary KPI for configured periods with NE/CELL filters
       const promises = []
       
       // Period 1 data
       promises.push(
         apiClient.post('/api/kpi/query', {
-          params: {
-            // 유지: 호출 시그니처 호환성
-          },
           start_date: chartConfig.startDate1,
           end_date: chartConfig.endDate1,
           kpi_type: chartConfig.primaryKPI,
-          entity_ids: chartConfig.entities.join(',')
+          kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_names) ? kpiMap[chartConfig.primaryKPI].peg_names : undefined,
+          kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_like) ? kpiMap[chartConfig.primaryKPI].peg_like : undefined,
+          ne: chartConfig.ne,
+          cellid: chartConfig.cellid,
         })
       )
 
@@ -101,7 +111,10 @@ const AdvancedChart = () => {
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.primaryKPI,
-            entity_ids: chartConfig.entities.join(',')
+            kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_names) ? kpiMap[chartConfig.primaryKPI].peg_names : undefined,
+            kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_like) ? kpiMap[chartConfig.primaryKPI].peg_like : undefined,
+            ne: chartConfig.ne,
+            cellid: chartConfig.cellid,
           })
         )
       }
@@ -113,7 +126,10 @@ const AdvancedChart = () => {
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.secondaryKPI,
-            entity_ids: chartConfig.entities.join(',')
+            kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.secondaryKPI]?.peg_names) ? kpiMap[chartConfig.secondaryKPI].peg_names : undefined,
+            kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.secondaryKPI]?.peg_like) ? kpiMap[chartConfig.secondaryKPI].peg_like : undefined,
+            ne: chartConfig.ne,
+            cellid: chartConfig.cellid,
           })
         )
       }
@@ -139,43 +155,35 @@ const AdvancedChart = () => {
     const period2Data = config.showComparison && results[1] ? results[1].data.data : []
     const secondaryData = config.showSecondaryAxis && results[2] ? results[2].data.data : []
 
-    // Group data by time for period 1
-    const groupedData = {}
-
-    // Add period 1 data
-    period1Data.forEach(item => {
-      const time = new Date(item.timestamp).toLocaleString()
-      if (!groupedData[time]) groupedData[time] = { time }
-      groupedData[time][`${item.entity_id}_period1`] = item.value
-    })
-
-    // Add period 2 data
-    if (config.showComparison) {
-      period2Data.forEach(item => {
-        const time = new Date(item.timestamp).toLocaleString()
-        if (!groupedData[time]) groupedData[time] = { time }
-        groupedData[time][`${item.entity_id}_period2`] = item.value
+    // Aggregate by time (avg across rows) because NE/CELL filter narrows scope
+    const grouped = {}
+    function acc(rows, key) {
+      const tmp = {}
+      rows.forEach(item => {
+        const t = new Date(item.timestamp).toLocaleString()
+        if (!tmp[t]) tmp[t] = { sum: 0, cnt: 0 }
+        tmp[t].sum += Number(item.value) || 0
+        tmp[t].cnt += 1
+      })
+      Object.keys(tmp).forEach(t => {
+        if (!grouped[t]) grouped[t] = { time: t }
+        const avg = tmp[t].cnt > 0 ? +(tmp[t].sum / tmp[t].cnt).toFixed(2) : 0
+        grouped[t][key] = avg
       })
     }
+    acc(period1Data, `${config.primaryKPI}_period1`)
+    if (config.showComparison) acc(period2Data, `${config.primaryKPI}_period2`)
+    if (config.showSecondaryAxis) acc(secondaryData, `${config.secondaryKPI}_secondary`)
 
-    // Add secondary KPI data
-    if (config.showSecondaryAxis) {
-      secondaryData.forEach(item => {
-        const time = new Date(item.timestamp).toLocaleString()
-        if (!groupedData[time]) groupedData[time] = { time }
-        groupedData[time][`${item.entity_id}_secondary`] = item.value
-      })
-    }
-
-    return Object.values(groupedData).slice(0, 100) // Limit for performance
+    return Object.values(grouped).sort((a,b)=> new Date(a.time)-new Date(b.time)).slice(0, 200)
   }
 
   const getDataKeys = () => {
     if (chartData.length === 0) return { primary: [], secondary: [] }
     
     const allKeys = Object.keys(chartData[0]).filter(key => key !== 'time')
-    const primary = allKeys.filter(key => !key.includes('_secondary'))
-    const secondary = allKeys.filter(key => key.includes('_secondary'))
+    const primary = allKeys.filter(key => key.endsWith('_period1') || key.endsWith('_period2'))
+    const secondary = allKeys.filter(key => key.endsWith('_secondary'))
     
     return { primary, secondary }
   }
@@ -274,39 +282,45 @@ const AdvancedChart = () => {
               />
             </div>
 
-            {/* Entities selection */}
-            <div className="space-y-2 md:col-span-2 lg:col-span-3">
-              <Label>Entities (comma-separated)</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="e.g., LHK078ML1,LHK078MR1"
-                  value={(chartConfig.entities || []).join(',')}
-                  onChange={(e)=>{
-                    const list = (e.target.value || '')
-                      .split(',')
-                      .map(s=>s.trim())
-                      .filter(Boolean)
-                    setChartConfig(prev => ({ ...prev, entities: list }))
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={()=>{
-                    try {
-                      const raw = localStorage.getItem('activePreference')
-                      if (!raw) return
-                      const pref = JSON.parse(raw)
-                      const ents = Array.isArray(pref?.config?.defaultEntities) ? pref.config.defaultEntities.map(String) : []
-                      if (ents.length > 0) {
-                        setChartConfig(prev => ({ ...prev, entities: ents }))
-                      }
-                    } catch {}
-                  }}
-                >
-                  Use Preference
-                </Button>
-              </div>
+            {/* Filters: NE / Cell ID */}
+            <div className="space-y-2">
+              <Label>NE</Label>
+              <Input
+                placeholder="e.g., nvgnb#10000 or nvgnb#10000,nvgnb#20000"
+                value={chartConfig.ne}
+                onChange={(e)=> setChartConfig(prev => ({ ...prev, ne: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Cell ID</Label>
+              <Input
+                placeholder="e.g., 2010 or 2010,2011"
+                value={chartConfig.cellid}
+                onChange={(e)=> setChartConfig(prev => ({ ...prev, cellid: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Use Preference (NE/Cell)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={()=>{
+                  try {
+                    const raw = localStorage.getItem('activePreference')
+                    if (!raw) return
+                    const pref = JSON.parse(raw)
+                    const defNEs = Array.isArray(pref?.config?.defaultNEs) ? pref.config.defaultNEs.map(String) : []
+                    const defCellIDs = Array.isArray(pref?.config?.defaultCellIDs) ? pref.config.defaultCellIDs.map(String) : []
+                    setChartConfig(prev => ({
+                      ...prev,
+                      ne: defNEs.join(','),
+                      cellid: defCellIDs.join(','),
+                    }))
+                  } catch {}
+                }}
+              >
+                Load from Preference
+              </Button>
             </div>
           </div>
 

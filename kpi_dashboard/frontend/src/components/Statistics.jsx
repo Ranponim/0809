@@ -3,28 +3,33 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Search, Filter, BarChart3 } from 'lucide-react'
 import AdvancedChart from './AdvancedChart.jsx'
 import apiClient from '@/lib/apiClient.js'
+import { toast } from 'sonner'
 
 const Statistics = () => {
   const [filters, setFilters] = useState({
     startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
-    kpiType: 'availability',
-    entityIds: 'LHK078ML1,LHK078MR1'
+    ne: '',
+    cellid: ''
   })
   
   const [chartData, setChartData] = useState([])
   const [dbConfig, setDbConfig] = useState({
     host: '', port: 5432, user: '', password: '', dbname: '', table: 'summary'
   })
+  const [dbTestResult, setDbTestResult] = useState({ status: 'idle', message: '' })
+  const [lastSavedAt, setLastSavedAt] = useState(null)
+  const [dataSource, setDataSource] = useState('')
   const [loading, setLoading] = useState(false)
   const [pegs, setPegs] = useState([])
   const [cells, setCells] = useState([])
+  const [neSuggest, setNeSuggest] = useState([])
+  const [cellSuggest, setCellSuggest] = useState([])
 
   const defaultKpiOptions = [
     { value: 'availability', label: 'Availability' },
@@ -50,11 +55,6 @@ const Statistics = () => {
           ? parsed.config.availableKPIs.map(o => ({ value: String(o.value), label: String(o.label || o.value) }))
           : defaultKpiOptions
         setKpiOptions(opts)
-        // 현재 선택된 kpiType이 목록에 없으면 첫 항목으로 교체
-        const values = opts.map(o => o.value)
-        if (!values.includes(filters.kpiType)) {
-          setFilters(prev => ({ ...prev, kpiType: opts[0]?.value || 'availability' }))
-        }
         console.info('[Statistics] availableKPIs loaded from Preference:', opts)
       } else {
         console.info('[Statistics] No activePreference, using defaults')
@@ -62,6 +62,15 @@ const Statistics = () => {
     } catch {
       setKpiOptions(defaultKpiOptions)
     }
+    // DB 설정 로컬 저장소에서 로드
+    try {
+      const rawDb = localStorage.getItem('dbConfig')
+      if (rawDb) {
+        const parsed = JSON.parse(rawDb)
+        setDbConfig(prev => ({ ...prev, ...parsed }))
+        console.info('[Statistics] Loaded dbConfig from localStorage')
+      }
+    } catch {}
     const fetchMasterData = async () => {
       try {
         console.info('[Statistics] Fetching master PEGs/Cells')
@@ -84,18 +93,38 @@ const Statistics = () => {
     try {
       setLoading(true)
       console.info('[Statistics] Search click:', filters, dbConfig)
-      const response = await apiClient.post('/api/kpi/query', {
-        db: dbConfig,
-        table: dbConfig.table || 'summary',
-        start_date: filters.startDate,
-        end_date: filters.endDate,
-        kpi_type: filters.kpiType,
-        entity_ids: filters.entityIds
+      const kpiTypes = (kpiOptions || []).map(o => o.value)
+      let kpiMap = {}
+      try {
+        const raw = localStorage.getItem('activePreference')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          kpiMap = parsed?.config?.kpiMappings || {}
+        }
+      } catch {}
+      // 각 KPI에 대해 DB 프록시 쿼리를 병렬 호출 (필터: ne/cellid 적용)
+      const requests = kpiTypes.map(kt =>
+        apiClient.post('/api/kpi/query', {
+          db: dbConfig,
+          table: dbConfig.table || 'summary',
+          start_date: filters.startDate,
+          end_date: filters.endDate,
+          kpi_type: kt,
+          kpi_peg_names: Array.isArray(kpiMap?.[kt]?.peg_names) ? kpiMap[kt].peg_names : undefined,
+          kpi_peg_like: Array.isArray(kpiMap?.[kt]?.peg_like) ? kpiMap[kt].peg_like : undefined,
+          ne: filters.ne,
+          cellid: filters.cellid,
+        })
+      )
+      const responses = await Promise.all(requests)
+      // 가능한 source 표시는 첫 응답 기준으로 설정
+      setDataSource(responses[0]?.data?.source || '')
+      const perKpiData = {}
+      responses.forEach((res, idx) => {
+        perKpiData[kpiTypes[idx]] = res?.data?.data || []
       })
-
-      const data = response.data.data || []
-      console.info('[Statistics] Query result rows:', data.length)
-      const formattedData = formatChartData(data)
+      console.info('[Statistics] Query per KPI done:', kpiTypes.length)
+      const formattedData = formatBatchChartData(perKpiData, kpiTypes)
       setChartData(formattedData)
     } catch (error) {
       console.error('Error fetching statistics:', error)
@@ -104,20 +133,86 @@ const Statistics = () => {
     }
   }
 
-  const formatChartData = (data) => {
-    if (!data || data.length === 0) return []
-    
-    const groupedByTime = data.reduce((acc, item) => {
-      const time = new Date(item.timestamp).toLocaleString()
-      if (!acc[time]) acc[time] = { time }
-      acc[time][item.entity_id] = item.value
-      return acc
-    }, {})
-
-    return Object.values(groupedByTime).slice(0, 50) // Limit to 50 points for better performance
+  const fetchNeSuggest = async (q='') => {
+    try {
+      const res = await apiClient.post('/api/master/ne-list', {
+        db: dbConfig,
+        table: dbConfig.table || 'summary',
+        columns: { ne: 'ne', time: 'datetime' },
+        q,
+        start_date: filters.startDate,
+        end_date: filters.endDate,
+        limit: 50,
+      })
+      setNeSuggest(res?.data?.items || [])
+    } catch {}
   }
 
-  const entities = chartData.length > 0 ? Object.keys(chartData[0]).filter(key => key !== 'time') : []
+  const fetchCellSuggest = async (q='') => {
+    try {
+      const res = await apiClient.post('/api/master/cellid-list', {
+        db: dbConfig,
+        table: dbConfig.table || 'summary',
+        columns: { cellid: 'cellid', time: 'datetime' },
+        q,
+        start_date: filters.startDate,
+        end_date: filters.endDate,
+        limit: 50,
+      })
+      setCellSuggest(res?.data?.items || [])
+    } catch {}
+  }
+
+  const handleSaveDbConfig = () => {
+    try {
+      localStorage.setItem('dbConfig', JSON.stringify(dbConfig))
+      const ts = new Date().toLocaleString()
+      setLastSavedAt(ts)
+      toast.success('Database settings saved')
+    } catch (e) {
+      toast.error('Failed to save settings')
+    }
+  }
+
+  const handleTestConnection = async () => {
+    setDbTestResult({ status: 'testing', message: '' })
+    try {
+      const res = await apiClient.post('/api/db/ping', { db: dbConfig })
+      if (res?.data?.ok) {
+        setDbTestResult({ status: 'ok', message: 'Connection successful' })
+        toast.success('DB connection OK')
+      } else {
+        setDbTestResult({ status: 'fail', message: 'Unexpected response' })
+        toast.error('DB connection failed')
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || 'Connection failed'
+      setDbTestResult({ status: 'fail', message: String(msg) })
+      toast.error(`DB connection failed: ${msg}`)
+    }
+  }
+
+  const formatBatchChartData = (batchData, kpiTypes) => {
+    const timeMap = {}
+    kpiTypes.forEach((kt) => {
+      const rows = Array.isArray(batchData[kt]) ? batchData[kt] : []
+      const tmp = {}
+      rows.forEach(row => {
+        const t = new Date(row.timestamp).toLocaleString()
+        if (!tmp[t]) tmp[t] = { sum: 0, cnt: 0 }
+        tmp[t].sum += Number(row.value) || 0
+        tmp[t].cnt += 1
+      })
+      Object.keys(tmp).forEach(t => {
+        if (!timeMap[t]) timeMap[t] = { time: t }
+        const avg = tmp[t].cnt > 0 ? +(tmp[t].sum / tmp[t].cnt).toFixed(2) : 0
+        timeMap[t][kt] = avg
+      })
+    })
+    return Object.values(timeMap).sort((a, b) => new Date(a.time) - new Date(b.time)).slice(0, 200)
+  }
+
+  const seriesKeys = chartData.length > 0 ? Object.keys(chartData[0]).filter(key => key !== 'time') : []
 
   return (
     <div className="space-y-6">
@@ -152,6 +247,17 @@ const Statistics = () => {
             <div className="space-y-2">
               <Label htmlFor="table">Table</Label>
               <Input id="table" value={dbConfig.table} onChange={(e)=>setDbConfig(prev=>({...prev, table: e.target.value}))} />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <Button variant="secondary" onClick={handleSaveDbConfig}>Save Settings</Button>
+            <Button onClick={handleTestConnection} disabled={dbTestResult.status === 'testing'}>
+              {dbTestResult.status === 'testing' ? 'Testing...' : 'Test Connection'}
+            </Button>
+            <div className="text-sm text-gray-500">
+              {lastSavedAt ? `Saved: ${lastSavedAt}` : 'Not saved yet'}
+              {dbTestResult.status === 'ok' && ' · DB: OK'}
+              {dbTestResult.status === 'fail' && ` · DB: FAIL (${dbTestResult.message})`}
             </div>
           </div>
         </CardContent>
@@ -193,31 +299,33 @@ const Statistics = () => {
                     onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
                   />
                 </div>
-                
                 <div className="space-y-2">
-                  <Label htmlFor="kpiType">KPI Type</Label>
-                  <Select value={filters.kpiType} onValueChange={(value) => setFilters(prev => ({ ...prev, kpiType: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select KPI Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {kpiOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="ne">NE</Label>
+                    <Input
+                      id="ne"
+                      list="ne-list"
+                      placeholder="e.g., nvgnb#10000 or nvgnb#10000,nvgnb#20000"
+                      value={filters.ne || ''}
+                      onFocus={() => fetchNeSuggest('')}
+                      onChange={(e) => { setFilters(prev => ({ ...prev, ne: e.target.value })); fetchNeSuggest(e.target.value.split(',').pop().trim()) }}
+                    />
+                    <datalist id="ne-list">
+                      {neSuggest.map(item => (<option value={item} key={item} />))}
+                    </datalist>
                 </div>
-                
                 <div className="space-y-2">
-                  <Label htmlFor="entityIds">Entity IDs</Label>
-                  <Input
-                    id="entityIds"
-                    placeholder="e.g., LHK078ML1,LHK078MR1"
-                    value={filters.entityIds}
-                    onChange={(e) => setFilters(prev => ({ ...prev, entityIds: e.target.value }))}
-                  />
+                  <Label htmlFor="cellid">Cell ID</Label>
+                    <Input
+                      id="cellid"
+                      list="cellid-list"
+                      placeholder="e.g., 2010 or 2010,2011"
+                      value={filters.cellid || ''}
+                      onFocus={() => fetchCellSuggest('')}
+                      onChange={(e) => { setFilters(prev => ({ ...prev, cellid: e.target.value })); fetchCellSuggest(e.target.value.split(',').pop().trim()) }}
+                    />
+                    <datalist id="cellid-list">
+                      {cellSuggest.map(item => (<option value={item} key={item} />))}
+                    </datalist>
                 </div>
               </div>
               
@@ -233,9 +341,7 @@ const Statistics = () => {
           {/* Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>
-                {kpiOptions.find(opt => opt.value === filters.kpiType)?.label || 'KPI'} Statistics
-              </CardTitle>
+              <CardTitle>Statistics (Preference KPIs)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-96">
@@ -247,12 +353,12 @@ const Statistics = () => {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      {entities.map((entity, index) => (
+                      {seriesKeys.map((key, index) => (
                         <Line
-                          key={entity}
+                          key={key}
                           type="monotone"
-                          dataKey={entity}
-                          stroke={`hsl(${index * 60}, 70%, 50%)`}
+                          dataKey={key}
+                          stroke={`hsl(${(index * 47) % 360}, 70%, 50%)`}
                           strokeWidth={2}
                         />
                       ))}
@@ -263,6 +369,9 @@ const Statistics = () => {
                     {loading ? 'Loading...' : 'No data available. Please search with different filters.'}
                   </div>
                 )}
+              </div>
+              <div className="mt-2 text-sm text-gray-500">
+                {dataSource ? `Data source: ${dataSource}` : ''}
               </div>
             </CardContent>
           </Card>

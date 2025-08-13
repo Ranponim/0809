@@ -7,7 +7,7 @@ const Dashboard = () => {
   const [kpiData, setKpiData] = useState({})
   const [loading, setLoading] = useState(true)
   const [kpiKeys, setKpiKeys] = useState([])
-  const [entityList, setEntityList] = useState(['LHK078ML1','LHK078MR1'])
+  const [entityList, setEntityList] = useState([])
 
   const defaultKpiKeys = ['availability','rrc','erab','sar','mobility_intra','cqi']
 
@@ -46,6 +46,8 @@ const Dashboard = () => {
         // Preference 적용 (localStorage)
         let keys = defaultKpiKeys
         let ents = entityList
+        let neStr = ''
+        let cellidStr = ''
         try {
           const raw = localStorage.getItem('activePreference')
           if (raw) {
@@ -53,21 +55,27 @@ const Dashboard = () => {
             if (Array.isArray(parsed?.config?.defaultKPIs) && parsed.config.defaultKPIs.length > 0) {
               keys = parsed.config.defaultKPIs.map(String)
             }
-            if (Array.isArray(parsed?.config?.defaultEntities) && parsed.config.defaultEntities.length > 0) {
-              ents = parsed.config.defaultEntities.map(String)
-            }
+            // 새 구조: NE/CellID
+            if (Array.isArray(parsed?.config?.defaultNEs)) neStr = parsed.config.defaultNEs.map(String).join(',')
+            if (Array.isArray(parsed?.config?.defaultCellIDs)) cellidStr = parsed.config.defaultCellIDs.map(String).join(',')
           }
         } catch {}
         setKpiKeys(keys)
         setEntityList(ents)
 
         // 배치 엔드포인트 호출
-        const resp = await apiClient.post('/api/kpi/statistics/batch', {
+        // 대시보드는 평균 시계열 표시 목적이므로 per-KPI 쿼리 후 평균 집계 포맷에 재활용 가능
+        const requests = keys.map(kt => apiClient.post('/api/kpi/query', {
           start_date: startDate,
           end_date: endDate,
-          kpi_types: keys,
-          entity_ids: (ents || []).join(',')
-        })
+          kpi_type: kt,
+          ne: neStr,
+          cellid: cellidStr,
+        }))
+        const responses = await Promise.all(requests)
+        const dataByKpi = {}
+        responses.forEach((res, idx) => { dataByKpi[keys[idx]] = res?.data?.data || [] })
+        const resp = { data: { data: dataByKpi } }
         setKpiData(resp?.data?.data || {})
       } catch (error) {
         console.error('Error fetching KPI data:', error)
