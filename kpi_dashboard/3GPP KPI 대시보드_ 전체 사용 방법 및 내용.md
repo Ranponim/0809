@@ -35,7 +35,7 @@ kpi_dashboard/
 └── 백엔드-프론트엔드 데이터 구조 양식.md  # API/데이터 규격 문서
 ```
 
-> 참고: 일부 컴포넌트는 하드코드된 백엔드 주소(`http://localhost:8000`)를 사용합니다. 프로덕션/테스트 환경에서는 프론트엔드 환경변수(`VITE_API_BASE_URL`) 설정을 권장합니다.
+> 참고: 모든 API 호출은 공용 `apiClient`(`src/lib/apiClient.js`)를 사용합니다. 프로덕션/테스트 환경에서는 프론트엔드 환경변수(`VITE_API_BASE_URL`) 설정을 통해 백엔드 주소를 제어하세요.
 
 ## 3. 백엔드 설정 및 실행 (FastAPI)
 
@@ -138,7 +138,7 @@ pnpm run build
 
 ### 5.1. 대시보드 (Dashboard)
 
-사전 정의된 주요 KPI(Availability, RRC Success Rate, ERAB Success Rate, SAR, Mobility Intra, CQI)의 시계열 데이터를 라인 차트 형태로 보여줍니다. 여러 엔티티(예: `LHK078ML1`, `LHK078MR1`)의 데이터를 동시에 비교할 수 있습니다.
+Preference의 `config.defaultKPIs`와 `config.defaultEntities`를 읽어 KPI 카드 수와 비교 엔티티를 동적으로 구성합니다. 다수 KPI는 `POST /api/kpi/statistics/batch`로 일괄 조회하여 성능을 확보합니다. 시간축(X) 기준으로 entity_id별 라인이 그려집니다.
 
 ### 5.2. 종합 분석 리포트 (Summary Report)
 
@@ -152,11 +152,13 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
     -   기간, KPI 타입, 엔티티 ID를 기준으로 데이터를 필터링하고 조회합니다.
     -   선택된 KPI에 대한 시계열 라인 차트를 표시합니다.
     -   사용 가능한 PEG 및 Cell 목록을 참조용으로 제공합니다.
+    -   Preference의 `config.availableKPIs`가 있으면 KPI 선택 목록을 설정에서 로드하고, 없으면 기본 목록으로 폴백합니다.
 
 -   **고급 분석 (Advanced Analysis)**:
     -   **기간 비교**: 두 개의 다른 기간에 대한 KPI 데이터를 비교하여 추이 변화를 쉽게 파악할 수 있습니다.
     -   **이중 Y축**: 서로 다른 스케일을 가진 두 가지 KPI(예: Availability와 SAR)를 하나의 차트에 동시에 표시하여 상관관계를 분석할 수 있습니다.
     -   **임계값 라인**: 설정된 임계값을 차트에 표시하여 KPI가 목표치를 달성하고 있는지 시각적으로 확인할 수 있습니다.
+    -   **엔티티 입력**: 엔티티 입력칸에서 쉼표로 구분해 지정하거나, “Use Preference”로 `config.defaultEntities`를 적용할 수 있습니다.
     -   **PEG 겹쳐 그리기**: 여러 엔티티의 데이터를 하나의 차트에 겹쳐 그려 비교 분석을 용이하게 합니다.
 
 ### 5.4. 환경설정 (Preference)
@@ -167,14 +169,14 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 백엔드와 프론트엔드 간의 데이터 통신에 사용되는 주요 JSON 구조는 다음과 같습니다. 자세한 내용은 `백엔드-프론트엔드 데이터 구조 양식.md` 파일을 참조하십시오.
 
--   **KPI 데이터**: `timestamp`, `entity_id`, `kpi_type`, `value`를 포함합니다.
+-   **KPI 데이터**: `timestamp`, `entity_id`, `kpi_type`, `value`를 포함합니다. 샘플링 간격은 `interval_minutes`(기본 60, 5/15 지원)를 통해 제어할 수 있습니다.
 -   **환경설정 데이터**: `id`, `name`, `description`, `config` (JSON 객체)를 포함합니다.
 -   **종합 분석 리포트**: `id`, `title`, `content` (마크다운), `generated_at`를 포함합니다.
 -   **마스터 데이터 (PEG/Cell)**: `id`, `name`을 포함하는 객체 배열입니다.
 
 ## 7. 배포 정보
 
-배포 환경과 도메인은 인프라 구성에 따라 달라집니다. 프론트엔드의 `VITE_API_BASE_URL`과 백엔드의 데이터베이스 DSN을 환경에 맞게 설정하세요.
+배포 환경과 도메인은 인프라 구성에 따라 달라집니다. 프론트엔드의 `VITE_API_BASE_URL`과 백엔드의 데이터베이스 DSN을 환경에 맞게 설정하세요. 백엔드는 INFO 로그로 모든 주요 요청/응답 건수를 기록합니다.
 
 ## 8. 향후 개선 사항
 

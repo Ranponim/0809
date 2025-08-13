@@ -1,11 +1,31 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import axios from 'axios'
+import apiClient from '@/lib/apiClient.js'
 
 const Dashboard = () => {
   const [kpiData, setKpiData] = useState({})
   const [loading, setLoading] = useState(true)
+  const [kpiKeys, setKpiKeys] = useState([])
+  const [entityList, setEntityList] = useState(['LHK078ML1','LHK078MR1'])
+
+  const defaultKpiKeys = ['availability','rrc','erab','sar','mobility_intra','cqi']
+
+  const titleFor = (key) => ({
+    availability: 'Availability (%)',
+    rrc: 'RRC Success Rate (%)',
+    erab: 'ERAB Success Rate (%)',
+    sar: 'SAR',
+    mobility_intra: 'Mobility Intra (%)',
+    cqi: 'CQI',
+  }[key] || key)
+
+  const colorFor = (index) => {
+    const preset = ['#8884d8','#82ca9d','#ffc658','#ff7300','#8dd1e1','#d084d0']
+    if (index < preset.length) return preset[index]
+    const hue = (index * 47) % 360
+    return `hsl(${hue}, 70%, 50%)`
+  }
 
   const kpiTypes = [
     { key: 'availability', title: 'Availability (%)', color: '#8884d8' },
@@ -22,22 +42,33 @@ const Dashboard = () => {
         setLoading(true)
         const endDate = new Date().toISOString().split('T')[0]
         const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        
-        const promises = kpiTypes.map(async (kpi) => {
-          const response = await axios.get(`http://localhost:8000/api/kpi/statistics`, {
-            params: {
-              start_date: startDate,
-              end_date: endDate,
-              kpi_type: kpi.key,
-              entity_ids: 'LHK078ML1,LHK078MR1'
-            }
-          })
-          return { [kpi.key]: response.data.data }
-        })
 
-        const results = await Promise.all(promises)
-        const combinedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {})
-        setKpiData(combinedData)
+        // Preference 적용 (localStorage)
+        let keys = defaultKpiKeys
+        let ents = entityList
+        try {
+          const raw = localStorage.getItem('activePreference')
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed?.config?.defaultKPIs) && parsed.config.defaultKPIs.length > 0) {
+              keys = parsed.config.defaultKPIs.map(String)
+            }
+            if (Array.isArray(parsed?.config?.defaultEntities) && parsed.config.defaultEntities.length > 0) {
+              ents = parsed.config.defaultEntities.map(String)
+            }
+          }
+        } catch {}
+        setKpiKeys(keys)
+        setEntityList(ents)
+
+        // 배치 엔드포인트 호출
+        const resp = await apiClient.post('/api/kpi/statistics/batch', {
+          start_date: startDate,
+          end_date: endDate,
+          kpi_types: keys,
+          entity_ids: (ents || []).join(',')
+        })
+        setKpiData(resp?.data?.data || {})
       } catch (error) {
         console.error('Error fetching KPI data:', error)
       } finally {
@@ -66,10 +97,10 @@ const Dashboard = () => {
       <div className="space-y-6">
         <h2 className="text-3xl font-bold">Dashboard</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {kpiTypes.map((kpi) => (
-            <Card key={kpi.key}>
+          {(kpiKeys && kpiKeys.length ? kpiKeys : defaultKpiKeys).map((key) => (
+            <Card key={key}>
               <CardHeader>
-                <CardTitle>{kpi.title}</CardTitle>
+                <CardTitle>{titleFor(key)}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64 flex items-center justify-center">
@@ -87,14 +118,14 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h2 className="text-3xl font-bold">Dashboard</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {kpiTypes.map((kpi) => {
-          const chartData = formatChartData(kpiData[kpi.key] || [])
+        {(kpiKeys && kpiKeys.length ? kpiKeys : defaultKpiKeys).map((key, idx) => {
+          const chartData = formatChartData(kpiData[key] || [])
           const entities = chartData.length > 0 ? Object.keys(chartData[0]).filter(key => key !== 'time') : []
           
           return (
-            <Card key={kpi.key}>
+            <Card key={key}>
               <CardHeader>
-                <CardTitle>{kpi.title}</CardTitle>
+                <CardTitle>{titleFor(key)}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
@@ -110,7 +141,7 @@ const Dashboard = () => {
                           key={entity}
                           type="monotone"
                           dataKey={entity}
-                          stroke={index === 0 ? kpi.color : `hsl(${index * 60}, 70%, 50%)`}
+                          stroke={colorFor((idx + index) % 12)}
                           strokeWidth={2}
                         />
                       ))}

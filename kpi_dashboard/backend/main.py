@@ -119,11 +119,12 @@ def _record_to_model(rec: AnalysisResultRecord) -> AnalysisResult:
     )
 
 # 가상 데이터 생성 함수
-def generate_mock_kpi_data(start_date: str, end_date: str, kpi_type: str, entity_ids: List[str]) -> List[KPIData]:
+def generate_mock_kpi_data(start_date: str, end_date: str, kpi_type: str, entity_ids: List[str], interval_minutes: int = 60) -> List[KPIData]:
     data = []
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
     
+    step = timedelta(minutes=max(1, int(interval_minutes)))
     current = start
     while current <= end:
         for entity_id in entity_ids:
@@ -168,7 +169,7 @@ def generate_mock_kpi_data(start_date: str, end_date: str, kpi_type: str, entity
                 value=round(value, 2)
             ))
         
-        current += timedelta(hours=1)  # 1시간 간격
+        current += step  # 가변 간격 (기본 60분, 5/15분 등)
     
     return data
 
@@ -205,6 +206,8 @@ mock_reports = [
 # API 엔드포인트
 @app.get("/")
 async def root():
+    """헬스 체크 및 간단한 루트 응답."""
+    logging.info("GET / 호출")
     return {"message": "3GPP KPI Management API"}
 
 @app.post("/api/analysis-result")
@@ -235,6 +238,7 @@ async def post_analysis_result(payload: dict):
 
 @app.get("/api/analysis-result/latest")
 async def get_latest_analysis_result():
+    logging.info("GET /api/analysis-result/latest 호출")
     with SessionLocal() as s:
         rec = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).first()
         if not rec:
@@ -243,6 +247,7 @@ async def get_latest_analysis_result():
 
 @app.get("/api/analysis-result/{result_id}")
 async def get_analysis_result(result_id: int):
+    logging.info("GET /api/analysis-result/%s 호출", result_id)
     with SessionLocal() as s:
         rec = s.query(AnalysisResultRecord).filter(AnalysisResultRecord.id == result_id).first()
         if not rec:
@@ -251,6 +256,7 @@ async def get_analysis_result(result_id: int):
 
 @app.get("/api/analysis-result")
 async def list_analysis_results():
+    logging.info("GET /api/analysis-result 호출 (list)")
     with SessionLocal() as s:
         recs = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).all()
         return {"results": [_record_to_model(r) for r in recs]}
@@ -300,6 +306,7 @@ async def kpi_query(payload: dict = Body(...)):
             raise ValueError("start_date/end_date 형식은 YYYY-MM-DD 이어야 합니다")
 
         ids = [t.strip() for t in str(entity_ids).split(",") if t.strip()]
+        logging.info("/api/kpi/query 매개변수: kpi_type=%s, ids=%d, 기간=%s~%s", kpi_type, len(ids), start_date, end_date)
 
         # SQL: 시간(hour) 버킷으로 평균값 집계. entity_id는 peg_name으로 대응
         sql = (
@@ -349,6 +356,7 @@ async def kpi_query(payload: dict = Body(...)):
                 "kpi_type": kpi_type,
                 "value": float(r["avg_value"]),
             })
+        logging.info("/api/kpi/query 성공: rows=%d (proxy-db)", len(data))
         return {"data": data, "source": "proxy-db"}
     except Exception:
         # 실패 시 mock 으로 폴백하여 프론트 사용성 보장
@@ -358,6 +366,7 @@ async def kpi_query(payload: dict = Body(...)):
         entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
         logging.warning("KPI 프록시 실패, mock 데이터로 폴백")
         data = generate_mock_kpi_data(start_date, end_date, kpi_type, entity_ids.split(","))
+        logging.info("/api/kpi/query 폴백 성공: rows=%d (proxy-mock)", len(data))
         return {"data": data, "source": "proxy-mock"}
 
 @app.get("/api/kpi/statistics")
@@ -365,10 +374,13 @@ async def get_kpi_statistics(
     start_date: str = Query(..., description="시작 날짜 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="종료 날짜 (YYYY-MM-DD)"),
     kpi_type: str = Query(..., description="KPI 타입"),
-    entity_ids: str = Query("LHK078ML1,LHK078MR1", description="엔티티 ID 목록 (쉼표로 구분)")
+    entity_ids: str = Query("LHK078ML1,LHK078MR1", description="엔티티 ID 목록 (쉼표로 구분)"),
+    interval_minutes: int = Query(60, ge=1, le=60*24, description="샘플링 간격(분). 최소 5/15 등의 간격 지원")
 ):
+    logging.info("GET /api/kpi/statistics: kpi_type=%s, ids=%s, interval=%s, 기간=%s~%s", kpi_type, entity_ids, interval_minutes, start_date, end_date)
     entity_list = entity_ids.split(",")
-    data = generate_mock_kpi_data(start_date, end_date, kpi_type, entity_list)
+    data = generate_mock_kpi_data(start_date, end_date, kpi_type, entity_list, interval_minutes=interval_minutes)
+    logging.info("/api/kpi/statistics 응답 rows=%d", len(data))
     return {"data": data}
 
 @app.get("/api/kpi/trends")
@@ -376,10 +388,51 @@ async def get_kpi_trends(
     start_date: str = Query(..., description="시작 날짜 (YYYY-MM-DD)"),
     end_date: str = Query(..., description="종료 날짜 (YYYY-MM-DD)"),
     kpi_type: str = Query(..., description="KPI 타입"),
-    entity_id: str = Query(..., description="엔티티 ID")
+    entity_id: str = Query(..., description="엔티티 ID"),
+    interval_minutes: int = Query(60, ge=1, le=60*24, description="샘플링 간격(분)")
 ):
-    data = generate_mock_kpi_data(start_date, end_date, kpi_type, [entity_id])
+    logging.info("GET /api/kpi/trends: kpi_type=%s, entity_id=%s, interval=%s, 기간=%s~%s", kpi_type, entity_id, interval_minutes, start_date, end_date)
+    data = generate_mock_kpi_data(start_date, end_date, kpi_type, [entity_id], interval_minutes=interval_minutes)
+    logging.info("/api/kpi/trends 응답 rows=%d", len(data))
     return {"data": data}
+
+@app.post("/api/kpi/statistics/batch")
+async def get_kpi_statistics_batch(payload: dict = Body(...)):
+    """
+    다수 KPI 타입을 한 번에 조회하는 배치 엔드포인트.
+    현재 단계에서는 mock 생성기를 사용해 프론트엔드 대량 KPI 차트 표시를 지원한다.
+
+    기대 입력 예시:
+    {
+      "start_date": "YYYY-MM-DD",
+      "end_date": "YYYY-MM-DD",
+      "kpi_types": ["availability","rrc",...],
+      "entity_ids": "LHK078ML1,LHK078MR1",
+      "interval_minutes": 60
+    }
+    """
+    try:
+        start_date = payload.get("start_date")
+        end_date = payload.get("end_date")
+        kpi_types = payload.get("kpi_types") or []
+        entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
+        interval_minutes = int(payload.get("interval_minutes") or 60)
+        if not start_date or not end_date or not kpi_types:
+            raise HTTPException(status_code=400, detail="start_date, end_date, kpi_types는 필수입니다")
+
+        entities = [t.strip() for t in str(entity_ids).split(",") if t.strip()]
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        logging.info("POST /api/kpi/statistics/batch: types=%d, ids=%d, interval=%s, 기간=%s~%s", len(kpi_types), len(entities), interval_minutes, start_date, end_date)
+        for kt in kpi_types:
+            result[str(kt)] = generate_mock_kpi_data(start_date, end_date, str(kt), entities, interval_minutes=interval_minutes)
+        total = sum(len(v) for v in result.values())
+        logging.info("/api/kpi/statistics/batch 응답 합계 rows=%d", total)
+        return {"data": result, "source": "proxy-mock"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("배치 KPI 통계 생성 실패")
+        raise HTTPException(status_code=400, detail=f"failed: {e}")
 
 @app.get("/api/reports/summary")
 async def get_summary_reports(report_id: Optional[int] = None):
@@ -392,10 +445,12 @@ async def get_summary_reports(report_id: Optional[int] = None):
 
 @app.get("/api/preferences")
 async def get_preferences():
+    logging.info("GET /api/preferences 호출: count=%d", len(preferences_db))
     return {"preferences": preferences_db}
 
 @app.get("/api/preferences/{preference_id}")
 async def get_preference(preference_id: int):
+    logging.info("GET /api/preferences/%s 호출", preference_id)
     preference = next((p for p in preferences_db if p.id == preference_id), None)
     if not preference:
         raise HTTPException(status_code=404, detail="Preference not found")
@@ -403,6 +458,7 @@ async def get_preference(preference_id: int):
 
 @app.post("/api/preferences")
 async def create_preference(preference: PreferenceModel):
+    logging.info("POST /api/preferences 호출: name=%s", preference.name)
     global preference_counter
     preference.id = preference_counter
     preference_counter += 1
@@ -411,6 +467,7 @@ async def create_preference(preference: PreferenceModel):
 
 @app.put("/api/preferences/{preference_id}")
 async def update_preference(preference_id: int, preference: PreferenceModel):
+    logging.info("PUT /api/preferences/%s 호출", preference_id)
     existing = next((p for p in preferences_db if p.id == preference_id), None)
     if not existing:
         raise HTTPException(status_code=404, detail="Preference not found")
@@ -422,12 +479,14 @@ async def update_preference(preference_id: int, preference: PreferenceModel):
 
 @app.delete("/api/preferences/{preference_id}")
 async def delete_preference(preference_id: int):
+    logging.info("DELETE /api/preferences/%s 호출", preference_id)
     global preferences_db
     preferences_db = [p for p in preferences_db if p.id != preference_id]
     return {"message": "Preference deleted successfully"}
 
 @app.get("/api/preferences/{preference_id}/derived-pegs")
 async def get_preference_derived_pegs(preference_id: int):
+    logging.info("GET /api/preferences/%s/derived-pegs 호출", preference_id)
     pref = next((p for p in preferences_db if p.id == preference_id), None)
     if not pref:
         raise HTTPException(status_code=404, detail="Preference not found")
@@ -436,6 +495,7 @@ async def get_preference_derived_pegs(preference_id: int):
 
 @app.put("/api/preferences/{preference_id}/derived-pegs")
 async def update_preference_derived_pegs(preference_id: int, payload: dict = Body(...)):
+    logging.info("PUT /api/preferences/%s/derived-pegs 호출", preference_id)
     pref = next((p for p in preferences_db if p.id == preference_id), None)
     if not pref:
         raise HTTPException(status_code=404, detail="Preference not found")

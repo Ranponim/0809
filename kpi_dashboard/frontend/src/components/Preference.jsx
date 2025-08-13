@@ -309,6 +309,22 @@ const Preference = () => {
                       Apply to Dashboard
                     </Button>
                   </div>
+                  <div className="text-xs text-gray-500">현재 선택한 Preference를 대시보드에 적용하려면 아래 버튼을 누르세요.</div>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        try {
+                          if (!selectedPreference) return
+                          localStorage.setItem('activePreference', JSON.stringify(selectedPreference))
+                        } catch (e) {
+                          console.error('Failed to set activePreference', e)
+                        }
+                      }}
+                    >
+                      Set as Active Preference
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

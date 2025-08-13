@@ -1,3 +1,49 @@
+## 3GPP KPI Dashboard + Cell LLM Analyzer
+
+> React + FastAPI 기반 3GPP KPI 대시보드와 MCP 기반 셀 성능 LLM 분석기를 한 번에 운영하기 위한 통합 리포지토리입니다.
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933.svg?logo=nodedotjs&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688.svg?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg?logo=vite&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-CC0000.svg)
+![License](https://img.shields.io/badge/License-Private-lightgrey.svg)
+
+네트워크 KPI 대시보드(React + FastAPI)와 셀 성능 LLM 분석기(MCP)를 함께 제공하는 저장소입니다.
+
+- 백엔드: FastAPI 기반 KPI/리포트/Preference API, PostgreSQL/SQLite 영구 저장 지원
+- 프론트엔드: Vite + React, Dashboard/Statistics/AdvancedChart/Preference UI 제공
+- 분석기: `analysis_llm.py` MCP 서버, 두 기간(N-1/N) 비교·시각화·LLM 종합 분석/HTML 리포트
+
+빠르게 시작하려면 아래 문서를 참고하세요.
+- Quick Start: `kpi_dashboard/QUICKSTART.md`
+- 대시보드 사용/구조: `kpi_dashboard/3GPP KPI 대시보드_ 전체 사용 방법 및 내용.md`
+- API/데이터 규격: `kpi_dashboard/백엔드-프론트엔드 데이터 구조 양식.md`
+
+---
+
+## 목차
+- [개요 (Cell 성능 LLM 분석기)](#cell-성능-llm-분석기-mcp-기반)
+- [설치](#설치)
+- [환경 변수](#환경-변수)
+- [대시보드(백엔드/프론트) 빠른 실행](#대시보드백엔드프론트-빠른-실행)
+- [실행 방법 (MCP)](#실행-방법)
+- [처리 파이프라인 개요 (분석기)](#처리-파이프라인-개요)
+- [로깅/오류 처리 정책](#로깅오류-처리-정책)
+- [스키마/설정 참고](#스키마설정-참고)
+- [LLM 엔드포인트/모델 변경](#llm-엔드포인트모델-변경)
+- [라이선스/고지](#라이선스고지)
+
+---
+
+### Quick Links
+- 빠른 시작: `kpi_dashboard/QUICKSTART.md`
+- 대시보드 사용/구조: `kpi_dashboard/3GPP KPI 대시보드_ 전체 사용 방법 및 내용.md`
+- API/데이터 규격: `kpi_dashboard/백엔드-프론트엔드 데이터 구조 양식.md`
+
+---
+
 ## Cell 성능 LLM 분석기 (MCP 기반)
 
 ### 개요
@@ -33,6 +79,15 @@ python -m pip install -r requirements.txt
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: DB 접속 정보의 폴백 값
 
 LLM 엔드포인트/모델은 코드 내부 `query_llm()`에 하드코딩되어 있습니다. 필요 시 해당 함수의 `endpoints`/`payload["model"]`를 수정하세요.
+
+---
+
+## 대시보드(백엔드/프론트) 빠른 실행
+- 빠른 시작 가이드는 `kpi_dashboard/QUICKSTART.md`를 참고하세요.
+- 전체 사용 방법/데이터 규격 문서는 아래를 참고하세요.
+  - `kpi_dashboard/3GPP KPI 대시보드_ 전체 사용 방법 및 내용.md`
+  - `kpi_dashboard/백엔드-프론트엔드 데이터 구조 양식.md`
+  - `kpi_dashboard/docs/architecture.md` (아키텍처/데이터 흐름 다이어그램)
 
 ---
 

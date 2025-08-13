@@ -79,7 +79,27 @@ const SummaryReport = () => {
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold">Summary Report</h2>
         {selectedReport && (
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => {
+              try {
+                const name = (selectedReport.title || 'report').replace(/\s+/g,'_')
+                const content = String(selectedReport.content || '')
+                const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${name}.md`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              } catch (e) {
+                console.error('Export failed', e)
+              }
+            }}
+          >
             <Download className="h-4 w-4" />
             Export Report
           </Button>

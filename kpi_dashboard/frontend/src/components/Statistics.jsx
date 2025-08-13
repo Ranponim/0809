@@ -26,7 +26,7 @@ const Statistics = () => {
   const [pegs, setPegs] = useState([])
   const [cells, setCells] = useState([])
 
-  const kpiOptions = [
+  const defaultKpiOptions = [
     { value: 'availability', label: 'Availability' },
     { value: 'rrc', label: 'RRC Success Rate' },
     { value: 'erab', label: 'ERAB Success Rate' },
@@ -38,15 +38,40 @@ const Statistics = () => {
     { value: 'ul_int', label: 'UL Interference' }
   ]
 
+  const [kpiOptions, setKpiOptions] = useState(defaultKpiOptions)
+
   useEffect(() => {
+    // Preference에서 availableKPIs 로드 (없으면 기본값 유지)
+    try {
+      const raw = localStorage.getItem('activePreference')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const opts = Array.isArray(parsed?.config?.availableKPIs) && parsed.config.availableKPIs.length > 0
+          ? parsed.config.availableKPIs.map(o => ({ value: String(o.value), label: String(o.label || o.value) }))
+          : defaultKpiOptions
+        setKpiOptions(opts)
+        // 현재 선택된 kpiType이 목록에 없으면 첫 항목으로 교체
+        const values = opts.map(o => o.value)
+        if (!values.includes(filters.kpiType)) {
+          setFilters(prev => ({ ...prev, kpiType: opts[0]?.value || 'availability' }))
+        }
+        console.info('[Statistics] availableKPIs loaded from Preference:', opts)
+      } else {
+        console.info('[Statistics] No activePreference, using defaults')
+      }
+    } catch {
+      setKpiOptions(defaultKpiOptions)
+    }
     const fetchMasterData = async () => {
       try {
+        console.info('[Statistics] Fetching master PEGs/Cells')
         const [pegsResponse, cellsResponse] = await Promise.all([
           apiClient.get('/api/master/pegs'),
           apiClient.get('/api/master/cells')
         ])
         setPegs(pegsResponse.data.pegs || [])
         setCells(cellsResponse.data.cells || [])
+        console.info('[Statistics] Master loaded:', pegsResponse.data.pegs?.length || 0, cellsResponse.data.cells?.length || 0)
       } catch (error) {
         console.error('Error fetching master data:', error)
       }
@@ -58,6 +83,7 @@ const Statistics = () => {
   const handleSearch = async () => {
     try {
       setLoading(true)
+      console.info('[Statistics] Search click:', filters, dbConfig)
       const response = await apiClient.post('/api/kpi/query', {
         db: dbConfig,
         table: dbConfig.table || 'summary',
@@ -68,6 +94,7 @@ const Statistics = () => {
       })
 
       const data = response.data.data || []
+      console.info('[Statistics] Query result rows:', data.length)
       const formattedData = formatChartData(data)
       setChartData(formattedData)
     } catch (error) {
