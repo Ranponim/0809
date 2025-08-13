@@ -234,7 +234,7 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.D
         raise
 
 
-# --- LLM 프롬프트 생성 (통합 분석) ---
+# --- LLM 프롬프트 생성 (통합 분석) [구버전: 호환성 유지 목적, 미사용 예정] ---
 def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str, n_range: str) -> str:
     """
     전체 PEG를 통합한 셀 단위 종합 분석 프롬프트를 생성합니다.
@@ -285,6 +285,82 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
     logging.info("create_llm_analysis_prompt_overall() 완료")
     return prompt
 
+
+# --- LLM 프롬프트 생성 (고도화된 종합 분석) ---
+def create_llm_analysis_prompt_enhanced(processed_df: pd.DataFrame, n1_range: str, n_range: str) -> str:
+    """
+    PEG 집계 데이터를 기반으로, 연쇄적 사고 진단 워크플로우를 적용한
+    전문가 수준의 종합 분석 프롬프트를 생성합니다.
+
+    가정:
+    - n-1과 n 기간은 동일한 시험환경에서 수행됨.
+    - 입력 데이터(processed_df)는 PEG 단위로 집계된 상태임 (셀 단위 데이터 아님).
+
+    기대 출력 (JSON):
+    - executive_summary: 최상위 요약
+    - diagnostic_findings: 구조화된 진단 결과 목록
+    - recommended_actions: 우선순위가 부여된 구체적인 실행 계획 목록
+    """
+    logging.info("create_llm_analysis_prompt_enhanced() 호출: 고도화된 프롬프트 생성 시작")
+    data_preview = processed_df.to_string(index=False)
+
+    prompt = f"""
+[페르소나 및 임무]
+당신은 Tier-1 이동통신사에서 20년 경력을 가진 수석 네트워크 진단 및 최적화 전략가입니다. 당신의 임무는 신속한 근본 원인 분석(RCA)을 수행하고, 고객 영향도에 따라 문제의 우선순위를 정하며, 현장 엔지니어링 팀을 위한 명확하고 실행 가능한 계획을 제공하는 것입니다. 당신의 분석은 3GPP 표준(TS 36/38.xxx 시리즈)과 운영 모범 사례에 부합해야 하며, 엄격하고 증거에 기반해야 합니다.
+
+[컨텍스트 및 가정]
+- 분석 대상은 두 기간 동안의 PEG(Performance Event Group) 카운터 변화입니다.
+- 기간 n-1: {n1_range}
+- 기간 n: {n_range}
+- 핵심 가정: 두 기간은 동일한 시험환경(동일 하드웨어, 기본 파라미터, 트래픽 모델)에서 수행되었습니다.
+- 입력 데이터는 PEG 단위로 집계된 평균값이며, 개별 셀(cell) 데이터는 포함되어 있지 않습니다. 따라서 셀 단위의 특정 문제 식별은 불가능하며, 집계 데이터 기반의 거시적 분석을 수행해야 합니다.
+
+[입력 데이터]
+- 컬럼 설명: peg_name(PEG 이름), avg_n_minus_1(기간 n-1 평균), avg_n(기간 n 평균), diff(변화량), pct_change(변화율)
+- 데이터 테이블:
+{data_preview}
+
+[분석 워크플로우 지침]
+아래의 4단계 연쇄적 사고(Chain-of-Thought) 진단 워크플로우를 엄격히 따라서 분석을 수행하십시오.
+
+# 1단계: 문제 분류 및 중요도 평가 (Triage and Significance Assessment)
+먼저, 입력 테이블의 모든 PEG를 검토하여 가장 심각한 '부정적' 변화를 보인 상위 3~5개의 PEG를 식별하십시오. '중요도'는 'pct_change'의 절대값 크기와 해당 PEG의 운영상 '고객 영향도'를 종합하여 판단합니다. 각 PEG가 영향을 미치는 3GPP 서비스 범주(Accessibility, Retainability, Mobility, Integrity, Latency)에 따라 영향도를 분류하고, 가장 시급하게 다루어야 할 문제를 선정하십시오.
+
+# 2단계: 주제별 그룹화 및 핵심 가설 생성 (Thematic Grouping and Primary Hypothesis Generation)
+1단계에서 식별된 우선순위가 높은 문제들에 대해, 연관된 PEG들을 논리적으로 그룹화하여 '진단 주제(Diagnostic Theme)'를 정의하십시오. (예: 다수의 접속 관련 PEG 악화 -> 'Accessibility Degradation' 주제). 각 주제에 대해, 3GPP 호 처리 절차(Call Flow) 및 운영 경험에 기반하여 가장 개연성 높은 단일 '핵심 가설(Primary Hypothesis)'을 수립하십시오. 이 가설은 구체적이고 검증 가능해야 합니다.
+
+# 3단계: 시스템적 요인 분석 및 교란 변수 고려 (Systemic Factor Analysis & Confounding Variable Assessment)
+수립한 핵심 가설을 검증하기 위해, 전체 데이터 테이블에서 가설을 뒷받침하거나(supporting evidence) 반박하는(contradictory evidence) 다른 PEG 변화를 분석하십시오. 또한, '동일 환경' 가정이 깨질 수 있는 잠재적 교란 요인(예: 라우팅 정책 변경, 소프트웨어 마이너 패치, 특정 파라미터 롤백, 단말기 믹스 변화)을 명시적으로 고려하고, 이러한 요인들이 현재 문제의 원인일 가능성이 높은지 낮은지, 그리고 그 판단의 근거는 무엇인지 논리적으로 기술하십시오.
+
+# 4단계: 증거 기반의 검증 계획 수립 (Formulation of an Evidence-Based Verification Plan)
+각 핵심 가설에 대해, 현장 엔지니어가 즉시 수행할 수 있는 구체적이고 우선순위가 부여된 '검증 계획'을 수립하십시오. 조치는 반드시 구체적이어야 합니다. (예: '로그 확인' 대신 '특정 카운터(pmRachAtt) 추이 분석'). 조치별로 P1(즉시 조치), P2(심층 조사), P3(정기 감사)와 같은 우선순위를 부여하고, 필요한 데이터(카운터, 파라미터 등)나 도구를 명시하십시오.
+
+[출력 형식 제약]
+- 분석 결과는 반드시 아래의 JSON 스키마를 정확히 준수하여 생성해야 합니다.
+- 모든 문자열 값은 한국어로 작성하십시오.
+- 각 필드에 대한 설명과 열거형(Enum) 값을 반드시 따르십시오.
+
+
+{{
+  "executive_summary": "네트워크 상태 변화와 식별된 가장 치명적인 문제에 대한 1-2 문장의 최상위 요약.",
+  "diagnostic_findings": [
+    {{
+      "primary_hypothesis": "가장 가능성 높은 단일 근본 원인 가설.",
+      "supporting_evidence": "데이터 테이블 내에서 가설을 뒷받침하는 다른 PEG 변화나 논리적 근거.",
+      "confounding_factors_assessment": "교란 변수들의 가능성에 대한 평가 및 그 근거."
+    }}
+  ],
+  "recommended_actions": [
+    {{
+      "priority": "P1|P2|P3",
+      "action": "구체적 실행 항목",
+      "details": "필요 데이터/도구 및 수행 방법"
+    }}
+  ]
+}}
+"""
+    logging.info("create_llm_analysis_prompt_enhanced() 완료")
+    return prompt
 
 # --- LLM API 호출 함수 (subprocess + curl) ---
 def query_llm(prompt: str) -> dict:
@@ -375,11 +451,51 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
     report_filename = f"Cell_Analysis_Report_{timestamp}.html"
     report_path = os.path.join(output_dir, report_filename)
 
-    summary_html = (llm_analysis.get('overall_summary') or llm_analysis.get('comprehensive_summary', 'N/A')).replace('\n', '<br>')
-    findings_html = ''.join([f'<li>{item}</li>' for item in llm_analysis.get('key_findings', [])])
-    actions_html = ''.join([f'<li>{item}</li>' for item in llm_analysis.get('recommended_actions', [])])
+    # 요약: 새 스키마(executive_summary) 우선, 구 스키마(overall_summary, comprehensive_summary) 폴백
+    summary_text = (
+        llm_analysis.get('executive_summary')
+        or llm_analysis.get('overall_summary')
+        or llm_analysis.get('comprehensive_summary', 'N/A')
+    )
+    summary_html = str(summary_text).replace('\n', '<br>')
 
-    # 셀 상세 분석 (있을 경우)
+    # 진단 결과: 새 스키마(diagnostic_findings: list[dict]) 우선, 구 스키마(key_findings: list[str]) 폴백
+    findings_html = ''
+    diagnostic_findings = llm_analysis.get('diagnostic_findings')
+    if isinstance(diagnostic_findings, list) and diagnostic_findings and isinstance(diagnostic_findings[0], dict):
+        items = []
+        for i, d in enumerate(diagnostic_findings, 1):
+            ph = d.get('primary_hypothesis', '').strip()
+            se = d.get('supporting_evidence', '').strip()
+            cf = d.get('confounding_factors_assessment', '').strip()
+            item_html = (
+                f"<li><div><strong>가설 {i}:</strong> {html.escape(ph)}</div>"
+                f"<div class='muted'>증거: {html.escape(se)}</div>"
+                f"<div class='muted'>교란 변수 평가: {html.escape(cf)}</div></li>"
+            )
+            items.append(item_html)
+        findings_html = ''.join(items)
+    else:
+        findings_html = ''.join([f'<li>{html.escape(str(item))}</li>' for item in llm_analysis.get('key_findings', [])])
+
+    # 권장 조치: 새 스키마(recommended_actions: list[dict])와 구 스키마(list[str]) 지원
+    actions_html = ''
+    rec_actions = llm_analysis.get('recommended_actions', [])
+    if isinstance(rec_actions, list) and rec_actions and isinstance(rec_actions[0], dict):
+        parts = []
+        for a in rec_actions:
+            pr = a.get('priority', '').strip()
+            ac = a.get('action', '').strip()
+            dt = a.get('details', '').strip()
+            parts.append(
+                f"<li><div><strong>{html.escape(pr or 'P?')}</strong> - {html.escape(ac)}</div>"
+                f"<div class='muted'>{html.escape(dt)}</div></li>"
+            )
+        actions_html = ''.join(parts)
+    else:
+        actions_html = ''.join([f'<li>{html.escape(str(item))}</li>' for item in rec_actions])
+
+    # 셀 상세 분석 (있을 경우, 구 스키마 호환)
     detail_map = llm_analysis.get('cells_with_significant_change') or llm_analysis.get('detailed_cell_analysis') or {}
     detailed_parts = []
     for cell, analysis in detail_map.items():
@@ -795,7 +911,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
         # LLM 프롬프트 & 분석
-        prompt = create_llm_analysis_prompt_overall(processed_df, n1_text, n_text)
+        prompt = create_llm_analysis_prompt_enhanced(processed_df, n1_text, n_text)
         logging.info("프롬프트 길이: %d자", len(prompt))
         llm_analysis = query_llm(prompt)
         logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
