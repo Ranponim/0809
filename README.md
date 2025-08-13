@@ -154,3 +154,24 @@ async def receive(req: Request):
 - 자세한 요구사항은 `./.taskmaster/docs/prd.txt` 참고
 
 
+## PEG 평균 비교 스크립트 (신규)
+
+PRD 변경에 따라 `peg_name`별로 두 날짜(n-1, n)의 `value` 평균을 비교하는 단일 실행 스크립트를 추가했습니다.
+
+- 입력: `YYYY-MM-DD YYYY-MM-DD` (순서대로 n-1, n)
+- 설정: `output_dir / backend_url / db / table / columns`는 코드에 하드코딩됨
+- DB 스키마(열): `id / host / ne / version / family_name / cellid / peg_name / datetime / value`
+- 결과: peg_name별 평균 비교 CSV 및 간단 HTML 리포트 생성
+
+### 실행 방법
+```bash
+python peg_name_avg_compare.py 2025-08-12 2025-08-13
+```
+
+### 출력
+- CSV: `analysis_output/comparison_YYYY-MM-DD_YYYY-MM-DD.csv`
+- HTML: `analysis_output/peg_avg_report_YYYY-MM-DD_YYYY-MM-DD.html`
+
+> 변화 지표: `diff = avg_n - avg_n_minus_1`, `pct_change = diff / avg_n_minus_1 * 100` (분모 0/결측은 NaN 처리)
+
+

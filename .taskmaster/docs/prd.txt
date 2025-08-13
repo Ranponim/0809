@@ -1,130 +1,100 @@
-제목: Cell 성능 LLM 분석기 리팩토링 PRD (시간범위 입력 + PostgreSQL 집계 + 통합 분석 + HTML/백엔드 POST)
+제목: 하드코딩 기반 입력 단순화 및 n/n-1 평균 비교 분석 기능 PRD
 
-요약
-- 기존: PEG별 JSON 입력 → 내부 LLM 분석 → PEG 단위 리포트
-- 변경: LLM/사용자 입력은 시간 범위(n-1, n). 주어진 시간 범위로 PostgreSQL에서 셀 단위 평균을 집계하고, 전체 PEG 데이터를 통합하여 셀 기준으로 종합 성능을 분석한다.
-- 가정: n-1과 n은 동일한 시험환경에서 수행되었다고 상정하여 분석한다.
-- 출력: HTML 리포트 생성 + FastAPI 백엔드로 JSON POST 전송. MCP 도구로 호출 가능.
+1. 배경 및 목적
+- 현재 코드 사용 방식을 단순화한다.
+- 실행 시 외부 설정 입력을 최소화하고, 코드 내부에 핵심 환경설정을 하드코딩한다.
+- 사용자 입력은 오직 두 개의 값(n-1, n)만 받는다. 두 값은 일(day) 단위의 기준일로 간주한다.
+- 목표는 기준일(n-1)과 대상일(n)에 대해 peg_name별 value의 평균을 산출하고, 평균값의 증감 및 변화율을 분석·보고하는 것이다.
 
-배경 및 목적
-- 운영 중인 네트워크에서 다양한 PEG 측정이 동일한 환경에서 반복 수행된다. PEG별이 아니라 셀 기준으로 전체 PEG 결과를 통합해 네트워크 전반의 성능 변화를 평가하는 것이 목표.
-- 리팩토링을 통해 분석 입력을 시간 범위로 단순화하고, DB에서 직접 집계하여 자동화·재현성을 향상.
+2. 범위(Scope)
+- 입력: n-1, n (형식: YYYY-MM-DD, 문자열)
+- 하드코딩 항목: output_dir, backend_url, DB 접속 정보, 대상 table, 사용 columns
+- 데이터 원천: RDB (스키마/테이블은 코드에 하드코딩)
+- 처리 내용: 두 기준일에 대한 peg_name별 value 평균 비교, 증감 분석 결과 산출/저장
+- 산출물: 결과 CSV 및 요약 리포트(예: HTML 또는 Markdown)
 
-범위
-- 포함: 입력 파서(시간 범위), PostgreSQL 집계, 데이터 처리(변화율/이상치), LLM 프롬프트 생성(통합 분석), LLM 호출/페일오버, HTML 리포트 생성, 백엔드 POST(JSON), MCP 도구 인터페이스.
-- 제외: 백엔드 FastAPI 서버 구현 자체, 데이터 적재 파이프라인, 권한/계정 관리 UI.
+3. 시스템/설정(코드 하드코딩 항목)
+- output_dir: 결과 파일 저장 경로
+- backend_url: 백엔드 서비스 URL (필요 시; 현 단계에선 DB 직접 조회만 사용 가능)
+- db: DB 접속 정보 (호스트, 포트, DB명, 계정, 비밀번호 등)
+- table: 조회 대상 테이블명
+- columns: 아래 스키마에 명시된 컬럼들
 
-용어 정의
-- n-1, n: 비교 대상이 되는 두 기간. 입력 형식은 "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm".
-- anomaly: 변화율(|rate|)이 임계치(threshold) 이상인 경우 True.
+4. 데이터베이스 스키마 사양
+- 테이블 컬럼 목록 및 자료형
+  - id: integer
+  - host: character varying
+  - ne: character varying
+  - version: character varying
+  - family_name: character varying
+  - cellid: character varying
+  - peg_name: character varying
+  - datetime: timestamp without time zone
+  - value: double precision
 
-입력 사양
-- 필수
-  - n_minus_1: 문자열 (예: "2025-07-01_00:00~2025-07-01_23:59")
-  - n: 문자열 (예: "2025-07-02_00:00~2025-07-02_23:59")
-- 선택
-  - threshold: float, 기본 30.0 (변화율 임계치, %)
-  - output_dir: 문자열, 기본 ./analysis_output (HTML 출력 경로)
-  - backend_url: 문자열 (FastAPI POST URL)
-  - db: 객체 {host, port, user, password, dbname}
-  - table: 문자열, 기본 'measurements'
-  - columns: 객체 {time: 'ts', cell: 'cell_name', value: 'kpi_value'}
+5. 처리 로직(Functional Requirements)
+- 입력 유효성 검증
+  - n-1, n은 YYYY-MM-DD 형식의 문자열이어야 한다.
+  - n은 n-1보다 같거나 이후여야 한다.
+- 데이터 조회
+  - 두 기준일 각각에 대해 DATE(datetime) = 기준일 조건으로 행을 조회한다.
+  - 추가 필터(예: host, ne, family_name 등)는 현 버전에서 적용하지 않는다.
+- 집계
+  - 각 기준일 데이터에 대해 peg_name별 평균값(avg(value))을 산출한다.
+  - 결과를 peg_name을 기준으로 조인하여 다음 지표를 계산한다.
+    - avg_n_minus_1: 기준일(n-1)의 평균
+    - avg_n: 대상일(n)의 평균
+    - diff = avg_n - avg_n_minus_1
+    - pct_change =
+      - avg_n_minus_1가 0이 아니면 (diff / avg_n_minus_1) * 100
+      - avg_n_minus_1가 0이면 분모 0 회피 로직 적용(예: null 또는 무한대로 표기)
+- 출력
+  - CSV: columns = [peg_name, avg_n_minus_1, avg_n, diff, pct_change]
+  - 요약 리포트(HTML 또는 Markdown):
+    - 전체 peg_name 개수, 평균 증감의 전반적 경향
+    - 증감 상위/하위 peg_name (절대 diff 기준 상위 N, 변화율 기준 상위 N)
+    - 임계값(예: |diff| >= T, |pct_change| >= P)을 넘는 항목 강조 (T, P는 코드에 하드코딩 가능)
+- 성능/데이터량 가정
+  - 하루 기준 데이터량에서 peg_name 그룹 수가 수천 단위까지 무리 없는 성능 목표
 
-데이터 소스 및 스키마
-- 데이터: PostgreSQL 테이블 `measurements`(기본)
-  - time(ts, TIMESTAMP/TIMESTAMPTZ)
-  - cell(cell_name, TEXT)
-  - value(kpi_value, NUMERIC/DOUBLE PRECISION)
-- 쿼리: 기간 내 row를 cell로 GROUP BY, 평균(AVG) 산출
+6. 인터페이스(입력/출력)
+- 입력
+  - CLI 인자 또는 함수 파라미터로 n_minus_1_date, n_date (YYYY-MM-DD)
+  - 기타 설정/경로/DB정보는 전부 코드 내 상수로 하드코딩
+- 출력
+  - output_dir 아래 CSV 파일: 파일명 예) comparison_{n_minus_1}_{n}.csv
+  - output_dir 아래 요약 리포트 파일: 파일명 예) report_{n_minus_1}_{n}.html (또는 .md)
 
-기능 요구사항
-1) 시간 범위 파싱
-  - "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm" 형식을 파싱해 (start_dt, end_dt) 반환.
-  - 유효성 오류 시 명확한 로그 및 예외 메시지 제공.
+7. 오류 처리 및 로깅(필수)
+- 모든 주요 단계에서 INFO 레벨 로그 출력
+  - 시작/종료, 입력 검증 결과, 쿼리 수행 시작/종료, 조회 건수, 집계 완료, 파일 저장 경로 등
+- 예외 상황
+  - 날짜 형식 오류: 사용자 친화적 메시지 + 종료
+  - DB 연결/쿼리 실패: 오류 로그 + 종료
+  - 데이터 없음: 경고 로그 + 빈 결과 처리(파일은 헤더만 저장 또는 결과 없음 리포트)
+  - 분모 0: 변화율 계산 시 안전 처리 및 로그로 카운트 보고
+- 로깅 포맷 예
+  - "YYYY-MM-DD HH:MM:SS - LEVEL - [function] message"
 
-2) DB 연결/조회
-  - psycopg2로 PostgreSQL 연결 (환경변수 fallback 지원: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
-  - 파라미터로 받은 테이블/컬럼명 사용
-  - 각 기간(n-1, n)에 대해 cell별 AVG(value) 집계
-  - 결과 DataFrame 스키마: [cell_name, avg_value, period]
+8. 비기능 요구사항
+- 재현성: 하드코딩 설정에 기반하여 언제 실행해도 동일한 결과(동일한 n, n-1 입력 시)
+- 유지보수성: 설정 상수는 파일 상단에 모아두고, 명확한 변수명과 주석으로 관리
+- 가독성: PEP 8 준수, 의미 있는 함수/변수명, 함수별 단일 책임 원칙 준수
 
-3) 데이터 처리/시각화
-  - n-1/n 병합 Pivot: index=cell_name, columns=period → ['N-1', 'N']
-  - rate(%) 계산: ((N - N-1) / N-1) * 100, N-1=0은 NaN 처리
-  - anomaly: abs(rate) >= threshold
-  - 전체 셀 N-1 vs N 비교 차트(단일 이미지) base64 생성
+9. 보안
+- 비밀정보(계정/비번)는 안전한 방법으로 주입 가능하나, 본 PRD 범위에서는 하드코딩로 가정
+  - 실제 운영 전환 시 환경변수/보안 저장소로 이전 권장
 
-4) LLM 프롬프트 생성(통합 분석)
-  - 프롬프트에 명시: “n-1과 n은 동일한 시험환경에서 수행되었다고 가정”
-  - PEG 단위가 아닌 “전체 PEG 통합 데이터로 셀 단위 종합 분석” 요청
-  - 입력 표(요약)를 포함하고, 다음 JSON 출력 요구
-    {
-      "overall_summary": "...",
-      "key_findings": ["..."],
-      "recommended_actions": ["..."],
-      "cells_with_significant_change": {"CELL": "설명"}
-    }
+10. 완료 기준(Definition of Done)
+- n-1, n 두 날짜 입력만으로 실행 가능
+- DB에서 두 날짜 데이터를 조회해 peg_name별 평균 산출 후 비교/분석 결과를 CSV와 리포트로 저장
+- 주요 단계 로그가 상세히 출력되고, 오류 상황에서 안전하게 종료
+- 기본 단위 테스트(입력 검증, 집계 로직, 변화율 계산 분모 0 처리) 통과
 
-5) LLM 호출/페일오버
-  - vLLM chat/completions API 사용, 모델 "Gemma-3-27B"
-  - 엔드포인트 리스트 순차 시도, 실패 시 다음 엔드포인트로 이동
-  - 응답 텍스트에서 JSON만 안전하게 추출 (첫 '{' ~ 마지막 '}')
-
-6) HTML 리포트 생성
-  - 섹션: 종합 요약, 핵심 관찰, 권장 조치, 셀 상세(있을 경우), 전체 비교 차트
-  - 반응형 그리드, 한글 폰트 호환, headless 렌더링(backend 환경) 고려
-
-7) 백엔드 POST 전송
-  - backend_url 제공 시 JSON payload POST
-  - payload 예:
-    {
-      "status": "success",
-      "n_minus_1": "...",
-      "n": "...",
-      "threshold": 30.0,
-      "analysis": {...},
-      "stats": [{"cell_name": "...", "N-1": 0, "N": 0, "rate(%)": 0.0, "anomaly": false}],
-      "chart_overall_base64": "...",
-      "report_path": "...",
-      "assumption_same_environment": true
-    }
-  - 실패 시에도 메인 분석은 계속 진행하고 로그 남김.
-
-8) MCP 도구 인터페이스
-  - 이름: analyze_cell_performance_with_llm
-  - 입력: 상단 입력 사양과 동일한 request dict
-  - 출력: {status, message, report_path, backend_response?, analysis, stats}
-
-비기능 요구사항
-- 로깅: 함수별 INFO/ERROR 로그 필수. 예외 시 stacktrace 기록. 민감정보(password)는 로그에 남기지 않음.
-- 코드 스타일: PEP 8 준수, 의미 있는 변수/함수명, 주요 로직에 주석.
-- 성능: 기간당 수십만 row 수준에서 5초 내 평균 집계 목표(환경에 따라 상이, 인덱스 전제).
-- 안정성: DB/LLM/백엔드 POST 실패에 대한 견고한 예외 처리.
-- 보안: DB 자격증명은 환경변수 또는 안전한 설정으로 주입.
-
-수용 기준(AC)
-1) n-1/n 시간 범위로 분석 요청 시 DB에서 평균 집계가 정상 수행된다.
-2) 처리 결과에 rate(%), anomaly가 정확히 계산된다.
-3) LLM 결과 JSON을 안정적으로 추출한다(비JSON 텍스트 포함 응답도 처리).
-4) HTML 리포트가 생성되고, 차트가 올바르게 표시된다.
-5) backend_url 제공 시 결과 JSON이 성공적으로 POST된다.
-6) 주요 오류 케이스에 대해 명확한 로그와 의미 있는 에러 메시지를 반환한다.
-
-테스트 시나리오(예)
-- 정상: 유효한 기간과 DB 설정으로 요청 → 성공 분석, HTML 생성, POST 성공
-- 데이터 없음: 특정 기간에 데이터가 없어 오류 메시지/경고 처리
-- DB 연결 실패: 잘못된 자격증명 → 연결 오류 반환
-- LLM 실패: 모든 엔드포인트 실패 → 연결 오류 반환
-- POST 실패: 500/타임아웃 → 분석 결과는 반환하되 POST 실패 로그
-
-의존성
-- pandas, matplotlib(Agg), psycopg2, requests, fastmcp
-
-마일스톤(개략)
-1) 입력 파서/DB 집계 구현
-2) 처리/시각화 구현
-3) 프롬프트/LLM 호출/페일오버
-4) HTML/POST 구현
-5) 통합 테스트 및 로깅 강화
+11. 향후 확장(Out of Scope)
+- 기간 범위(예: 일주일/월간) 비교
+- 추가 필터(host/ne/family_name 등) 적용
+- 시각화 대시보드 연동
+- 경보/알림 시스템 연계
 
 
