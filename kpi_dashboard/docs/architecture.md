@@ -6,7 +6,7 @@ graph LR
   A["User Browser"] --> B["Frontend (React + Vite)"]
   B --> C["API Client (axios)"]
   C --> D["Backend (FastAPI)"]
-  D --> E[("DB: PostgreSQL / SQLite")]
+  D --> E[("DB (Persistence): PostgreSQL")]
   subgraph Analysis
     F["MCP Server: analysis_llm.py"]
     G["LLM Endpoints (vLLM)"]
@@ -16,27 +16,30 @@ graph LR
   F -- "Call" --> G
 ```
 
+- Persistence DB: 분석결과 영구 저장(필수). 환경변수 `ANALYSIS_DB_URL`(PostgreSQL DSN) 필요
+- Query DB: 통계 조회 대상(선택). 프런트의 Database Settings로 접속 정보 전달 → `/api/kpi/query`에서 사용
+
 ## KPI Data Flow (Dashboard/Statistics)
 ```mermaid
 sequenceDiagram
   participant U as "User"
   participant FE as "Frontend (React)"
   participant BE as "Backend (FastAPI)"
-  participant DB as "DB (PostgreSQL/SQLite)"
+  participant DB as "Query DB (PostgreSQL)"
 
-  U->>FE: Select KPIs/Entities/Date Range
-  FE->>BE: POST /api/kpi/statistics/batch (kpi_types, entity_ids, dates)
-  BE->>DB: Aggregate (or generate mock)
+  U->>FE: Select KPIs / Date Range / NE / CellID
+  FE->>BE: POST /api/kpi/query (per KPI, with kpi_peg_names/like, ne/cellid)
+  BE->>DB: Aggregate by hour (or generate mock on failure)
   DB-->>BE: Rows
-  BE-->>FE: { data: { kpi: KPIData[] } }
-  FE->>U: Render time-series with entity_id lines
+  BE-->>FE: { data: KPIData[], source }
+  FE->>U: Render per-KPI averaged time-series
 ```
 
 ## Analysis Flow (N-1 vs N)
 ```mermaid
 sequenceDiagram
   participant Tool as "MCP Tool (analysis_llm.py)"
-  participant DB as "DB (PostgreSQL)"
+  participant DB as "Query DB (PostgreSQL)"
   participant LLM as "vLLM API"
   participant HTML as "HTML Reports"
   participant BE as "FastAPI"
@@ -48,3 +51,10 @@ sequenceDiagram
   Tool->>HTML: Generate multi-tab report
   Tool->>BE: POST /api/analysis-result (JSON)
 ```
+
+## Key Endpoints
+- POST `/api/kpi/query`: 시간 단위 평균. 필터: `ne`, `cellid`, `kpi_peg_names`, `kpi_peg_like`
+- POST `/api/kpi/statistics/batch`: 다중 KPI mock(프록시 실패 폴백용)
+- POST `/api/db/ping`: DB 연결 테스트
+- POST `/api/master/ne-list`, `/api/master/cellid-list`: 자동완성용 DISTINCT 조회
+- Preferences: `GET/POST/PUT/DELETE /api/preferences`, `GET/PUT /api/preferences/{id}/derived-pegs`

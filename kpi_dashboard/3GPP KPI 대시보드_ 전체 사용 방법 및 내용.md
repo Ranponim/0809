@@ -39,7 +39,7 @@ kpi_dashboard/
 
 ## 3. 백엔드 설정 및 실행 (FastAPI)
 
-백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 PostgreSQL 영구 저장소를 사용합니다.
+백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 PostgreSQL 영구 저장소를 사용합니다. 통계 조회는 프런트에서 입력한 별도 Query DB(PostgreSQL)에 프록시로 접속합니다.
 
 ### 3.1. 종속성 설치
 
@@ -138,7 +138,7 @@ pnpm run build
 
 ### 5.1. 대시보드 (Dashboard)
 
-Preference의 `config.defaultKPIs`와 `config.defaultEntities`를 읽어 KPI 카드 수와 비교 엔티티를 동적으로 구성합니다. 다수 KPI는 `POST /api/kpi/statistics/batch`로 일괄 조회하여 성능을 확보합니다. 시간축(X) 기준으로 entity_id별 라인이 그려집니다.
+Preference의 `config.defaultKPIs`를 읽어 KPI 카드 구성을 결정합니다. 각 KPI는 Preference의 `config.kpiMappings`에 정의된 peg_name/패턴을 기준으로 `/api/kpi/query`로 조회하며, 매핑이 없으면 기본집계(NE/CellID 필터만 적용)로 표시합니다.
 
 ### 5.2. 종합 분석 리포트 (Summary Report)
 
@@ -149,10 +149,10 @@ Preference의 `config.defaultKPIs`와 `config.defaultEntities`를 읽어 KPI 카
 KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 -   **기본 분석 (Basic Analysis)**:
-    -   기간, KPI 타입, 엔티티 ID를 기준으로 데이터를 필터링하고 조회합니다.
-    -   선택된 KPI에 대한 시계열 라인 차트를 표시합니다.
-    -   사용 가능한 PEG 및 Cell 목록을 참조용으로 제공합니다.
-    -   Preference의 `config.availableKPIs`가 있으면 KPI 선택 목록을 설정에서 로드하고, 없으면 기본 목록으로 폴백합니다.
+    -   기간, KPI 타입, NE, CellID를 기준으로 데이터를 조회합니다.
+    -   Preference의 `config.kpiMappings`에 따라 KPI별로 peg 필터(`kpi_peg_names`/`kpi_peg_like`)를 적용하여 `/api/kpi/query`를 병렬 호출합니다.
+    -   매핑이 없는 KPI는 기본집계(필터만 적용)로 표시합니다.
+    -   NE/CellID 입력에는 자동완성(datalist)이 제공되며, `/api/master/ne-list`, `/api/master/cellid-list`를 사용합니다.
 
 -   **고급 분석 (Advanced Analysis)**:
     -   **기간 비교**: 두 개의 다른 기간에 대한 KPI 데이터를 비교하여 추이 변화를 쉽게 파악할 수 있습니다.
