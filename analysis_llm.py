@@ -37,6 +37,7 @@ import logging
 import subprocess
 from typing import Dict, Tuple, Optional
 import ast
+import math
 
 import pandas as pd
 import matplotlib
@@ -1050,8 +1051,33 @@ def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optio
     """분석 JSON 결과를 FastAPI 백엔드로 POST 전송합니다."""
     # 네트워크 오류/타임아웃 대비. 상태코드/본문 파싱 결과를 기록해 원인 추적을 용이하게 함
     logging.info("post_results_to_backend() 호출: %s", url)
+    
+    def _sanitize_for_json(value):
+        """NaN/Infinity 및 넘파이 수치를 JSON 호환으로 정규화한다."""
+        try:
+            # dict/list 재귀 처리
+            if isinstance(value, dict):
+                return {k: _sanitize_for_json(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [_sanitize_for_json(v) for v in value]
+            # 수치형: 넘파이 포함을 float()로 흡수
+            if isinstance(value, (int, float)):
+                return value if math.isfinite(float(value)) else None
+            # 기타 타입: 넘파이 스칼라 등은 float() 시도
+            try:
+                f = float(value)  # numpy.float64 등
+                return f if math.isfinite(f) else None
+            except Exception:
+                return value
+        except Exception:
+            return value
+    
+    safe_payload = _sanitize_for_json(payload)
+    
     try:
-        resp = requests.post(url, json=payload, timeout=timeout)
+        # allow_nan=False 보장 직렬화 후 전송 (서버와 규격 일치)
+        json_text = json.dumps(safe_payload, ensure_ascii=False, allow_nan=False)
+        resp = requests.post(url, data=json_text.encode('utf-8'), headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=timeout)
         resp.raise_for_status()
         logging.info("백엔드 POST 성공: status=%s", resp.status_code)
         try:
