@@ -150,6 +150,8 @@ def fetch_cell_averages_for_period(
     start_dt: datetime.datetime,
     end_dt: datetime.datetime,
     period_label: str,
+    ne_filters: Optional[list] = None,
+    cellid_filters: Optional[list] = None,
 ) -> pd.DataFrame:
     """
     주어진 기간에 대해 PEG 단위 평균값을 집계합니다.
@@ -161,21 +163,42 @@ def fetch_cell_averages_for_period(
     # README 스키마 기준: peg_name 컬럼 사용. columns 사전에 'peg' 또는 'peg_name' 키가 있으면 우선 사용
     peg_col = columns.get("peg") or columns.get("peg_name", "peg_name")
     value_col = columns.get("value", "value")
+    ne_col = columns.get("ne", "ne")
+    cell_col = columns.get("cell") or columns.get("cellid", "cellid")
 
-    sql = f"""
-        SELECT {peg_col} AS peg_name, AVG({value_col}) AS avg_value
-        FROM {table}
-        WHERE {time_col} BETWEEN %s AND %s
-        GROUP BY {peg_col}
-    """
+    sql = f"SELECT {peg_col} AS peg_name, AVG({value_col}) AS avg_value FROM {table} WHERE {time_col} BETWEEN %s AND %s"
+    params = [start_dt, end_dt]
+
+    # 선택적 필터: ne, cellid
+    if ne_filters:
+        ne_vals = [str(x).strip() for x in (ne_filters or []) if str(x).strip()]
+        if len(ne_vals) == 1:
+            sql += f" AND {ne_col} = %s"
+            params.append(ne_vals[0])
+        elif len(ne_vals) > 1:
+            placeholders = ",".join(["%s"] * len(ne_vals))
+            sql += f" AND {ne_col} IN ({placeholders})"
+            params.extend(ne_vals)
+
+    if cellid_filters:
+        cid_vals = [str(x).strip() for x in (cellid_filters or []) if str(x).strip()]
+        if len(cid_vals) == 1:
+            sql += f" AND {cell_col} = %s"
+            params.append(cid_vals[0])
+        elif len(cid_vals) > 1:
+            placeholders = ",".join(["%s"] * len(cid_vals))
+            sql += f" AND {cell_col} IN ({placeholders})"
+            params.extend(cid_vals)
+
+    sql += f" GROUP BY {peg_col}"
     try:
         # 동적 테이블/컬럼 구성이므로 실행 전에 구성값을 로그로 남겨 디버깅을 돕는다
         logging.info(
-            "집계 SQL 실행: table=%s, time_col=%s, peg_col=%s, value_col=%s",
-            table, time_col, peg_col, value_col,
+            "집계 SQL 실행: table=%s, time_col=%s, peg_col=%s, value_col=%s, ne_col=%s, cell_col=%s",
+            table, time_col, peg_col, value_col, ne_col, cell_col,
         )
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(sql, (start_dt, end_dt))
+            cur.execute(sql, tuple(params))
             rows = cur.fetchall()
         # 조회 결과를 DataFrame으로 변환 (비어있을 수 있음)
         df = pd.DataFrame(rows, columns=["peg_name", "avg_value"]) if rows else pd.DataFrame(columns=["peg_name", "avg_value"]) 
@@ -1052,6 +1075,9 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
       - db: {host, port, user, password, dbname}
       - table: str (기본 'summary')
       - columns: {time: 'datetime', peg_name: 'peg_name', value: 'value'}
+      - ne: 문자열 또는 배열. 예: "nvgnb#10000" 또는 ["nvgnb#10000","nvgnb#20000"]
+      - cellid|cell: 문자열(쉼표 구분) 또는 배열. 예: "2010,2011" 또는 [2010,2011]
+        → 제공 시 DB 집계에서 해당 조건으로 필터링하여 PEG 평균을 계산
       - preference: 쉼표 구분 문자열 또는 배열. 정확한 peg_name만 인식하여 '특정 peg 분석' 대상 선정
       - selected_pegs: 배열. 명시적 선택 목록이 있으면 우선 사용
       - peg_definitions: {파생PEG이름: 수식 문자열}. 예: {"telus_RACH_Success": "A/B*100"}
@@ -1087,8 +1113,27 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         # DB 조회
         conn = get_db_connection(db)
         try:
-            n1_df = fetch_cell_averages_for_period(conn, table, columns, n1_start, n1_end, "N-1")
-            n_df = fetch_cell_averages_for_period(conn, table, columns, n_start, n_end, "N")
+            # 선택적 입력 필터 수집: ne, cellid
+            # request 예시: { "ne": "nvgnb#10000" } 또는 { "ne": ["nvgnb#10000","nvgnb#20000"], "cellid": "2010,2011" }
+            ne_raw = request.get('ne')
+            cell_raw = request.get('cellid') or request.get('cell')
+
+            def to_list(raw):
+                if raw is None:
+                    return []
+                if isinstance(raw, str):
+                    return [t.strip() for t in raw.split(',') if t.strip()]
+                if isinstance(raw, list):
+                    return [str(t).strip() for t in raw if str(t).strip()]
+                return [str(raw).strip()]
+
+            ne_filters = to_list(ne_raw)
+            cellid_filters = to_list(cell_raw)
+
+            logging.info("입력 필터: ne=%s, cellid=%s", ne_filters, cellid_filters)
+
+            n1_df = fetch_cell_averages_for_period(conn, table, columns, n1_start, n1_end, "N-1", ne_filters=ne_filters, cellid_filters=cellid_filters)
+            n_df = fetch_cell_averages_for_period(conn, table, columns, n_start, n_end, "N", ne_filters=ne_filters, cellid_filters=cellid_filters)
         finally:
             conn.close()
             logging.info("DB 연결 종료")

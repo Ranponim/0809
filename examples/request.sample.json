@@ -5,10 +5,12 @@
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "summary",
-  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"},
+  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value", "ne": "ne", "cellid": "cellid"},
   "preference": "Random_access_preamble_count,Random_access_response",
   "peg_definitions": {
     "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"
-  }
+  },
+  "ne": "nvgnb#10000",
+  "cellid": "2010,2011"
 }
 
