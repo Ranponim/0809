@@ -175,3 +175,66 @@ python peg_name_avg_compare.py 2025-08-12 2025-08-13
 > 변화 지표: `diff = avg_n - avg_n_minus_1`, `pct_change = diff / avg_n_minus_1 * 100` (분모 0/결측은 NaN 처리)
 
 
+## 중요 변경점 (2025-08-13)
+
+- 사용 방식 단순화: 설정값은 코드에 하드코딩하고, 입력은 오직 두 날짜(`n-1`, `n`)만 받습니다.
+- 신규 스크립트 추가: `peg_name_avg_compare.py`
+  - `peg_name`별 `value`의 일자 평균을 계산하여 n-1과 n을 비교(diff, pct_change)합니다.
+  - 결과는 CSV/HTML로 저장됩니다.
+- 기존 MCP 기반 통합 분석(`analysis_llm.py`)은 레거시로 유지되며, 이번 변경 사항의 기본 플로우는 `peg_name_avg_compare.py`를 사용합니다.
+
+### 요청 스키마(입력)
+- CLI 인자(2개, 순서 고정):
+  1) `n-1` 날짜: `YYYY-MM-DD`
+  2) `n` 날짜: `YYYY-MM-DD`
+
+예)
+```bash
+python peg_name_avg_compare.py 2025-08-12 2025-08-13
+```
+
+### 하드코딩 설정(코드 내 고정)
+- `output_dir`: 결과 파일 저장 경로 (기본 `./analysis_output`)
+- `backend_url`: 현재 버전 미사용(향후 확장용)
+- `db`: DB 접속 정보 `{host, port, user, password, dbname}`
+- `table`: 조회 테이블명 (기본 `measurements`)
+- `columns`: 
+  - 스키마: `id / host / ne / version / family_name / cellid / peg_name / datetime / value`
+
+### 데이터베이스 스키마(열/타입)
+- `id`: integer
+- `host`: character varying
+- `ne`: character varying
+- `version`: character varying
+- `family_name`: character varying
+- `cellid`: character varying
+- `peg_name`: character varying
+- `datetime`: timestamp without time zone
+- `value`: double precision
+
+### 처리/출력 스키마
+- 처리 로직: 
+  - 각 날짜에 대해 `DATE(datetime) = <날짜>` 조건으로 필터링
+  - `peg_name` 그룹으로 `AVG(value)` 계산
+  - 조인 후 지표 산출: 
+    - `avg_n_minus_1`, `avg_n`, `diff = avg_n - avg_n_minus_1`,
+    - `pct_change = (diff / avg_n_minus_1) * 100` (분모 0/결측은 NaN)
+- CSV 컬럼: `peg_name, avg_n_minus_1, avg_n, diff, pct_change`
+- HTML 리포트: 요약, 절대 diff 상위 N, 절대 pct_change 상위 N, 임계값 초과 항목 테이블
+
+### 결과 파일
+- CSV: `analysis_output/comparison_YYYY-MM-DD_YYYY-MM-DD.csv`
+- HTML: `analysis_output/peg_avg_report_YYYY-MM-DD_YYYY-MM-DD.html`
+
+### 로깅/오류 처리
+- 함수별 INFO/ERROR 로그를 상세 출력(형식: `YYYY-MM-DD HH:MM:SS - LEVEL - [function] message`)
+- 날짜 형식 오류, DB 연결/쿼리 실패, 데이터 없음, 분모 0 처리 등 상황별 메시지 기록
+
+### 레거시/호환성 안내
+- 이전 문서/예시(`examples/request.sample.json`, MCP `analyze_cell_performance_with_llm`)는 **레거시** 흐름입니다.
+  - 레거시 경로는 시간 범위(`yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm`)와 외부 설정을 입력으로 받는 통합 분석용입니다.
+  - 이번 변경(PRD)으로 기본 사용 경로는 단순화된 `peg_name_avg_compare.py` 입니다.
+
+---
+
+
