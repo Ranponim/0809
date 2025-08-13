@@ -55,10 +55,19 @@ python analysis_llm.py
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "summary",
-  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"}
+  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"},
+  "preference": "Random_access_preamble_count,Random_access_response",
+  "peg_definitions": {
+    "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"
+  }
 }
 ```
 - `columns`에서 `peg_name` 대신 `peg` 키를 제공해도 됩니다. 내부에서는 `peg` → `peg_name` 우선순위로 해석합니다.
+ - `preference`: 쉼표 구분 목록 또는 배열. 정확히 일치하는 `peg_name`만 특정 분석 대상에 포함됩니다.
+ - `peg_definitions`(옵션): `{파생PEG이름: 수식}` 형식으로 파생 PEG를 정의합니다. 예: `{ "telus_RACH_Success": "A/B*100" }`
+   - 지원 수식: 숫자, 변수(peg_name), +, -, *, /, (), 단항 +/-. 함수/제곱(**)은 미지원
+   - 0으로 나누면 NaN 처리됩니다.
+ - `selected_pegs`(옵션): 특정 분석 대상 PEG를 직접 배열로 지정할 수 있습니다.
 
 응답 예시(요약):
 ```json
@@ -71,7 +80,13 @@ python analysis_llm.py
     "overall_summary": "...",
     "key_findings": ["..."],
     "recommended_actions": ["..."],
-    "cells_with_significant_change": {"CELL_A": "..."}
+    "cells_with_significant_change": {"CELL_A": "..."},
+    "specific_peg_analysis": {
+      "selected_pegs": ["Random_access_preamble_count", "telus_RACH_Success"],
+      "summary": "...",
+      "peg_insights": {"telus_RACH_Success": "..."},
+      "prioritized_actions": [{"priority": "P1", "action": "...", "details": "..."}]
+    }
   },
   "stats": [
     {"peg_name": "...", "avg_n_minus_1": 0.0, "avg_n": 0.0, "diff": 0.0, "pct_change": 0.0}
@@ -91,6 +106,10 @@ python analysis_llm.py
 5. LLM 분석: `create_llm_analysis_prompt_overall()` → `query_llm()` — JSON 형식 분석 산출
 6. HTML 출력: `generate_multitab_html_report()` — 요약/상세/차트/테이블 탭 UI, PNG/CSV 다운로드 제공
 7. 백엔드 전송(옵션): `post_results_to_backend()` — 응답 JSON 파싱 시도, 실패 시 텍스트 반환
+
+### 특정 PEG 분석 동작
+- 입력에 `preference` 또는 `selected_pegs`가 제공되면, 해당 PEG들만 모아 별도의 LLM 분석을 수행하고 결과를 `analysis.specific_peg_analysis`에 포함합니다.
+- HTML 리포트의 두 번째 탭 라벨이 "특정 peg 분석"으로 표시되며, 여기에 이 결과가 렌더링됩니다. 폴백으로 과거 스키마(`cells_with_significant_change`)도 지원합니다.
 
 HTML 리포트 경로: `output_dir/Cell_Analysis_Report_YYYY-MM-DD_HH-MM.html`
 

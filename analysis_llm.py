@@ -8,6 +8,8 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
 - 분석 관점 변경: PEG 단위가 아닌, 셀 단위 전체 PEG 데이터를 통합하여 종합 성능 평가
 - 가정 반영: n-1과 n은 동일한 시험환경에서 수행되었다는 가정 하에 분석
 - 결과 출력 확장: HTML 리포트 생성 + FastAPI 백엔드로 JSON POST 전송
+- 특정 PEG 분석: preference(정확한 peg_name 목록)나 selected_pegs로 지정된 PEG만 묶어 별도 LLM 분석
+- 파생 PEG 수식 지원: peg_definitions로 (pegA/pegB)*100 같은 수식을 정의해 파생 PEG를 계산/포함
 
 사용 예시 (MCP tool 호출 request 예):
 {
@@ -17,7 +19,11 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "summary",
-  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"}
+  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"},
+  "preference": "Random_access_preamble_count,Random_access_response",
+  "peg_definitions": {
+    "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"
+  }
 }
 """
 
@@ -30,6 +36,7 @@ import datetime
 import logging
 import subprocess
 from typing import Dict, Tuple, Optional
+import ast
 
 import pandas as pd
 import matplotlib
@@ -179,6 +186,91 @@ def fetch_cell_averages_for_period(
         logging.exception("기간별 평균 집계 쿼리 실패: %s", e)
         raise
 
+
+# --- 파생 PEG 계산: 수식 정의를 안전하게 평가하여 새로운 PEG 생성 ---
+def _safe_eval_expr(expr_text: str, variables: Dict[str, float]) -> float:
+    """
+    간단한 산술 수식(expr_text)을 안전하게 평가합니다.
+    허용 토큰: 숫자, 변수명(peg_name), +, -, *, /, (, )
+    변수값은 variables 딕셔너리에서 가져옵니다.
+    """
+    logging.info("_safe_eval_expr() 호출: expr=%s", expr_text)
+    try:
+        node = ast.parse(expr_text, mode='eval')
+
+        def _eval(node):
+            if isinstance(node, ast.Expression):
+                return _eval(node.body)
+            if isinstance(node, ast.BinOp):
+                left = _eval(node.left)
+                right = _eval(node.right)
+                if isinstance(node.op, ast.Add):
+                    return float(left) + float(right)
+                if isinstance(node.op, ast.Sub):
+                    return float(left) - float(right)
+                if isinstance(node.op, ast.Mult):
+                    return float(left) * float(right)
+                if isinstance(node.op, ast.Div):
+                    return float(left) / float(right)
+                raise ValueError("허용되지 않은 연산자")
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+                operand = _eval(node.operand)
+                return +float(operand) if isinstance(node.op, ast.UAdd) else -float(operand)
+            if isinstance(node, ast.Num):
+                return float(node.n)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return float(node.value)
+            if isinstance(node, ast.Name):
+                name = node.id
+                if name not in variables:
+                    raise KeyError(f"정의되지 않은 변수: {name}")
+                return float(variables[name])
+            if isinstance(node, ast.Call):
+                raise ValueError("함수 호출은 허용되지 않습니다")
+            if isinstance(node, (ast.Attribute, ast.Subscript, ast.List, ast.Dict, ast.Tuple)):
+                raise ValueError("허용되지 않은 표현식 형식")
+            raise ValueError("지원되지 않는 AST 노드")
+
+        return float(_eval(node))
+    except ZeroDivisionError:
+        logging.warning("수식 평가 중 0으로 나눔 발생: %s", expr_text)
+        return float('nan')
+    except Exception as e:
+        logging.error("수식 평가 실패: %s (expr=%s)", e, expr_text)
+        return float('nan')
+
+
+def compute_derived_pegs_for_period(period_df: pd.DataFrame, definitions: Dict[str, str], period_label: str) -> pd.DataFrame:
+    """
+    period_df: [peg_name, avg_value] 형태의 단일 기간 집계 데이터
+    definitions: {derived_name: expr_text} 형태의 파생 PEG 수식 정의
+    반환: 동일 컬럼을 갖는 파생 PEG 데이터프레임
+    """
+    logging.info("compute_derived_pegs_for_period() 호출: period=%s, defs=%d", period_label, len(definitions or {}))
+    if not isinstance(definitions, dict) or not definitions:
+        return pd.DataFrame(columns=["peg_name", "avg_value", "period"])  # 빈 DF
+
+    # 변수 사전 구성 (peg_name -> avg_value)
+    base_map: Dict[str, float] = {}
+    try:
+        for row in period_df.itertuples(index=False):
+            base_map[str(row.peg_name)] = float(row.avg_value)
+    except Exception:
+        # 컬럼명이 다를 가능성 최소화를 위해 보호
+        ser = period_df.set_index('peg_name')['avg_value'] if 'peg_name' in period_df and 'avg_value' in period_df else None
+        if ser is not None:
+            base_map = {str(k): float(v) for k, v in ser.items()}
+
+    rows = []
+    for new_name, expr in definitions.items():
+        try:
+            value = _safe_eval_expr(str(expr), base_map)
+            rows.append({"peg_name": str(new_name), "avg_value": float(value), "period": period_label})
+            logging.info("파생 PEG 계산: %s = %s (period=%s)", new_name, value, period_label)
+        except Exception as e:
+            logging.error("파생 PEG 계산 실패: %s (name=%s, period=%s)", e, new_name, period_label)
+            continue
+    return pd.DataFrame(rows, columns=["peg_name", "avg_value", "period"]) if rows else pd.DataFrame(columns=["peg_name", "avg_value", "period"]) 
 
 # --- 처리: N-1/N 병합 + 변화율/차트 생성 ---
 def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
@@ -362,6 +454,52 @@ def create_llm_analysis_prompt_enhanced(processed_df: pd.DataFrame, n1_range: st
     logging.info("create_llm_analysis_prompt_enhanced() 완료")
     return prompt
 
+
+# --- LLM 프롬프트 생성 (특정 PEG 전용 분석) ---
+def create_llm_analysis_prompt_specific_pegs(processed_df_subset: pd.DataFrame, selected_pegs: list[str], n1_range: str, n_range: str) -> str:
+    """
+    선택된 PEG 집합에 한정된 분석 프롬프트를 생성합니다.
+
+    기대 출력(JSON):
+    {
+      "summary": "특정 PEG 집합에 대한 최상위 요약",
+      "peg_insights": {"PEG_A": "설명", ...},
+      "prioritized_actions": [{"priority": "P1|P2|P3", "action": "...", "details": "..."}]
+    }
+    """
+    logging.info("create_llm_analysis_prompt_specific_pegs() 호출: 선택 PEG=%s, 행수=%d", selected_pegs, len(processed_df_subset))
+    data_preview = processed_df_subset.to_string(index=False)
+
+    prompt = f"""
+[페르소나 및 임무]
+당신은 Tier-1 이동통신사의 수석 네트워크 최적화 전문가입니다. 아래 표는 지정된 PEG 집합에 대해서만, 두 기간(n-1, n)의 평균값/변화량/변화율을 정리한 것입니다. 지정된 PEG에 '한정하여' 분석하십시오.
+
+[컨텍스트]
+- 대상 PEG: {', '.join(selected_pegs)}
+- 기간 n-1: {n1_range}
+- 기간 n: {n_range}
+- 표 컬럼: peg_name, avg_n_minus_1, avg_n, diff, pct_change
+
+[데이터 표]
+{data_preview}
+
+[분석 지침]
+- 각 PEG 별 핵심 관찰/의미/가능한 원인 가설을 간결히 기술하십시오.
+- 변화율의 방향/크기를 근거로 운영 영향도와 위험도를 평가하십시오.
+- 즉시 실행 가능한 조치 항목을 우선순위(P1/P2/P3)로 제시하십시오.
+
+[출력 형식(JSON)]
+{{
+  "summary": "특정 PEG 집합에 대한 최상위 요약 (한국어)",
+  "peg_insights": {{"PEG_NAME": "해당 PEG에 대한 한국어 통찰/설명"}},
+  "prioritized_actions": [
+    {{"priority": "P1|P2|P3", "action": "구체 조치", "details": "필요 데이터/도구/수행 방법"}}
+  ]
+}}
+"""
+    logging.info("create_llm_analysis_prompt_specific_pegs() 완료")
+    return prompt
+
 # --- LLM API 호출 함수 (subprocess + curl) ---
 def query_llm(prompt: str) -> dict:
     """내부 vLLM 서버로 분석 요청. 응답 본문에서 JSON만 추출.
@@ -495,13 +633,47 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
     else:
         actions_html = ''.join([f'<li>{html.escape(str(item))}</li>' for item in rec_actions])
 
-    # 셀 상세 분석 (있을 경우, 구 스키마 호환)
-    detail_map = llm_analysis.get('cells_with_significant_change') or llm_analysis.get('detailed_cell_analysis') or {}
-    detailed_parts = []
-    for cell, analysis in detail_map.items():
-        analysis_html = str(analysis).replace('\n', '<br>')
-        detailed_parts.append(f"<h2>{cell}</h2><div class='peg-analysis-box'><p>{analysis_html}</p></div>")
-    detailed_html = "".join(detailed_parts)
+    # 특정 PEG 분석(신규) 우선 표시, 없으면 구 스키마로 폴백
+    detailed_html = ''
+    spec = llm_analysis.get('specific_peg_analysis') if isinstance(llm_analysis, dict) else None
+    if isinstance(spec, dict) and (spec.get('summary') or spec.get('peg_insights') or spec.get('prioritized_actions')):
+        sel_list = spec.get('selected_pegs') or []
+        sel_html = ', '.join([html.escape(str(x)) for x in sel_list]) if sel_list else ''
+        summary_text = str(spec.get('summary', '')).replace('\n', '<br>')
+
+        peg_insights = spec.get('peg_insights') or {}
+        peg_parts = []
+        for peg, insight in peg_insights.items():
+            peg_parts.append(
+                f"<div class='peg-analysis-box'><h3>{html.escape(str(peg))}</h3><div class='muted'>{html.escape(str(insight))}</div></div>"
+            )
+        peg_html = ''.join(peg_parts)
+
+        pr_actions = spec.get('prioritized_actions') or []
+        pr_list_html = ''
+        if isinstance(pr_actions, list):
+            items = []
+            for a in pr_actions:
+                pr = html.escape(str(a.get('priority', 'P?')))
+                ac = html.escape(str(a.get('action', '')))
+                dt = html.escape(str(a.get('details', '')))
+                items.append(f"<li><strong>{pr}</strong> - {ac}<div class='muted'>{dt}</div></li>")
+            pr_list_html = '<ul>' + ''.join(items) + '</ul>' if items else ''
+
+        detailed_html = (
+            (f"<div class='section card'><h2>선택 PEG</h2><div class='muted'>{sel_html or 'N/A'}</div></div>" if sel_html else '') +
+            f"<div class='section card'><h2>요약</h2><div class='muted'>{summary_text or 'N/A'}</div></div>" +
+            (f"<div class='section card'><h2>PEG별 인사이트</h2>{peg_html}</div>" if peg_html else '') +
+            (f"<div class='section card list'><h2>우선순위 조치</h2>{pr_list_html}</div>" if pr_list_html else '')
+        )
+    else:
+        # 구 스키마 호환: 셀 상세 분석 맵 표시
+        detail_map = llm_analysis.get('cells_with_significant_change') or llm_analysis.get('detailed_cell_analysis') or {}
+        detailed_parts = []
+        for cell, analysis in detail_map.items():
+            analysis_html = str(analysis).replace('\n', '<br>')
+            detailed_parts.append(f"<h2>{cell}</h2><div class='peg-analysis-box'><p>{analysis_html}</p></div>")
+        detailed_html = "".join(detailed_parts)
 
     # 차트 HTML (PNG 다운로드 버튼 포함)
     charts_html = ''.join([
@@ -538,11 +710,25 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
                 cells.append(f"<td>{html.escape(str(value))}</td>")
             table_rows_html += '<tr>' + ''.join(cells) + '</tr>'
 
+    # 로깅: 상세 섹션 건수를 안전하게 계산
+    detailed_cells_count = 0
+    try:
+        # specific 우선
+        spec = llm_analysis.get('specific_peg_analysis') if isinstance(llm_analysis, dict) else None
+        if isinstance(spec, dict) and spec.get('peg_insights'):
+            detailed_cells_count = len(spec.get('peg_insights') or {})
+        else:
+            legacy_map = llm_analysis.get('cells_with_significant_change') or llm_analysis.get('detailed_cell_analysis') or {}
+            if isinstance(legacy_map, dict):
+                detailed_cells_count = len(legacy_map)
+    except Exception:
+        detailed_cells_count = 0
+
     logging.info(
         "리포트 구성요소: findings=%d, actions=%d, detailed_cells=%d, charts=%d",
         len(llm_analysis.get('key_findings', [])),
         len(llm_analysis.get('recommended_actions', [])),
-        len(detail_map),
+        detailed_cells_count,
         len(charts),
     )
 
@@ -691,7 +877,7 @@ def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], ou
             <div class="tabs">
                 <div class="tab-nav" role="tablist">
                     <button class="active" role="tab" aria-selected="true" onclick="openTab(event, 'summary')">종합 리포트</button>
-                    <button role="tab" aria-selected="false" onclick="openTab(event, 'detailed')">셀 상세 분석</button>
+                    <button role="tab" aria-selected="false" onclick="openTab(event, 'detailed')">특정 peg 분석</button>
                     <button role="tab" aria-selected="false" onclick="openTab(event, 'charts')">비교 차트</button>
                     <button role="tab" aria-selected="false" onclick="openTab(event, 'table')">데이터 테이블</button>
                 </div>
@@ -866,6 +1052,11 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
       - db: {host, port, user, password, dbname}
       - table: str (기본 'summary')
       - columns: {time: 'datetime', peg_name: 'peg_name', value: 'value'}
+      - preference: 쉼표 구분 문자열 또는 배열. 정확한 peg_name만 인식하여 '특정 peg 분석' 대상 선정
+      - selected_pegs: 배열. 명시적 선택 목록이 있으면 우선 사용
+      - peg_definitions: {파생PEG이름: 수식 문자열}. 예: {"telus_RACH_Success": "A/B*100"}
+        수식 지원: 숫자, 변수(peg_name), +, -, *, /, (), 단항 +/-. 0 나눗셈은 NaN 처리
+        적용 시점: N-1, N 각각의 집계 결과에 대해 계산 후 원본과 병합 → 전체 처리/분석에 포함
     """
     logging.info("=" * 20 + " Cell 성능 분석 로직 실행 시작 " + "=" * 20)
     try:
@@ -906,7 +1097,18 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         if len(n1_df) == 0 or len(n_df) == 0:
             logging.warning("한쪽 기간 데이터가 비어있음: 분석 신뢰도가 낮아질 수 있음")
 
-        # 처리 & 시각화
+        # 파생 PEG 정의 처리 (사용자 정의 수식)
+        # 입력 예: "peg_definitions": {"telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"}
+        derived_defs = request.get('peg_definitions') or {}
+        derived_n1 = compute_derived_pegs_for_period(n1_df, derived_defs, "N-1") if derived_defs else pd.DataFrame(columns=["peg_name","avg_value","period"])
+        derived_n  = compute_derived_pegs_for_period(n_df, derived_defs, "N") if derived_defs else pd.DataFrame(columns=["peg_name","avg_value","period"])
+
+        if not derived_n1.empty or not derived_n.empty:
+            n1_df = pd.concat([n1_df, derived_n1], ignore_index=True)
+            n_df = pd.concat([n_df, derived_n], ignore_index=True)
+            logging.info("파생 PEG 병합 완료: n-1=%d행, n=%d행", len(n1_df), len(n_df))
+
+        # 처리 & 시각화 (파생 포함)
         processed_df, charts_base64 = process_and_visualize(n1_df, n_df)
         logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
@@ -915,6 +1117,60 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         logging.info("프롬프트 길이: %d자", len(prompt))
         llm_analysis = query_llm(prompt)
         logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
+
+        # '특정 peg 분석' 처리: preference / peg_definitions / selected_pegs
+        try:
+            selected_pegs: list[str] = []
+            # 1) 명시적 선택 목록
+            explicit_list = request.get('selected_pegs')
+            if isinstance(explicit_list, list):
+                selected_pegs.extend([str(x) for x in explicit_list])
+
+            # 2) preference 기반 선택 (정확한 peg_name로만 해석)
+            pref = request.get('preference')
+            if isinstance(pref, str):
+                pref_tokens = [t.strip() for t in pref.split(',') if t.strip()]
+            elif isinstance(pref, list):
+                pref_tokens = [str(t).strip() for t in pref if str(t).strip()]
+            else:
+                pref_tokens = []
+
+            if pref_tokens:
+                valid_names_set = set(processed_df['peg_name'].astype(str).tolist())
+                for token in pref_tokens:
+                    if token in valid_names_set:
+                        selected_pegs.append(token)
+
+            # 유니크 + 순서 유지 + 실데이터 존재 필터링
+            unique_selected = []
+            seen = set()
+            valid_names = set(processed_df['peg_name'].astype(str).tolist())
+            for name in selected_pegs:
+                if name in valid_names and name not in seen:
+                    unique_selected.append(name)
+                    seen.add(name)
+
+            logging.info("특정 PEG 선택 결과: %d개", len(unique_selected))
+
+            if unique_selected:
+                subset_df = processed_df[processed_df['peg_name'].isin(unique_selected)].copy()
+                # LLM에 보낼 수 있는 행수/토큰 보호를 위해 상한을 둘 수 있음(예: 500행). 필요 시 조정
+                max_rows = int(request.get('specific_max_rows', 500))
+                if len(subset_df) > max_rows:
+                    logging.warning("선택 PEG 서브셋이 %d행으로 큼. 상한 %d행으로 절단", len(subset_df), max_rows)
+                    subset_df = subset_df.head(max_rows)
+
+                sp_prompt = create_llm_analysis_prompt_specific_pegs(subset_df, unique_selected, n1_text, n_text)
+                logging.info("특정 PEG 프롬프트 길이: %d자, 선택 PEG=%d개", len(sp_prompt), len(unique_selected))
+                sp_result = query_llm(sp_prompt)
+                if isinstance(llm_analysis, dict):
+                    llm_analysis['specific_peg_analysis'] = {
+                        "selected_pegs": unique_selected,
+                        **(sp_result if isinstance(sp_result, dict) else {"summary": str(sp_result)})
+                    }
+                logging.info("특정 PEG 분석 완료: keys=%s", list((llm_analysis.get('specific_peg_analysis') or {}).keys()))
+        except Exception as e:
+            logging.exception("특정 PEG 분석 처리 중 오류: %s", e)
 
         # HTML 리포트 작성
         report_path = generate_multitab_html_report(llm_analysis, charts_base64, output_dir, processed_df)
