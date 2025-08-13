@@ -2,160 +2,153 @@
   "master": {
     "tasks": [
       {
-        "id": 15,
-        "title": "프로젝트 구조 설정 및 설정 상수 정의",
-        "description": "프로젝트의 기본 폴더 구조를 설정하고, DB 접속 정보, 경로, 테이블명 등 PRD에 명시된 모든 하드코딩 값을 코드 상단에 상수로 정의합니다.",
-        "details": "output_dir, db 정보, table, columns, 리포트용 임계값(T, P), Top-N 값(N) 등을 포함합니다. 유지보수성을 위해 명확한 변수명과 주석을 사용합니다.",
-        "testStrategy": "설정 값이 올바르게 정의되었는지 코드 리뷰를 통해 확인합니다.",
+        "id": 27,
+        "title": "Backend: Implement Analysis Result API (In-Memory)",
+        "description": "Create FastAPI endpoints to receive and serve analysis results from the MCP. For the MVP, data will be stored in-memory.",
+        "details": "Implement POST /api/analysis-result, GET /api/analysis-result, GET /api/analysis-result/latest, and GET /api/analysis-result/{id}. Define the Pydantic model for the analysis result payload based on the PRD. Configure CORS for development.",
+        "testStrategy": "Use an API client like Postman or Insomnia to send POST requests with sample JSON data and verify the GET endpoints return the correct data. Write unit tests for each endpoint.",
         "priority": "high",
         "dependencies": [],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 16,
-        "title": "로깅 시스템 초기화",
-        "description": "PRD 요구사항에 맞는 포맷('YYYY-MM-DD HH:MM:SS - LEVEL - [function] message')으로 로그를 출력하는 로거를 설정합니다.",
-        "details": "logging 모듈을 사용하여 콘솔 및/또는 파일에 로그를 남기도록 설정합니다. 애플리케이션 전역에서 사용할 수 있는 로거 인스턴스를 생성합니다.",
-        "testStrategy": "간단한 테스트 스크립트를 실행하여 로그가 지정된 포맷과 레벨로 정상 출력되는지 확인합니다.",
+        "id": 28,
+        "title": "Backend: Implement KPI Query Proxy API",
+        "description": "Create a proxy endpoint that receives DB connection details and a query, forwards it to the MCP or a DB connector, and returns the results.",
+        "details": "Implement POST /api/kpi/query. The initial version can be a mock that returns sample statistical data. Implement basic error handling and timeout logic.",
+        "testStrategy": "Test the endpoint by POSTing a JSON payload with mock DB settings and a query. Verify that it returns a correctly formatted response or a proper error message on failure.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 29,
+        "title": "Backend: Extend Preference to Manage Derived PEGs",
+        "description": "Update the existing Preference management system to support CRUD operations for derived PEG definitions.",
+        "details": "Modify the configuration model to include a dictionary for `derived_pegs`. Update the existing Preference API endpoints to handle the creation, reading, updating, and deletion of these PEG definitions.",
+        "testStrategy": "Use API client to test the CRUD endpoints for `derived_pegs`. Verify that definitions can be added, retrieved, updated, and deleted from the application's configuration.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 30,
+        "title": "MCP: Integrate with Backend Analysis API",
+        "description": "Update the MCP script (`analysis_llm.py`) to send its analysis results to the new backend endpoint.",
+        "details": "Modify the `post_results_to_backend()` function to target `POST /api/analysis-result`. Ensure the target URL is configurable via an environment variable or input parameter. The JSON payload must match the schema expected by the backend.",
+        "testStrategy": "Run the MCP script and verify that a POST request is successfully sent to the backend. Check the backend logs or in-memory store to confirm the data was received correctly.",
         "priority": "high",
         "dependencies": [
-          15
+          27
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 17,
-        "title": "CLI 인자 파싱 및 날짜 유효성 검증",
-        "description": "애플리케이션 실행 시 n-1, n 날짜를 커맨드 라인 인자로 받아 파싱하고 유효성을 검증합니다.",
-        "details": "입력값이 'YYYY-MM-DD' 형식인지, n이 n-1보다 크거나 같은지 확인합니다. 유효하지 않을 경우, 에러 로그를 기록하고 사용자 친화적 메시지와 함께 종료합니다.",
-        "testStrategy": "유효한 입력, 잘못된 형식, 잘못된 날짜 순서 등 다양한 케이스에 대한 단위 테스트를 작성합니다.",
+        "id": 31,
+        "title": "Frontend: Setup Common API Client",
+        "description": "Create a centralized API client instance for making requests to the backend.",
+        "details": "Create a file `src/lib/apiClient.js` that exports a configured `axios` instance. The base URL for the instance should be set using the `VITE_API_BASE_URL` environment variable.",
+        "testStrategy": "Verify that the environment variable is correctly read and that the API client can make a simple test request to a backend health check endpoint.",
         "priority": "high",
         "dependencies": [
-          16
+          27
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 18,
-        "title": "데이터베이스 연결 및 쿼리 실행 모듈 구현",
-        "description": "설정된 DB 정보로 데이터베이스에 연결하고, 주어진 날짜에 대한 데이터를 조회하는 함수를 구현합니다.",
-        "details": "DB 연결/해제 로직을 구현합니다. DATE(datetime) = %s 조건으로 데이터를 조회하는 함수를 작성합니다. 쿼리 실행 시작/종료, 조회 건수, 오류 발생 시 상세 정보를 로그로 남깁니다.",
-        "testStrategy": "DB 연결 성공/실패 테스트. Mock DB 또는 실제 DB를 사용하여 쿼리가 정상적으로 실행되고 데이터를 반환하는지 테스트합니다. 데이터가 없는 경우도 테스트합니다.",
+        "id": 32,
+        "title": "Frontend: Develop Summary Report Page",
+        "description": "Build the UI for the Summary Report page to display analysis results fetched from the backend.",
+        "details": "Use the common API client to call `/api/analysis-result/latest` and `/api/analysis-result` to get data. Render the list of reports. Implement a detail view for a selected report, including the base64 chart image and a download link for the full report.",
+        "testStrategy": "Manually test the UI by navigating to the Summary Report page. Verify that the list of reports loads correctly. Test selecting a report to view its details and downloading the associated file.",
         "priority": "high",
         "dependencies": [
-          15,
-          16
+          27,
+          31
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 19,
-        "title": "기준일(n-1) 및 대상일(n) 데이터 조회",
-        "description": "구현된 DB 쿼리 모듈을 사용하여 n-1일과 n일의 데이터를 각각 조회하여 메모리에 로드합니다.",
-        "details": "Task 18에서 만든 함수를 두 번 호출하여 각 날짜의 데이터를 가져옵니다. 데이터가 없는 경우 경고 로그를 남기고, 후속 처리가 가능하도록 빈 데이터 구조를 반환합니다.",
-        "testStrategy": "두 날짜 모두 데이터가 있는 경우, 한쪽만 있는 경우, 둘 다 없는 경우를 테스트하여 올바른 데이터 또는 빈 데이터 구조가 반환되는지 확인합니다.",
-        "priority": "high",
-        "dependencies": [
-          17,
-          18
-        ],
+        "id": 33,
+        "title": "Frontend: Develop Statistics Page DB Configuration UI",
+        "description": "Create the UI components on the Statistics page for users to input and manage database connection settings.",
+        "details": "Add a collapsible section at the top of the Statistics page with input fields for DB Host, Port, User, Password, and DB Name. The state should be managed by React.",
+        "testStrategy": "Manually verify the UI renders correctly. Check that the input fields are functional and that the collapsible section works as expected.",
+        "priority": "medium",
+        "dependencies": [],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 20,
-        "title": "데이터 집계 로직 구현",
-        "description": "조회된 데이터를 바탕으로 peg_name별 value의 평균을 계산하는 함수를 구현합니다.",
-        "details": "입력으로 데이터셋(예: Pandas DataFrame)을 받아 peg_name으로 그룹화하고 avg(value)를 계산하여 반환하는 재사용 가능한 함수를 작성합니다.",
-        "testStrategy": "알려진 결과를 가진 샘플 데이터셋을 사용하여 평균 계산 로직의 정확성을 검증하는 단위 테스트를 작성합니다.",
-        "priority": "high",
-        "dependencies": [
-          19
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 21,
-        "title": "비교 분석 지표 계산",
-        "description": "두 날짜의 집계 결과를 조인하고, diff 및 pct_change를 계산합니다.",
-        "details": "n-1, n의 평균값 데이터를 peg_name으로 조인합니다. diff를 계산하고, pct_change 계산 시 분모가 0인 경우를 안전하게 처리(null 또는 특정 값으로 대체)하고 로그를 남깁니다.",
-        "testStrategy": "분모가 0인 케이스, 한쪽에만 peg_name이 존재하는 케이스 등을 포함한 단위 테스트를 작성하여 계산의 정확성을 검증합니다.",
-        "priority": "high",
-        "dependencies": [
-          20
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 22,
-        "title": "최종 결과를 CSV 파일로 저장",
-        "description": "분석된 최종 데이터프레임을 지정된 형식의 CSV 파일로 저장합니다.",
-        "details": "output_dir에 'comparison_{n_minus_1}_{n}.csv' 형식의 파일명으로 저장합니다. 컬럼 순서는 ['peg_name', 'avg_n_minus_1', 'avg_n', 'diff', 'pct_change']를 따릅니다.",
-        "testStrategy": "스크립트 실행 후 생성된 CSV 파일의 경로, 이름, 헤더, 내용이 명세와 일치하는지 확인합니다.",
+        "id": 34,
+        "title": "Frontend: Implement Statistics Page Query and Visualization",
+        "description": "Connect the Statistics page UI to the backend to query for KPI data and visualize the results.",
+        "details": "On form submission, send the DB settings and query parameters to the `/api/kpi/query` endpoint. Use the response data to render charts with Recharts and display master data in a table.",
+        "testStrategy": "Enter mock DB settings, trigger a query, and verify that the request is sent to the backend. Ensure that mock data returned from the backend is correctly rendered as a chart and a table. Test error handling by simulating a failed API call.",
         "priority": "medium",
         "dependencies": [
-          21
+          28,
+          31,
+          33
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 23,
-        "title": "요약 리포트 기본 구조 및 통계 생성",
-        "description": "HTML 또는 Markdown 형식의 요약 리포트 파일을 생성하고, 기본 통계 정보를 추가합니다.",
-        "details": "파일명은 'report_{n_minus_1}_{n}.html' (또는 .md) 형식입니다. 전체 peg_name 개수, 평균이 증가/감소/유지된 peg_name의 개수 등 전반적인 경향을 요약하여 리포트에 기재합니다.",
-        "testStrategy": "생성된 리포트 파일에 헤더 정보와 기본 통계가 올바르게 포함되었는지 확인합니다.",
-        "priority": "medium",
-        "dependencies": [
-          21
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 24,
-        "title": "리포트에 상위/하위 N개 항목 목록 추가",
-        "description": "diff의 절대값과 pct_change의 절대값을 기준으로 상위 N개 항목을 정렬하여 리포트에 추가합니다.",
-        "details": "분석 결과 데이터에서 diff와 pct_change를 기준으로 각각 상위 N개 항목을 추출하여 표 형태로 리포트에 포함시킵니다.",
-        "testStrategy": "정렬 로직이 정확한지, 올바른 항목들이 리포트의 해당 섹션에 표시되는지 확인합니다.",
-        "priority": "medium",
-        "dependencies": [
-          23
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 25,
-        "title": "리포트에 임계값 초과 항목 강조",
-        "description": "설정된 임계값(T, P)을 초과하는 항목들을 필터링하여 리포트의 별도 섹션에 표시하거나 강조합니다.",
-        "details": "|diff| >= T 또는 |pct_change| >= P 조건을 만족하는 모든 항목을 찾아 리포트에 목록화합니다. HTML의 경우 배경색 변경 등으로 강조할 수 있습니다.",
-        "testStrategy": "임계값 필터링 로직이 정확하게 동작하는지, 해당 항목들이 리포트에 올바르게 표시되는지 확인합니다.",
+        "id": 35,
+        "title": "Frontend: Develop Preference Page for Derived PEGs",
+        "description": "Add UI components to the Preference page to allow users to manage derived PEG definitions.",
+        "details": "Create a new tab or section on the Preference page. Implement a form or JSON editor to allow users to create, view, edit, and delete derived PEG formulas. Connect these actions to the backend Preference API.",
+        "testStrategy": "Manually test the full CRUD lifecycle. Add a new PEG definition, verify it appears in the list, edit it, and finally delete it. Confirm that each action successfully calls the backend API.",
         "priority": "low",
         "dependencies": [
-          23
+          29,
+          31
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 26,
-        "title": "전체 실행 흐름 통합 및 최종 테스트",
-        "description": "개별적으로 구현된 모든 기능(입력-조회-분석-출력)을 하나의 메인 스크립트로 통합하고 전체 프로세스를 테스트합니다.",
-        "details": "애플리케이션의 진입점(entry point)을 만들고, 각 모듈을 순서대로 호출합니다. 전체 실행 과정에서 발생하는 예외를 처리하고, 완료 기준(DoD)을 모두 만족하는지 최종 검증합니다.",
-        "testStrategy": "실제 실행 환경과 유사한 조건에서 n-1, n 날짜를 입력하여 처음부터 끝까지 실행해보고, 생성된 CSV와 리포트가 예상과 일치하는지 확인합니다.",
-        "priority": "high",
+        "id": 36,
+        "title": "Enhancement: Implement DB Persistence for Analysis Results",
+        "description": "Transition the backend from in-memory storage to a persistent database for analysis results.",
+        "details": "Define a database schema for the analysis results using SQLAlchemy. Configure a connection to a PostgreSQL database. Modify the `/api/analysis-result` endpoints to perform CRUD operations on the database instead of the in-memory object.",
+        "testStrategy": "After implementation, repeat the tests from task #27. Additionally, inspect the database directly to verify that data is being created, updated, and deleted correctly. Test application restarts to ensure data persists.",
+        "priority": "medium",
         "dependencies": [
-          17,
-          22,
-          24,
-          25
+          27
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 37,
+        "title": "Frontend: Implement Global Error Handling and Notifications",
+        "description": "Implement a system for providing clear user feedback for API calls, especially for errors.",
+        "details": "Integrate a toast notification library (e.g., react-toastify). Modify the common API client to intercept responses and display a success or error toast message, such as for a failed DB connection on the Statistics page.",
+        "testStrategy": "Trigger a successful API call and verify a success notification appears. Trigger a failed API call (e.g., by stopping the backend) and verify a clear error message is displayed to the user.",
+        "priority": "low",
+        "dependencies": [
+          31
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 38,
+        "title": "Enhancement: Refine DB Query Proxy and Connection Management",
+        "description": "Improve the reliability and security of the KPI query proxy.",
+        "details": "Implement robust connection handling for external DBs, including connection pooling and retry logic. Ensure secure management of DB credentials passed from the frontend. Add structured logging for query attempts, successes, and failures.",
+        "testStrategy": "Perform load testing on the `/api/kpi/query` endpoint. Test failure scenarios, such as incorrect credentials or a non-responsive database, to verify that the system handles them gracefully and logs appropriate errors.",
+        "priority": "low",
+        "dependencies": [
+          28
         ],
         "status": "done",
         "subtasks": []
@@ -163,7 +156,7 @@
     ],
     "metadata": {
       "created": "2025-08-08T16:22:51.535Z",
-      "updated": "2025-08-13T00:18:40.131Z",
+      "updated": "2025-08-13T15:50:40.229Z",
       "description": "Tasks for master context"
     }
   }

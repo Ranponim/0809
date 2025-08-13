@@ -1,15 +1,15 @@
 {
   "models": {
     "main": {
-      "provider": "gemini-cli",
-      "modelId": "gemini-2.5-pro",
-      "maxTokens": 65536,
+      "provider": "anthropic",
+      "modelId": "claude-3-7-sonnet-20250219",
+      "maxTokens": 120000,
       "temperature": 0.2
     },
     "research": {
-      "provider": "perplexity",
-      "modelId": "sonar-pro",
-      "maxTokens": 8700,
+      "provider": "anthropic",
+      "modelId": "claude-3-7-sonnet-20250219",
+      "maxTokens": 120000,
       "temperature": 0.1
     },
     "fallback": {

@@ -1,10 +1,18 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import json
 import random
 from datetime import datetime, timedelta
+import os
+import psycopg2
+import psycopg2.extras
+from fastapi import Body
+import logging
+import time
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 app = FastAPI(title="3GPP KPI Management API", version="1.0.0")
 
@@ -16,6 +24,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 데이터 모델 정의
 class KPIData(BaseModel):
@@ -35,6 +46,73 @@ class SummaryReport(BaseModel):
     title: str
     content: str
     generated_at: str
+
+# 분석 결과 모델
+class AnalysisResult(BaseModel):
+    id: int
+    status: str
+    n_minus_1: Optional[str] = None
+    n: Optional[str] = None
+    analysis: Dict[str, Any]
+    stats: List[Dict[str, Any]] = []
+    chart_overall_base64: Optional[str] = None
+    report_path: Optional[str] = None
+    created_at: str
+
+# 인메모리 저장소 (MVP)
+analysis_results: List[AnalysisResult] = []
+analysis_counter: int = 1
+
+# 영구 저장소 (SQLite via SQLAlchemy)
+def _build_analysis_db_url() -> str:
+    """PostgreSQL 우선 영구 저장 DSN 구성.
+    - ANALYSIS_DB_URL 이 지정되면 그대로 사용 (예: postgresql+psycopg2://user:pass@host:5432/db)
+    - 아니면 ANALYSIS_PG_* 환경변수로 DSN 생성
+    - 미설정 시 명시적으로 오류 발생 (요구사항: PostgreSQL 영구 저장)
+    """
+    dsn = os.getenv("ANALYSIS_DB_URL")
+    if dsn:
+        return dsn
+    host = os.getenv("ANALYSIS_PG_HOST")
+    if host:
+        port = os.getenv("ANALYSIS_PG_PORT", "5432")
+        user = os.getenv("ANALYSIS_PG_USER", "postgres")
+        password = os.getenv("ANALYSIS_PG_PASSWORD", "")
+        dbname = os.getenv("ANALYSIS_PG_DBNAME", "postgres")
+        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
+    raise RuntimeError("Set ANALYSIS_DB_URL or ANALYSIS_PG_* envs for PostgreSQL persistence")
+
+ANALYSIS_DB_URL = _build_analysis_db_url()
+engine = create_engine(ANALYSIS_DB_URL, future=True, pool_pre_ping=True)
+Base = declarative_base()
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+class AnalysisResultRecord(Base):
+    __tablename__ = "analysis_results"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    status = Column(String(32), nullable=False)
+    n_minus_1 = Column(String(64))
+    n = Column(String(64))
+    analysis_json = Column(Text)  # JSON 문자열
+    stats_json = Column(Text)     # JSON 문자열
+    chart_overall_base64 = Column(Text)
+    report_path = Column(Text)
+    created_at = Column(DateTime, nullable=False)
+
+Base.metadata.create_all(bind=engine)
+
+def _record_to_model(rec: AnalysisResultRecord) -> AnalysisResult:
+    return AnalysisResult(
+        id=rec.id,
+        status=rec.status,
+        n_minus_1=rec.n_minus_1,
+        n=rec.n,
+        analysis=json.loads(rec.analysis_json or "{}"),
+        stats=json.loads(rec.stats_json or "[]"),
+        chart_overall_base64=rec.chart_overall_base64,
+        report_path=rec.report_path,
+        created_at=rec.created_at.isoformat(),
+    )
 
 # 가상 데이터 생성 함수
 def generate_mock_kpi_data(start_date: str, end_date: str, kpi_type: str, entity_ids: List[str]) -> List[KPIData]:
@@ -125,6 +203,159 @@ mock_reports = [
 async def root():
     return {"message": "3GPP KPI Management API"}
 
+@app.post("/api/analysis-result")
+async def post_analysis_result(payload: dict):
+    try:
+        # 필수 키 점검 및 생성 시간 부여
+        created_dt = datetime.utcnow()
+        logging.info("POST /api/analysis-result 호출: created_at=%s", created_dt.isoformat())
+        with SessionLocal() as s:
+            rec = AnalysisResultRecord(
+                status=str(payload.get("status", "success")),
+                n_minus_1=payload.get("n_minus_1"),
+                n=payload.get("n"),
+                analysis_json=json.dumps(payload.get("analysis") or {}),
+                stats_json=json.dumps(payload.get("stats") or []),
+                chart_overall_base64=payload.get("chart_overall_base64"),
+                report_path=payload.get("report_path"),
+                created_at=created_dt,
+            )
+            s.add(rec)
+            s.commit()
+            s.refresh(rec)
+            logging.info("분석결과 저장 성공: id=%s", rec.id)
+            return {"id": rec.id, "created_at": created_dt.isoformat()}
+    except Exception as e:
+        logging.exception("분석결과 저장 실패")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
+
+@app.get("/api/analysis-result/latest")
+async def get_latest_analysis_result():
+    with SessionLocal() as s:
+        rec = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="No analysis results")
+        return _record_to_model(rec)
+
+@app.get("/api/analysis-result/{result_id}")
+async def get_analysis_result(result_id: int):
+    with SessionLocal() as s:
+        rec = s.query(AnalysisResultRecord).filter(AnalysisResultRecord.id == result_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Result not found")
+        return _record_to_model(rec)
+
+@app.get("/api/analysis-result")
+async def list_analysis_results():
+    with SessionLocal() as s:
+        recs = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).all()
+        return {"results": [_record_to_model(r) for r in recs]}
+
+@app.post("/api/kpi/query")
+async def kpi_query(payload: dict = Body(...)):
+    """
+    MVP: DB 설정을 입력으로 받아 KPI 통계를 반환하는 프록시.
+    현재 단계에서는 기존 mock 생성기를 사용해 프론트 연동을 우선 보장한다.
+    기대 입력 예시:
+    {
+      "db": {"host":"...","port":5432,"user":"...","password":"...","dbname":"..."},
+      "table": "summary",
+      "start_date": "YYYY-MM-DD",
+      "end_date": "YYYY-MM-DD",
+      "kpi_type": "availability",
+      "entity_ids": "LHK078ML1,LHK078MR1"
+    }
+    """
+    try:
+        start_date = payload.get("start_date")
+        end_date = payload.get("end_date")
+        kpi_type = payload.get("kpi_type")
+        entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
+        if not start_date or not end_date or not kpi_type:
+            raise ValueError("start_date, end_date, kpi_type는 필수입니다")
+
+        # 실제 DB 프록시 시도
+        db = payload.get("db") or {}
+        table = payload.get("table") or "summary"
+        columns = payload.get("columns") or {"time": "datetime", "peg_name": "peg_name", "value": "value"}
+        time_col = columns.get("time", "datetime")
+        peg_col = columns.get("peg_name", "peg_name")
+        value_col = columns.get("value", "value")
+
+        # 식별자 검증 (SQL Injection 방지): 영문/숫자/_ 만 허용
+        def _valid_ident(name: str) -> bool:
+            return bool(name) and name.replace('_','a').replace('0','0').replace('1','1').isalnum() and all(c.isalnum() or c=='_' for c in name)
+        if not all(map(_valid_ident, [table, time_col, peg_col, value_col])):
+            raise ValueError("Invalid identifiers in table/columns")
+
+        # 날짜 문자열(YYYY-MM-DD) → 하루 범위
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+        except Exception:
+            raise ValueError("start_date/end_date 형식은 YYYY-MM-DD 이어야 합니다")
+
+        ids = [t.strip() for t in str(entity_ids).split(",") if t.strip()]
+
+        # SQL: 시간(hour) 버킷으로 평균값 집계. entity_id는 peg_name으로 대응
+        sql = (
+            f"SELECT date_trunc('hour', {time_col}) AS ts, {peg_col} AS entity_id, AVG({value_col}) AS avg_value "
+            f"FROM {table} "
+            f"WHERE {time_col} BETWEEN %s AND %s "
+            f"  AND {peg_col} = ANY(%s) "
+            f"GROUP BY ts, {peg_col} "
+            f"ORDER BY ts ASC"
+        )
+        params = (start_dt, end_dt, ids)
+
+        # 간단 재시도(최대 3회)
+        attempt = 0
+        last_err = None
+        rows = []
+        while attempt < 3:
+            try:
+                attempt += 1
+                logging.info("DB 프록시 시도 %d/3: host=%s db=%s table=%s", attempt, db.get('host'), db.get('dbname'), table)
+                conn = psycopg2.connect(
+                    host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
+                    password=db.get("password"), dbname=db.get("dbname")
+                )
+                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
+                conn.close()
+                break
+            except Exception as e:
+                last_err = e
+                logging.warning("DB 프록시 실패(%d): %s", attempt, e)
+                time.sleep(0.5 * attempt)
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        if last_err and not rows:
+            raise last_err
+
+        data = []
+        for r in rows:
+            data.append({
+                "timestamp": r["ts"].isoformat(),
+                "entity_id": r["entity_id"],
+                "kpi_type": kpi_type,
+                "value": float(r["avg_value"]),
+            })
+        return {"data": data, "source": "proxy-db"}
+    except Exception:
+        # 실패 시 mock 으로 폴백하여 프론트 사용성 보장
+        start_date = payload.get("start_date")
+        end_date = payload.get("end_date")
+        kpi_type = payload.get("kpi_type")
+        entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
+        logging.warning("KPI 프록시 실패, mock 데이터로 폴백")
+        data = generate_mock_kpi_data(start_date, end_date, kpi_type, entity_ids.split(","))
+        return {"data": data, "source": "proxy-mock"}
+
 @app.get("/api/kpi/statistics")
 async def get_kpi_statistics(
     start_date: str = Query(..., description="시작 날짜 (YYYY-MM-DD)"),
@@ -190,6 +421,26 @@ async def delete_preference(preference_id: int):
     global preferences_db
     preferences_db = [p for p in preferences_db if p.id != preference_id]
     return {"message": "Preference deleted successfully"}
+
+@app.get("/api/preferences/{preference_id}/derived-pegs")
+async def get_preference_derived_pegs(preference_id: int):
+    pref = next((p for p in preferences_db if p.id == preference_id), None)
+    if not pref:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    derived = (pref.config or {}).get("derived_pegs") or {}
+    return {"derived_pegs": derived}
+
+@app.put("/api/preferences/{preference_id}/derived-pegs")
+async def update_preference_derived_pegs(preference_id: int, payload: dict = Body(...)):
+    pref = next((p for p in preferences_db if p.id == preference_id), None)
+    if not pref:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    if not isinstance(payload.get("derived_pegs"), dict):
+        raise HTTPException(status_code=400, detail="derived_pegs must be an object {name: expr}")
+    cfg = pref.config or {}
+    cfg["derived_pegs"] = payload["derived_pegs"]
+    pref.config = cfg
+    return {"message": "Derived PEGs updated", "derived_pegs": cfg["derived_pegs"]}
 
 @app.get("/api/master/pegs")
 async def get_pegs():
