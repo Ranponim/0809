@@ -38,7 +38,7 @@ export default function TimeSeriesChart({ series, height = 380, title }: TimeSer
       legend: { type: 'scroll' },
       grid: { left: 48, right: 24, top: 48, bottom: 72 },
       xAxis: { type: 'time' },
-      yAxis: yAxisIndices.map((idx) => ({ type: 'value', nameLocation: 'end' })),
+      yAxis: yAxisIndices.map(() => ({ type: 'value', nameLocation: 'end' })),
       dataZoom: [
         { type: 'inside', throttle: 50 },
         { type: 'slider', height: 24, bottom: 24 },

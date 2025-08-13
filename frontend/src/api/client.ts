@@ -3,11 +3,10 @@ import { z } from 'zod'
 import {
   LLMAnalysisResultSchema,
   MetricsListResponseSchema,
-  StatsQueryRequest,
   StatsQueryResponseSchema,
-  UserPreferences,
   UserPreferencesSchema,
 } from './types'
+import type { StatsQueryRequest, UserPreferences } from './types'
 
 const baseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 

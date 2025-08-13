@@ -1,5 +1,5 @@
 import { Parser } from 'expr-eval'
-import { TimeSeries } from '../api/types'
+import type { TimeSeries } from '../api/types'
 
 export function computeDerivedSeries(
   name: string,

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import { UserPreferences } from '../api/types'
+import type { UserPreferences } from '../api/types'
 import { fetchUserPreferences, updateUserPreferences } from '../api/client'
 
 interface PreferencesState {
