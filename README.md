@@ -5,7 +5,7 @@
 
 ### 주요 기능
 - 시간 범위 입력: `yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm`
-- PostgreSQL 집계: 기간별 `AVG(value)`를 `cell_name`으로 그룹화
+- PostgreSQL 집계: 기간별 `AVG(value)`를 `cellid`로 그룹화
 - 통합 분석: PEG별이 아닌 전체 PEG 데이터를 통합한 셀 기준 종합 분석
 - 동일 시험환경 가정: n-1과 n은 동일 환경에서 수행되었다고 가정
 - 리포트/전송: HTML 생성 및 JSON 결과를 백엔드로 POST
@@ -83,7 +83,7 @@ docker compose down
 
 ## 구성
 ### 데이터베이스 설정
-- 기본 테이블: `measurements`
+- 기본 테이블: `summary`
 - 기본 컬럼 매핑: `time`→`datetime`, `cell`→`cellid`, `value`→`value`
 - 환경변수 폴백: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 
@@ -98,7 +98,7 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
   "output_dir": "./analysis_output",
   "backend_url": "http://your-backend/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
-  "table": "measurements",
+  "table": "summary",
   "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
 }
 ```
@@ -117,7 +117,7 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
     "cells_with_significant_change": {"CELL_NAME": "..."}
   },
   "stats": [
-    {"cell_name": "...", "N-1": 0.0, "N": 0.0, "rate(%)": 0.0}
+    {"cellid": "...", "N-1": 0.0, "N": 0.0, "rate(%)": 0.0}
   ]
 }
 ```

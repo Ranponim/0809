@@ -16,7 +16,7 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
   "output_dir": "./analysis_output",
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
-  "table": "measurements",
+  "table": "summary",
   "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
 }
 """
@@ -115,7 +115,7 @@ def fetch_cell_averages_for_period(
     """
     주어진 기간에 대해 셀 단위 평균값을 집계합니다. PEG는 구분하지 않고 전체 데이터를 통합합니다.
 
-    반환 컬럼: [cell_name, period, avg_value]
+    반환 컬럼: [cellid, period, avg_value]
     """
     logging.info("fetch_cell_averages_for_period() 호출: %s ~ %s, period=%s", start_dt, end_dt, period_label)
     time_col = columns.get("time", "datetime")
@@ -123,7 +123,7 @@ def fetch_cell_averages_for_period(
     value_col = columns.get("value", "value")
 
     sql = f"""
-        SELECT {cell_col} AS cell_name, AVG({value_col}) AS avg_value
+        SELECT {cell_col} AS cellid, AVG({value_col}) AS avg_value
         FROM {table}
         WHERE {time_col} BETWEEN %s AND %s
         GROUP BY {cell_col}
@@ -138,7 +138,7 @@ def fetch_cell_averages_for_period(
             cur.execute(sql, (start_dt, end_dt))
             rows = cur.fetchall()
         # 조회 결과를 DataFrame으로 변환 (비어있을 수 있음)
-        df = pd.DataFrame(rows, columns=["cell_name", "avg_value"]) if rows else pd.DataFrame(columns=["cell_name", "avg_value"]) 
+        df = pd.DataFrame(rows, columns=["cellid", "avg_value"]) if rows else pd.DataFrame(columns=["cellid", "avg_value"])
         df["period"] = period_label
         logging.info("fetch_cell_averages_for_period() 건수: %d (period=%s)", len(df), period_label)
         return df
@@ -153,7 +153,7 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.D
     두 기간의 집계 데이터를 병합해 변화율을 계산하고, 종합 비교 차트를 생성합니다.
 
     반환:
-      - processed_df: [cell_name, 'N-1', 'N', 'rate(%)']
+      - processed_df: [cellid, 'N-1', 'N', 'rate(%)']
       - charts: {'overall': base64_png}
     """
     # 핵심 처리 단계: 병합 → 피벗 → 변화율 산출 → 차트 생성(Base64)
@@ -161,7 +161,7 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.D
     try:
         all_df = pd.concat([n1_df, n_df], ignore_index=True)
         logging.info("병합 데이터프레임 크기: %s행 x %s열", all_df.shape[0], all_df.shape[1])
-        pivot = all_df.pivot(index="cell_name", columns="period", values="avg_value").fillna(0)
+        pivot = all_df.pivot(index="cellid", columns="period", values="avg_value").fillna(0)
         logging.info("피벗 결과 컬럼: %s", list(pivot.columns))
         if "N-1" not in pivot.columns or "N" not in pivot.columns:
             raise ValueError("N-1 또는 N 데이터가 부족합니다. 시간 범위 또는 원본 데이터를 확인하세요.")
@@ -170,10 +170,10 @@ def process_and_visualize(n1_df: pd.DataFrame, n_df: pd.DataFrame) -> Tuple[pd.D
 
         # 차트: 모든 셀에 대해 N-1 vs N 비교 막대그래프 (단일 이미지)
         plt.figure(figsize=(10, 6))
-        processed_df.set_index("cell_name")[['N-1', 'N']].plot(kind='bar', ax=plt.gca())
+        processed_df.set_index("cellid")[['N-1', 'N']].plot(kind='bar', ax=plt.gca())
         plt.title("All Cells: Period N vs N-1", fontsize=12)
         plt.ylabel("Average Value")
-        plt.xlabel("Cell Name")
+        plt.xlabel("Cell ID")
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         buf = io.BytesIO()
@@ -217,7 +217,7 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
 [입력 데이터 개요]
 - 기간 n-1: {n1_range}
 - 기간 n: {n_range}
-- 표 컬럼: cell_name, N-1(평균 value), N(평균 value), rate(%)
+- 표 컬럼: cellid, N-1(평균 value), N(평균 value), rate(%)
 - 요약 테이블의 원본 스키마 예시: id(int), datetime(ts), value(double), version(text), family_name(text), cellid(text), peg_name(text), host(text), ne(text)
   (평균은 value에 대해서만 산출됨)
 
@@ -298,385 +298,59 @@ def query_llm(prompt: str) -> dict:
             if '{' in cleaned_json_str:
                 start_index, end_index = cleaned_json_str.find('{'), cleaned_json_str.rfind('}')
                 if start_index != -1 and end_index != -1:
-                    cleaned_json_str = cleaned_json_str[start_index: end_index + 1]
-                    logging.info("응답 문자열에서 JSON 부분 추출 성공")
-                else:
-                    logging.error("JSON 범위 추출 실패 (%s)", endpoint)
-                    continue
-            else:
-                logging.error("응답에 '{' 없음 (%s)", endpoint)
-                continue
-
-            analysis_result = json.loads(cleaned_json_str)
-            # 결과 구조를 빠르게 파악할 수 있도록 주요 키를 기록
-            logging.info(
-                "LLM 분석 결과 수신 성공 (%s): keys=%s",
-                endpoint, list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)
-            )
-            return analysis_result
-        except json.JSONDecodeError as e:
-            logging.error("JSON 파싱 실패: %s", e)
-            logging.error("파싱 시도 내용(1000자): %s...", cleaned_json_str[:1000])
-            continue
+                    cleaned_json_str = cleaned_json_str[start_index:end_index+1]
+            try:
+                return json.loads(cleaned_json_str)
+            except Exception:
+                logging.warning("JSON 파싱 실패, 원문 반환")
+                return {"raw": analysis_content}
         except Exception as e:
-            logging.error("예기치 못한 오류 (%s): %s", type(e).__name__, e, exc_info=True)
+            logging.exception("엔드포인트 실패(%s), 다음으로 페일오버", endpoint)
             continue
-    raise ConnectionError("모든 LLM API 엔드포인트에 연결하지 못했습니다.")
+
+    logging.error("모든 엔드포인트 실패")
+    return {"error": "All endpoints failed"}
 
 
-# --- HTML 리포트 생성 (통합 분석 전용) ---
-def generate_multitab_html_report(llm_analysis: dict, charts: Dict[str, str], output_dir: str, processed_df: pd.DataFrame) -> str:
-    """통합 분석 리포트를 HTML로 생성합니다."""
-    # 3개 탭 구조(요약/상세/차트)로 시각적 가독성을 높인다
-    logging.info("generate_multitab_html_report() 호출: HTML 생성 시작")
+# --- HTML 리포트 생성 ---
+def generate_multitab_html_report(analysis: dict, charts: Dict[str, str], output_dir: str, processed_df: pd.DataFrame) -> str:
+    """멀티탭 HTML 리포트를 생성합니다. 분석 JSON, 전체 비교 차트, 표를 포함합니다."""
     os.makedirs(output_dir, exist_ok=True)
+    report_path = os.path.join(output_dir, f"Cell_Analysis_Report_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}.html")
 
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    report_filename = f"Cell_Analysis_Report_{timestamp}.html"
-    report_path = os.path.join(output_dir, report_filename)
+    overall_chart_img = charts.get("overall")
 
-    summary_html = (llm_analysis.get('overall_summary') or llm_analysis.get('comprehensive_summary', 'N/A')).replace('\n', '<br>')
-    findings_html = ''.join([f'<li>{item}</li>' for item in llm_analysis.get('key_findings', [])])
-    actions_html = ''.join([f'<li>{item}</li>' for item in llm_analysis.get('recommended_actions', [])])
+    # HTML 문자열 구성 (간단한 스타일 포함)
+    html_parts = [
+        "<html><head><meta charset='utf-8'><title>Cell Analysis Report</title>",
+        "<style>body{font-family:Arial,sans-serif;margin:20px;} .tab{margin-bottom:20px;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ccc;padding:6px;text-align:left;} th{background:#f4f4f4;} .chart{max-width:100%;height:auto;}</style>",
+        "</head><body>",
+        "<h2>Cell Performance Analysis Report</h2>",
+    ]
 
-    # 셀 상세 분석 (있을 경우)
-    detail_map = llm_analysis.get('cells_with_significant_change') or llm_analysis.get('detailed_cell_analysis') or {}
-    detailed_parts = []
-    for cell, analysis in detail_map.items():
-        analysis_html = str(analysis).replace('\n', '<br>')
-        detailed_parts.append(f"<h2>{cell}</h2><div class='peg-analysis-box'><p>{analysis_html}</p></div>")
-    detailed_html = "".join(detailed_parts)
+    # 탭 1: 종합 요약/권고
+    if isinstance(analysis, dict):
+        html_parts.append("<div class='tab'><h3>Overall Summary</h3>")
+        html_parts.append(f"<pre>{html.escape(json.dumps(analysis, ensure_ascii=False, indent=2))}</pre>")
+        html_parts.append("</div>")
 
-    # 차트 HTML (PNG 다운로드 버튼 포함)
-    charts_html = ''.join([
-        (
-            f'<div class="chart-item">'
-            f'  <div class="chart-img-wrap">'
-            f'    <img src="data:image/png;base64,{b64_img}" alt="{label} Chart">'
-            f'    <div class="chart-actions">'
-            f'      <a class="btn" href="data:image/png;base64,{b64_img}" download="{label}.png">PNG 다운로드</a>'
-            f'    </div>'
-            f'  </div>'
-            f'  <div class="chart-caption">{label}</div>'
-            f'</div>'
-        )
-        for label, b64_img in charts.items()
-    ])
+    # 탭 2: 전체 비교 차트
+    if overall_chart_img:
+        html_parts.append("<div class='tab'><h3>All Cells: N vs N-1</h3>")
+        html_parts.append(f"<img class='chart' src='data:image/png;base64,{overall_chart_img}' alt='Overall Chart' />")
+        html_parts.append("</div>")
 
-    # CSV 데이터 URL 생성
-    try:
-        csv_text = processed_df.to_csv(index=False)
-    except Exception:
-        csv_text = ''
-    csv_b64 = base64.b64encode(csv_text.encode('utf-8')).decode('utf-8') if csv_text else ''
-    csv_data_url = f"data:text/csv;base64,{csv_b64}" if csv_b64 else ''
-
-    # 테이블 헤더/바디 생성
-    table_columns = list(processed_df.columns) if not processed_df.empty else []
-    table_header_html = ''.join([f'<th data-index="{idx}" data-key="{html.escape(str(col))}">{html.escape(str(col))}</th>' for idx, col in enumerate(table_columns)])
-    table_rows_html = ''
+    # 탭 3: 통계 테이블
     if not processed_df.empty:
-        for row in processed_df.itertuples(index=False):
-            cells = []
-            for value in row:
-                cells.append(f"<td>{html.escape(str(value))}</td>")
-            table_rows_html += '<tr>' + ''.join(cells) + '</tr>'
+        html_parts.append("<div class='tab'><h3>Statistics</h3>")
+        html_parts.append(processed_df.to_html(index=False))
+        html_parts.append("</div>")
 
-    logging.info(
-        "리포트 구성요소: findings=%d, actions=%d, detailed_cells=%d, charts=%d",
-        len(llm_analysis.get('key_findings', [])),
-        len(llm_analysis.get('recommended_actions', [])),
-        len(detail_map),
-        len(charts),
-    )
-
-    html_template = f"""
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Cell 종합 분석 리포트</title>
-        <style>
-            :root {{
-                --bg: #f6f7fb;
-                --card: #ffffff;
-                --text: #1f2937;
-                --muted: #6b7280;
-                --border: #e5e7eb;
-                --primary: #0ea5e9; /* sky-500 */
-                --primary-600: #0284c7;
-                --accent: #22c55e;  /* green-500 */
-                --warn: #f59e0b;    /* amber-500 */
-                --shadow: 0 10px 30px rgba(2, 8, 23, 0.08);
-                --radius: 14px;
-            }}
-            @media (prefers-color-scheme: dark) {{
-                :root {{
-                    --bg: #0b1220;
-                    --card: #0f172a;
-                    --text: #e5e7eb;
-                    --muted: #94a3b8;
-                    --border: #1f2a44;
-                    --primary: #38bdf8;
-                    --primary-600: #0ea5e9;
-                    --accent: #34d399;
-                    --warn: #fbbf24;
-                    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-                }}
-            }}
-
-            html, body {{
-                margin: 0; padding: 0; background: linear-gradient(180deg, var(--bg), #ffffff00 60%), var(--bg);
-                color: var(--text); font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;
-            }}
-
-            .shell {{ max-width: 1240px; margin: 28px auto; padding: 0 18px; }}
-
-            .hero {{
-                background: radial-gradient(1200px 240px at 20% -20%, rgba(56, 189, 248, 0.25), transparent),
-                            radial-gradient(800px 200px at 90% -10%, rgba(34, 197, 94, 0.25), transparent);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                padding: 26px 26px;
-                box-shadow: var(--shadow);
-                backdrop-filter: saturate(110%) blur(4px);
-            }}
-
-            .hero h1 {{
-                margin: 0 0 8px 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em;
-                background: linear-gradient(90deg, var(--primary), var(--accent));
-                -webkit-background-clip: text; background-clip: text; color: transparent;
-            }}
-
-            .hero .meta {{ color: var(--muted); font-size: 13px; }}
-
-            .tabs {{
-                margin-top: 16px;
-                background: var(--card);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                box-shadow: var(--shadow);
-                overflow: hidden;
-            }}
-
-            .tab-nav {{
-                display: flex; gap: 6px; padding: 10px; position: sticky; top: 0; background: var(--card);
-                border-bottom: 1px solid var(--border); z-index: 2;
-            }}
-
-            .tab-nav button {{
-                appearance: none; border: 1px solid var(--border); background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                color: var(--text); padding: 10px 14px; border-radius: 10px; font-size: 14px; cursor: pointer;
-                transition: all .18s ease; box-shadow: 0 1px 0 rgba(0,0,0,.04);
-            }}
-            .tab-nav button:hover {{ transform: translateY(-1px); box-shadow: 0 6px 14px rgba(2,8,23,.08); }}
-            .tab-nav button.active {{
-                background: linear-gradient(180deg, rgba(14,165,233,.14), rgba(14,165,233,.08));
-                color: var(--primary-600); border-color: rgba(14,165,233,.35);
-            }}
-
-            .content {{ padding: 18px; }}
-            .section {{ margin: 16px 0 22px; }}
-            .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }}
-            .card h2 {{ margin: 0 0 12px 0; font-size: 18px; color: var(--primary-600); }}
-            .muted {{ color: var(--muted); }}
-
-            .list ul {{ list-style: none; padding-left: 0; margin: 0; }}
-            .list li {{
-                margin: 8px 0; line-height: 1.6; position: relative; padding-left: 26px;
-            }}
-            .list li::before {{
-                content: '✓'; position: absolute; left: 0; top: 1px; color: var(--accent); font-weight: 700;
-            }}
-
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }}
-            .chart-item img {{
-                width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);
-            }}
-            .chart-img-wrap {{ position: relative; }}
-            .chart-actions {{ position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }}
-            .chart-caption {{ margin-top: 8px; color: var(--muted); font-size: 12px; text-align: center; }}
-
-            .btn {{
-                padding: 8px 12px; border-radius: 10px; text-decoration: none; color: var(--text);
-                background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-                border: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,.04);
-                font-size: 13px; transition: all .18s ease; cursor: pointer;
-            }}
-            .btn:hover {{ transform: translateY(-1px); box-shadow: 0 6px 14px rgba(2,8,23,.08); }}
-
-            .toolbar {{ display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }}
-            .input {{
-                padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text);
-                min-width: 220px; outline: none;
-            }}
-
-            table {{ width: 100%; border-collapse: separate; border-spacing: 0; }}
-            thead th {{
-                text-align: left; padding: 10px 12px; position: sticky; top: 0; background: var(--card);
-                border-bottom: 1px solid var(--border); cursor: pointer;
-            }}
-            tbody td {{ padding: 10px 12px; border-bottom: 1px solid var(--border); }}
-            tbody tr:hover {{ background: rgba(14,165,233,.05); }}
-
-            .tab-content {{ display: none; }}
-            .tab-content.active {{ display: block; animation: fadeIn .28s ease; }}
-            @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(6px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-        </style>
-    </head>
-    <body>
-        <div class="shell">
-            <div class="hero">
-                <h1>Cell 종합 분석 리포트</h1>
-                <div class="meta">생성 시각: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
-            </div>
-
-            <div class="tabs">
-                <div class="tab-nav" role="tablist">
-                    <button class="active" role="tab" aria-selected="true" onclick="openTab(event, 'summary')">종합 리포트</button>
-                    <button role="tab" aria-selected="false" onclick="openTab(event, 'detailed')">셀 상세 분석</button>
-                    <button role="tab" aria-selected="false" onclick="openTab(event, 'charts')">비교 차트</button>
-                    <button role="tab" aria-selected="false" onclick="openTab(event, 'table')">데이터 테이블</button>
-                </div>
-                <div class="content">
-                    <section id="summary" class="tab-content active" role="tabpanel">
-                        <div class="section card">
-                            <h2>종합 분석 요약</h2>
-                            <div class="muted">{summary_html}</div>
-                        </div>
-                        <div class="section card list">
-                            <h2>핵심 관찰 사항</h2>
-                            <ul>{findings_html}</ul>
-                        </div>
-                        <div class="section card list">
-                            <h2>권장 조치</h2>
-                            <ul>{actions_html}</ul>
-                        </div>
-                    </section>
-
-                    <section id="detailed" class="tab-content" role="tabpanel">
-                        <div class="section card">{detailed_html}</div>
-                    </section>
-
-                    <section id="charts" class="tab-content" role="tabpanel">
-                        <div class="section card">
-                            <h2>비교 차트</h2>
-                            <div class="grid">{charts_html}</div>
-                        </div>
-                    </section>
-
-                    <section id="table" class="tab-content" role="tabpanel">
-                        <div class="section card">
-                            <h2>데이터 테이블</h2>
-                            <div class="toolbar">
-                                <input id="table-search" class="input" placeholder="검색 (셀 이름 등)" />
-                                {f'<a class="btn" href="{csv_data_url}" download="cell_stats.csv">CSV 다운로드</a>' if csv_data_url else ''}
-                            </div>
-                            <div class="table-wrap">
-                                <table id="stats-table">
-                                    <thead>
-                                        <tr>{table_header_html}</tr>
-                                    </thead>
-                                    <tbody>{table_rows_html}</tbody>
-                                </table>
-                                {'' if table_rows_html else '<div class="muted">표시할 데이터가 없습니다.</div>'}
-                            </div>
-                        </div>
-                    </section>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            function openTab(evt, tabName) {{
-                var i, tabcontent, tablinks;
-                tabcontent = document.getElementsByClassName('tab-content');
-                for (i = 0; i < tabcontent.length; i++) {{
-                    tabcontent[i].classList.remove('active');
-                }}
-                var nav = evt.currentTarget.parentElement;
-                tablinks = nav.getElementsByTagName('button');
-                for (i = 0; i < tablinks.length; i++) {{
-                    tablinks[i].classList.remove('active');
-                    tablinks[i].setAttribute('aria-selected', 'false');
-                }}
-                document.getElementById(tabName).classList.add('active');
-                evt.currentTarget.classList.add('active');
-                evt.currentTarget.setAttribute('aria-selected', 'true');
-            }}
-
-            // 간단한 테이블 정렬/검색
-            (function() {{
-                var table = document.getElementById('stats-table');
-                if (!table) return;
-                var tbody = table.querySelector('tbody');
-                var headers = table.querySelectorAll('thead th');
-                var currentSort = {{ key: null, asc: true }};
-
-                function inferType(value) {{
-                    var num = parseFloat((value + '').replace(/,/g, ''));
-                    return !isNaN(num) && isFinite(num) ? 'number' : 'string';
-                }}
-
-                function compareValues(a, b, type, asc) {{
-                    if (type === 'number') {{
-                        a = parseFloat((a + '').replace(/,/g, ''));
-                        b = parseFloat((b + '').replace(/,/g, ''));
-                        a = isNaN(a) ? -Infinity : a;
-                        b = isNaN(b) ? -Infinity : b;
-                    }} else {{
-                        a = (a + '').toLowerCase();
-                        b = (b + '').toLowerCase();
-                    }}
-                    if (a < b) return asc ? -1 : 1;
-                    if (a > b) return asc ? 1 : -1;
-                    return 0;
-                }}
-
-                headers.forEach(function(th) {{
-                    th.addEventListener('click', function() {{
-                        var index = parseInt(th.getAttribute('data-index'));
-                        var key = th.getAttribute('data-key');
-                        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-                        var type = 'string';
-                        if (rows.length) {{
-                            var cellValue = rows[0].children[index].textContent.trim();
-                            type = inferType(cellValue);
-                        }}
-                        var asc = currentSort.key === key ? !currentSort.asc : true;
-                        rows.sort(function(r1, r2) {{
-                            var a = r1.children[index].textContent.trim();
-                            var b = r2.children[index].textContent.trim();
-                            return compareValues(a, b, type, asc);
-                        }});
-                        tbody.innerHTML = '';
-                        rows.forEach(function(r) {{ tbody.appendChild(r); }});
-                        currentSort = {{ key: key, asc: asc }};
-                    }});
-                }});
-
-                var search = document.getElementById('table-search');
-                if (search) {{
-                    search.addEventListener('input', function() {{
-                        var keyword = search.value.toLowerCase();
-                        var rows = tbody.querySelectorAll('tr');
-                        rows.forEach(function(r) {{
-                            var text = r.textContent.toLowerCase();
-                            r.style.display = text.indexOf(keyword) > -1 ? '' : 'none';
-                        }});
-                    }});
-                }}
-            }})();
-        </script>
-    </body>
-    </html>
-    """
+    html_parts.append("</body></html>")
 
     with open(report_path, "w", encoding="utf-8") as f:
-        f.write(html_template)
+        f.write("\n".join(html_parts))
 
-    logging.info("HTML 리포트 생성 완료: %s", report_path)
     return report_path
 
 
@@ -708,7 +382,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
       - output_dir: str (기본 ./analysis_output)
       - backend_url: str (선택)
       - db: {host, port, user, password, dbname}
-      - table: str (기본 'measurements')
+      - table: str (기본 'summary')
       - columns: {time: 'datetime', cell: 'cellid', value: 'value'}
     """
     logging.info("=" * 20 + " Cell 성능 분석 로직 실행 시작 " + "=" * 20)
@@ -723,7 +397,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         backend_url = request.get('backend_url')
 
         db = request.get('db', {})
-        table = request.get('table', 'measurements')
+        table = request.get('table', 'summary')
         columns = request.get('columns', {"time": "datetime", "cell": "cellid", "value": "value"})
 
         # 파라미터 요약 로그: 민감정보는 기록하지 않음
@@ -780,31 +454,20 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         backend_response = None
         if backend_url:
             backend_response = post_results_to_backend(backend_url, result_payload)
-            logging.info("백엔드 응답 타입: %s", type(backend_response))
+            result_payload["backend_response"] = backend_response
 
-        logging.info("=" * 20 + " Cell 성능 분석 로직 실행 종료 (성공) " + "=" * 20)
-        return {
-            "status": "success",
-            "message": f"분석 완료. 리포트: {report_path}",
-            "report_path": report_path,
-            "backend_response": backend_response,
-            "analysis": llm_analysis,
-            "stats": processed_df.to_dict(orient='records'),
-        }
-    except ValueError as e:
-        logging.error("입력/처리 오류: %s", e)
-        return {"status": "error", "message": f"입력/처리 오류: {str(e)}"}
-    except ConnectionError as e:
-        logging.error("연결 오류: %s", e)
-        return {"status": "error", "message": f"연결 오류: {str(e)}"}
+        logging.info("전체 로직 완료")
+        return result_payload
+
     except Exception as e:
-        logging.exception("예상치 못한 오류 발생")
-        return {"status": "error", "message": f"예상치 못한 오류: {str(e)}"}
+        logging.exception("분석 실패: %s", e)
+        return {"status": "error", "message": str(e)}
 
 
-@mcp.tool
+# --- MCP 도구 등록 ---
+@mcp.tool()
 def analyze_cell_performance_with_llm(request: dict) -> dict:
-    """MCP 엔드포인트: 시간 범위 기반 통합 셀 성능 분석 실행"""
+    """두 기간의 셀 성능을 집계/비교하고, LLM으로 통합 분석합니다."""
     return _analyze_cell_performance_logic(request)
 
 

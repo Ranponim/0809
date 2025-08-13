@@ -4,7 +4,7 @@
   "output_dir": "./analysis_output",
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
-  "table": "measurements",
+  "table": "summary",
   "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
 }
 
