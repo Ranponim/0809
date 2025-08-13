@@ -14,7 +14,7 @@ kpi_dashboard/
 │   ├── main.py               # FastAPI 애플리케이션 메인 파일
 │   └── requirements.txt      # Python 종속성 목록
 ├── frontend/                 # React 프론트엔드 애플리케이션
-│   ├── public/               # 정적 파일 (예: index.html)
+│   ├── public/               # 정적 파일 (예: favicon.ico)
 │   ├── src/                  # React 소스 코드
 │   │   ├── App.jsx           # 메인 애플리케이션 컴포넌트
 │   │   ├── main.jsx          # React 앱 엔트리 포인트
@@ -26,19 +26,20 @@ kpi_dashboard/
 │   │   │   ├── Statistics.jsx
 │   │   │   ├── Preference.jsx
 │   │   │   └── AdvancedChart.jsx
-│   │   └── lib/              # 유틸리티 함수
+│   │   ├── lib/              # API 클라이언트 및 유틸
+│   │   │   └── apiClient.js
 │   │   └── hooks/            # React Hooks
 │   ├── package.json          # Node.js/pnpm 종속성 및 스크립트
 │   ├── pnpm-lock.yaml        # pnpm 잠금 파일
 │   └── vite.config.js        # Vite 설정 파일
-├── deployment_summary.md     # 배포 요약 문서
-├── data_structure_summary.md # 백엔드-프론트엔드 데이터 구조 요약 문서
-└── full_documentation.md     # 현재 문서
+└── 백엔드-프론트엔드 데이터 구조 양식.md  # API/데이터 규격 문서
 ```
+
+> 참고: 일부 컴포넌트는 하드코드된 백엔드 주소(`http://localhost:8000`)를 사용합니다. 프로덕션/테스트 환경에서는 프론트엔드 환경변수(`VITE_API_BASE_URL`) 설정을 권장합니다.
 
 ## 3. 백엔드 설정 및 실행 (FastAPI)
 
-백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다.
+백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 PostgreSQL 영구 저장소를 사용합니다.
 
 ### 3.1. 종속성 설치
 
@@ -49,7 +50,31 @@ cd kpi_dashboard/backend
 pip install -r requirements.txt
 ```
 
-### 3.2. 백엔드 서버 실행
+### 3.2. 환경 변수 설정 (.env)
+
+분석 결과 영구 저장을 위해 PostgreSQL 연결 정보를 반드시 설정해야 합니다. `kpi_dashboard/backend/.env` 파일을 생성하고 아래 중 하나를 설정하세요.
+
+```bash
+# 방법 A: 완전한 DSN 작성 (권장)
+ANALYSIS_DB_URL=postgresql+psycopg2://<USER>:<PASSWORD>@<HOST>:5432/<DBNAME>
+
+# 방법 B: 개별 항목 설정
+ANALYSIS_PG_HOST=<HOST>
+ANALYSIS_PG_PORT=5432
+ANALYSIS_PG_USER=<USER>
+ANALYSIS_PG_PASSWORD=<PASSWORD>
+ANALYSIS_PG_DBNAME=<DBNAME>
+```
+
+설정이 없으면 서버가 기동되지 않습니다. 로컬 개발 시 Docker를 활용할 수 있습니다.
+
+```bash
+docker run --name kpi-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p 5432:5432 -d postgres:16
+# 예시 DSN
+ANALYSIS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+```
+
+### 3.3. 백엔드 서버 실행
 
 다음 명령어를 사용하여 백엔드 서버를 실행합니다. 서버는 기본적으로 `http://0.0.0.0:8000`에서 실행됩니다.
 
@@ -89,7 +114,18 @@ pnpm run dev --host
 
 웹 브라우저에서 `http://localhost:5173`에 접속하여 애플리케이션을 확인할 수 있습니다.
 
-### 4.3. 프로덕션 빌드
+### 4.3. 프론트엔드 환경 변수 설정 (.env)
+
+프론트엔드가 백엔드 API 주소를 인지할 수 있도록 다음과 같이 설정합니다.
+
+```bash
+# kpi_dashboard/frontend/.env.local
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+일부 컴포넌트(`Dashboard.jsx`)는 현재 직접 `http://localhost:8000`로 호출합니다. 장기적으로는 공용 `apiClient`(`src/lib/apiClient.js`)를 사용하도록 통합하는 것을 권장합니다.
+
+### 4.4. 프로덕션 빌드
 
 배포를 위해 프로덕션 빌드를 생성하려면 다음 명령어를 사용합니다. 빌드된 파일은 `kpi_dashboard/frontend/dist` 디렉토리에 생성됩니다.
 
@@ -106,7 +142,7 @@ pnpm run build
 
 ### 5.2. 종합 분석 리포트 (Summary Report)
 
-백엔드에서 제공하는 종합 분석 리포트를 표시합니다. 리포트는 마크다운 형식으로 작성되어 있으며, 사용자는 이를 조회하고 필요에 따라 내보낼 수 있습니다.
+백엔드의 최신 분석 결과(`/api/analysis-result/latest`)를 우선 사용하여 요약 리포트를 표시하고, 없을 경우 기존 mock 리포트(`/api/reports/summary`)로 폴백합니다. 리포트는 마크다운 형식으로 렌더링됩니다.
 
 ### 5.3. 통계 (Statistics)
 
@@ -129,7 +165,7 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 ## 6. 데이터 구조 양식
 
-백엔드와 프론트엔드 간의 데이터 통신에 사용되는 주요 JSON 구조는 다음과 같습니다. 자세한 내용은 `data_structure_summary.md` 파일을 참조하십시오.
+백엔드와 프론트엔드 간의 데이터 통신에 사용되는 주요 JSON 구조는 다음과 같습니다. 자세한 내용은 `백엔드-프론트엔드 데이터 구조 양식.md` 파일을 참조하십시오.
 
 -   **KPI 데이터**: `timestamp`, `entity_id`, `kpi_type`, `value`를 포함합니다.
 -   **환경설정 데이터**: `id`, `name`, `description`, `config` (JSON 객체)를 포함합니다.
@@ -138,10 +174,7 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 ## 7. 배포 정보
 
-이 애플리케이션은 Manus 환경에 배포되었으며, 다음 URL을 통해 접근할 수 있습니다.
-
--   **배포된 웹사이트 (프론트엔드)**: https://znkhrnem.manus.space
--   **백엔드 API**: https://8000-iufqfgsnija207p9nwrop-33571795.manus.computer
+배포 환경과 도메인은 인프라 구성에 따라 달라집니다. 프론트엔드의 `VITE_API_BASE_URL`과 백엔드의 데이터베이스 DSN을 환경에 맞게 설정하세요.
 
 ## 8. 향후 개선 사항
 
@@ -153,5 +186,5 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 -   **데이터 내보내기**: 차트 데이터나 리포트를 CSV, Excel, PDF 등 다양한 형식으로 내보내는 기능을 추가할 수 있습니다.
 -   **알림 및 임계값 경고 시스템**: KPI가 특정 임계값을 벗어날 경우 사용자에게 알림을 보내는 시스템을 구축할 수 있습니다.
 
-이 문서는 3GPP KPI 대시보드 웹 애플리케이션을 이해하고 활용하는 데 도움이 되기를 바랍니다.
+이 문서는 3GPP KPI 대시보드 웹 애플리케이션을 이해하고 활용하는 데 도움이 되기를 바랍니다. 백엔드는 INFO 수준 로깅을 사용하며, API 호출/DB 프록시 시도 및 오류가 로그로 남습니다.
 
