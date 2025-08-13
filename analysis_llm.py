@@ -16,8 +16,8 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
   "output_dir": "./analysis_output",
   "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
-  "table": "measurements",
-  "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
+  "table": "summary",
+  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"}
 }
 """
 
@@ -748,8 +748,8 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
       - output_dir: str (기본 ./analysis_output)
       - backend_url: str (선택)
       - db: {host, port, user, password, dbname}
-      - table: str (기본 'measurements')
-      - columns: {time: 'datetime', cell: 'cellid', value: 'value'}
+      - table: str (기본 'summary')
+      - columns: {time: 'datetime', peg_name: 'peg_name', value: 'value'}
     """
     logging.info("=" * 20 + " Cell 성능 분석 로직 실행 시작 " + "=" * 20)
     try:
@@ -763,8 +763,8 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         backend_url = request.get('backend_url')
 
         db = request.get('db', {})
-        table = request.get('table', 'measurements')
-        columns = request.get('columns', {"time": "datetime", "cell": "cellid", "value": "value"})
+        table = request.get('table', 'summary')
+        columns = request.get('columns', {"time": "datetime", "peg_name": "peg_name", "value": "value"})
 
         # 파라미터 요약 로그: 민감정보는 기록하지 않음
         logging.info(
