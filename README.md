@@ -1,15 +1,18 @@
-## Cell 성능 LLM 분석기
+## Cell 성능 LLM 분석기 (MCP 기반)
 
 ### 개요
-두 기간(n-1, n)의 시간 범위를 입력받아 PostgreSQL에서 PEG 단위 평균을 집계하고 LLM으로 비교·종합 분석합니다. 결과는 HTML 리포트로 생성되며, 옵션으로 백엔드(FastAPI 등)로 JSON을 POST 전송합니다.
+`analysis_llm.py`는 두 기간(n-1, n)의 시간 범위를 입력받아 PostgreSQL에서 PEG 단위 평균을 집계하고, 결과를 병합·시각화한 뒤 LLM으로 종합 분석하는 MCP 서버입니다. 분석 결과는 멀티 탭 HTML 리포트로 저장되며, 필요 시 FastAPI 등 백엔드로 JSON을 POST 전송합니다.
 
 ### 주요 기능
-- 시간 범위 입력: `yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm` 또는 단일 날짜 `yyyy-mm-dd` 지원
-- 시간대 처리: 기본 `+09:00`(KST) 적용, 환경변수 `DEFAULT_TZ_OFFSET`로 오버라이드 가능(예: `+00:00`)
-- PostgreSQL 집계: 기간별 `AVG(value)`를 `peg_name`으로 그룹화
-- 비교 분석: PEG 단위로 n-1 대비 n의 변화(diff, pct_change) 해석
-- 동일 시험환경 가정: n-1과 n은 동일 환경에서 수행되었다고 가정
-- 리포트/전송: HTML 생성 및 JSON 결과를 백엔드로 POST
+- **시간 범위 입력**: `yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm` 또는 단일 날짜 `yyyy-mm-dd` 지원
+- **시간대 처리**: 기본 `+09:00`(KST), 환경변수 `DEFAULT_TZ_OFFSET`로 오버라이드 가능(예: `+00:00`)
+- **PostgreSQL 집계**: 기간별 `AVG(value)`를 `peg_name`으로 그룹화
+- **비교/지표 산출**: `diff`, `pct_change` 산출 및 막대 그래프 이미지 생성(Base64)
+- **LLM 분석**: 내부 vLLM 엔드포인트 페일오버 호출 → JSON 요약/핵심 관찰/권장 조치/주요 셀 분석 생성
+- **HTML 리포트**: 요약/상세/차트/테이블 탭 UI, PNG 다운로드, CSV 내보내기
+- **백엔드 전송(옵션)**: 분석 JSON을 지정 URL로 POST
+
+---
 
 ## 설치
 ```bash
@@ -18,105 +21,57 @@ python -m pip install -r requirements.txt
 
 ### 요구 사항
 - Python 3.10+
-- PostgreSQL 접근 권한 (읽기)
-  
-> 컨테이너 환경(권장 실행): Ubuntu 22.04, Python 3.12.4, uv 사전 설치, MCPO(dev deps) 사전 설치
+- PostgreSQL 접근 권한(읽기)
 
-## Docker 환경 (Ubuntu 22.04 + Python 3.12.4)
+### 의존 패키지
+- `pandas`, `matplotlib`, `psycopg2-binary`, `requests`, `fastmcp`
 
-### 이미지 빌드
+---
+
+## 환경 변수
+- `DEFAULT_TZ_OFFSET`: 기본 시간대 오프셋(예: `+09:00`). 잘못되면 UTC로 폴백
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: DB 접속 정보의 폴백 값
+
+LLM 엔드포인트/모델은 코드 내부 `query_llm()`에 하드코딩되어 있습니다. 필요 시 해당 함수의 `endpoints`/`payload["model"]`를 수정하세요.
+
+---
+
+## 실행 방법
+### 1) MCP 서버 실행
 ```bash
-docker build -t mcpo-backend:py312-ubuntu22.04 .
+python analysis_llm.py
 ```
+표준 입출력(stdio) 기반 MCP 서버가 시작됩니다.
 
-### 실행 및 기본 검증
-```bash
-# 컨테이너 진입
-docker run --rm -it mcpo-backend:py312-ubuntu22.04 bash
+### 2) MCP 클라이언트에서 툴 호출
+툴 이름: `analyze_cell_performance_with_llm`
 
-# Python/uv 확인
-python --version        # 3.12.4
-uv --version
-
-# 앱 경로 및 파일 확인
-ls -la /app/backend
-
-# MCPO(dev deps) 설치 확인
-cd /opt/mcpo
-uv run python -c "import sys; print(sys.version)"
-```
-
-### 컨테이너 내 주요 경로
-- 앱 소스: `/app/backend`
-- MCPO 리포지토리: `/opt/mcpo` (빌드 시 `uv sync --dev` 완료)
-
-### 프로젝트 의존성
-- 루트의 `requirements.txt`가 존재하면 빌드 과정에서 자동 설치됩니다.
-
-### (선택) 개발용 볼륨 마운트 실행
-코드 변경을 즉시 반영하려면(재빌드 없이) 현재 디렉토리를 마운트하여 실행하세요.
-
-```powershell
-docker run --rm -it -v ${PWD}:/app/backend mcpo-backend:py312-ubuntu22.04 bash
-```
-
-### Compose 사용
-```bash
-# 빌드 + 실행
-docker compose up -d --build
-
-# 셸 진입
-docker compose exec backend bash
-
-# 종료 및 정리
-docker compose down
-```
-
-### 이미지 이름
-- `mcpo-backend:py312-ubuntu22.04`
-
-### 문제 해결
-- Docker Desktop이 실행 중인지 확인하세요. 미실행 시 PowerShell에서 다음을 실행:
-  - `Start-Process -FilePath "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`
-- Windows에서 이미지 확인: `docker images | findstr mcpo-backend`
-- Compose 경고(`version is obsolete`)는 `docker-compose.yml`에서 `version` 키 제거로 해소했습니다.
-
-
-## 구성
-### 데이터베이스 설정
-- 기본 테이블: `measurements`
-- 기본 컬럼 매핑: `time`→`datetime`, `peg_name`→`peg_name` (또는 `peg` 키로 지정 가능), `value`→`value`
-- 환경변수 폴백: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-
-## 사용 방법 (MCP 툴)
-MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_cell_performance_with_llm`를 호출합니다.
-
-### 요청 JSON 스키마
+요청 예시(JSON):
 ```json
 {
-  "n_minus_1": "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm",
-  "n": "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm",
+  "n_minus_1": "2025-07-01_00:00~2025-07-01_23:59",
+  "n": "2025-07-02_00:00~2025-07-02_23:59",
   "output_dir": "./analysis_output",
-  "backend_url": "http://your-backend/api/analysis-result",
+  "backend_url": "http://localhost:8000/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
-  "table": "measurements",
+  "table": "summary",
   "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"}
 }
 ```
-> 참고: `columns`에 `peg_name` 대신 `peg` 키를 사용할 수도 있습니다.
+- `columns`에서 `peg_name` 대신 `peg` 키를 제공해도 됩니다. 내부에서는 `peg` → `peg_name` 우선순위로 해석합니다.
 
-### 응답 JSON 스키마(요약)
+응답 예시(요약):
 ```json
 {
-  "status": "success | error",
-  "message": "...",
+  "status": "success",
+  "message": "분석 완료. 리포트: ./analysis_output/Cell_Analysis_Report_YYYY-MM-DD_HH-MM.html",
   "report_path": "./analysis_output/Cell_Analysis_Report_YYYY-MM-DD_HH-MM.html",
-  "backend_response": {"...": "..."},
+  "backend_response": null,
   "analysis": {
     "overall_summary": "...",
     "key_findings": ["..."],
     "recommended_actions": ["..."],
-    "cells_with_significant_change": {"CELL_NAME": "..."}
+    "cells_with_significant_change": {"CELL_A": "..."}
   },
   "stats": [
     {"peg_name": "...", "avg_n_minus_1": 0.0, "avg_n": 0.0, "diff": 0.0, "pct_change": 0.0}
@@ -124,13 +79,28 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
 }
 ```
 
-### 예시 요청 파일
-`examples/request.sample.json` 참고.
+예시 요청 파일: `examples/request.sample.json`
 
-## 백엔드 POST 사양
-분석 결과를 `backend_url`로 POST합니다(옵션). 페이로드는 위 응답 JSON의 핵심 필드를 포함합니다.
+---
 
-### 예시 FastAPI 엔드포인트
+## 처리 파이프라인 개요
+1. 시간 범위 파싱: `parse_time_range()` — 단일 날짜 입력 시 00:00~23:59:59로 확장, TZ 적용
+2. DB 연결: `get_db_connection()` — 환경 변수 폴백 사용, 민감정보 로그 미기록
+3. 기간별 집계: `fetch_cell_averages_for_period()` — `AVG(value)` by `peg_name`
+4. 병합/지표/차트: `process_and_visualize()` — `diff`, `pct_change`, 전체 비교 막대그래프(Base64)
+5. LLM 분석: `create_llm_analysis_prompt_overall()` → `query_llm()` — JSON 형식 분석 산출
+6. HTML 출력: `generate_multitab_html_report()` — 요약/상세/차트/테이블 탭 UI, PNG/CSV 다운로드 제공
+7. 백엔드 전송(옵션): `post_results_to_backend()` — 응답 JSON 파싱 시도, 실패 시 텍스트 반환
+
+HTML 리포트 경로: `output_dir/Cell_Analysis_Report_YYYY-MM-DD_HH-MM.html`
+
+---
+
+## 백엔드 POST 사양(옵션)
+- 전송 함수: `post_results_to_backend(url, payload)`
+- 페이로드 주요 필드: `analysis`(LLM 결과), `stats`(표 처리 결과), `chart_overall_base64`(PNG), `report_path` 등
+
+FastAPI 예시:
 ```python
 from fastapi import FastAPI, Request
 
@@ -139,104 +109,38 @@ app = FastAPI()
 @app.post("/api/analysis-result")
 async def receive(req: Request):
     data = await req.json()
-    # TODO: 저장/알림/대시보드 반영 등
     return {"ok": True, "keys": list(data.keys())}
 ```
 
-## HTML 리포트
-- 섹션: 종합 요약, 핵심 관찰, 권장 조치, 셀 상세(가능 시), 전체 비교 차트(N-1 vs N)
-- 출력 경로: `output_dir/Cell_Analysis_Report_YYYY-MM-DD_HH-MM.html`
+---
 
-## 로깅/오류 처리
-- 함수별 INFO/ERROR 로그 출력
-- DB/LLM/백엔드 실패 시 예외를 캐치하고 의미 있는 메시지로 반환
-- 민감정보(패스워드)는 로그에 남기지 않음
+## 로깅/오류 처리 정책
+- 모든 주요 함수 진입/성공/실패를 `logging`으로 기록합니다.
+- 네트워크/DB/LLM 오류는 세부 원인과 함께 로깅하며, 사용자 응답에는 안전한 메시지를 반환합니다.
+- 비밀번호 등 민감정보는 로그에 남기지 않습니다.
+- 예외 유형별로 `error` 응답을 구분하여 반환합니다.
 
-## PRD
-- 자세한 요구사항은 `./.taskmaster/docs/prd.txt` 참고
-
-
-## PEG 평균 비교 스크립트 (신규)
-
-PRD 변경에 따라 `peg_name`별로 두 날짜(n-1, n)의 `value` 평균을 비교하는 단일 실행 스크립트를 추가했습니다.
-
-- 입력: `YYYY-MM-DD YYYY-MM-DD` (순서대로 n-1, n)
-- 설정: `output_dir / backend_url / db / table / columns`는 코드에 하드코딩됨
-- DB 스키마(열): `id / host / ne / version / family_name / cellid / peg_name / datetime / value`
-- 결과: peg_name별 평균 비교 CSV 및 간단 HTML 리포트 생성
-
-### 실행 방법
-```bash
-python peg_name_avg_compare.py 2025-08-12 2025-08-13
-```
-
-### 출력
-- CSV: `analysis_output/comparison_YYYY-MM-DD_YYYY-MM-DD.csv`
-- HTML: `analysis_output/peg_avg_report_YYYY-MM-DD_YYYY-MM-DD.html`
-
-> 변화 지표: `diff = avg_n - avg_n_minus_1`, `pct_change = diff / avg_n_minus_1 * 100` (분모 0/결측은 NaN 처리)
-
-
-## 중요 변경점 (2025-08-13)
-
-- 사용 방식 단순화: 설정값은 코드에 하드코딩하고, 입력은 오직 두 날짜(`n-1`, `n`)만 받습니다.
-- 신규 스크립트 추가: `peg_name_avg_compare.py`
-  - `peg_name`별 `value`의 일자 평균을 계산하여 n-1과 n을 비교(diff, pct_change)합니다.
-  - 결과는 CSV/HTML로 저장됩니다.
-- 기존 MCP 기반 통합 분석(`analysis_llm.py`)은 레거시로 유지되며, 이번 변경 사항의 기본 플로우는 `peg_name_avg_compare.py`를 사용합니다.
-
-### 요청 스키마(입력)
-- CLI 인자(2개, 순서 고정):
-  1) `n-1` 날짜: `YYYY-MM-DD`
-  2) `n` 날짜: `YYYY-MM-DD`
-
-예)
-```bash
-python peg_name_avg_compare.py 2025-08-12 2025-08-13
-```
-
-### 하드코딩 설정(코드 내 고정)
-- `output_dir`: 결과 파일 저장 경로 (기본 `./analysis_output`)
-- `backend_url`: 현재 버전 미사용(향후 확장용)
-- `db`: DB 접속 정보 `{host, port, user, password, dbname}`
-- `table`: 조회 테이블명 (기본 `measurements`)
-- `columns`: 
-  - 스키마: `id / host / ne / version / family_name / cellid / peg_name / datetime / value`
-
-### 데이터베이스 스키마(열/타입)
-- `id`: integer
-- `host`: character varying
-- `ne`: character varying
-- `version`: character varying
-- `family_name`: character varying
-- `cellid`: character varying
-- `peg_name`: character varying
-- `datetime`: timestamp without time zone
-- `value`: double precision
-
-### 처리/출력 스키마
-- 처리 로직: 
-  - 각 날짜에 대해 `DATE(datetime) = <날짜>` 조건으로 필터링
-  - `peg_name` 그룹으로 `AVG(value)` 계산
-  - 조인 후 지표 산출: 
-    - `avg_n_minus_1`, `avg_n`, `diff = avg_n - avg_n_minus_1`,
-    - `pct_change = (diff / avg_n_minus_1) * 100` (분모 0/결측은 NaN)
-- CSV 컬럼: `peg_name, avg_n_minus_1, avg_n, diff, pct_change`
-- HTML 리포트: 요약, 절대 diff 상위 N, 절대 pct_change 상위 N, 임계값 초과 항목 테이블
-
-### 결과 파일
-- CSV: `analysis_output/comparison_YYYY-MM-DD_YYYY-MM-DD.csv`
-- HTML: `analysis_output/peg_avg_report_YYYY-MM-DD_YYYY-MM-DD.html`
-
-### 로깅/오류 처리
-- 함수별 INFO/ERROR 로그를 상세 출력(형식: `YYYY-MM-DD HH:MM:SS - LEVEL - [function] message`)
-- 날짜 형식 오류, DB 연결/쿼리 실패, 데이터 없음, 분모 0 처리 등 상황별 메시지 기록
-
-### 레거시/호환성 안내
-- 이전 문서/예시(`examples/request.sample.json`, MCP `analyze_cell_performance_with_llm`)는 **레거시** 흐름입니다.
-  - 레거시 경로는 시간 범위(`yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm`)와 외부 설정을 입력으로 받는 통합 분석용입니다.
-  - 이번 변경(PRD)으로 기본 사용 경로는 단순화된 `peg_name_avg_compare.py` 입니다.
+로그 형식: `YYYY-MM-DD HH:MM:SS - LEVEL - message`
 
 ---
+
+## 스키마/설정 참고
+- 기본 테이블: `summary` (요청에서 `table`로 변경 가능)
+- 기본 컬럼 매핑: `time`→`datetime`, `peg_name`→`peg_name`(또는 `peg`), `value`→`value`
+- 원본 스키마 예시: `id, datetime, value, version, family_name, cellid, peg_name, host, ne`
+
+---
+
+## LLM 엔드포인트/모델 변경
+`analysis_llm.py`의 `query_llm()`에서 다음을 수정하세요.
+- `endpoints`: vLLM 서버 리스트
+- `payload["model"]`: 사용 모델 ID (기본: `Gemma-3-27B`)
+
+엔드포인트 다중 지정으로 자동 페일오버가 동작합니다. 응답 본문에서 JSON 영역만 추출하여 사용합니다.
+
+---
+
+## 라이선스/고지
+본 프로젝트는 내부 네트워크 성능 분석 자동화를 위한 예시 구현입니다. 데이터/LLM 응답의 정확도는 입력 데이터 품질과 운영 환경에 따라 달라질 수 있습니다.
 
 
