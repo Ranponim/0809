@@ -1,12 +1,13 @@
 ## Cell 성능 LLM 분석기
 
 ### 개요
-두 기간(n-1, n)의 시간 범위를 입력받아 PostgreSQL에서 셀 단위 평균을 집계하고, 전체 PEG 데이터를 통합하여 LLM으로 종합 분석합니다. 결과는 HTML 리포트로 생성되며, 옵션으로 백엔드(FastAPI 등)로 JSON을 POST 전송합니다.
+두 기간(n-1, n)의 시간 범위를 입력받아 PostgreSQL에서 PEG 단위 평균을 집계하고 LLM으로 비교·종합 분석합니다. 결과는 HTML 리포트로 생성되며, 옵션으로 백엔드(FastAPI 등)로 JSON을 POST 전송합니다.
 
 ### 주요 기능
-- 시간 범위 입력: `yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm`
-- PostgreSQL 집계: 기간별 `AVG(value)`를 `cell_name`으로 그룹화
-- 통합 분석: PEG별이 아닌 전체 PEG 데이터를 통합한 셀 기준 종합 분석
+- 시간 범위 입력: `yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm` 또는 단일 날짜 `yyyy-mm-dd` 지원
+- 시간대 처리: 기본 `+09:00`(KST) 적용, 환경변수 `DEFAULT_TZ_OFFSET`로 오버라이드 가능(예: `+00:00`)
+- PostgreSQL 집계: 기간별 `AVG(value)`를 `peg_name`으로 그룹화
+- 비교 분석: PEG 단위로 n-1 대비 n의 변화(diff, pct_change) 해석
 - 동일 시험환경 가정: n-1과 n은 동일 환경에서 수행되었다고 가정
 - 리포트/전송: HTML 생성 및 JSON 결과를 백엔드로 POST
 
@@ -84,7 +85,7 @@ docker compose down
 ## 구성
 ### 데이터베이스 설정
 - 기본 테이블: `measurements`
-- 기본 컬럼 매핑: `time`→`datetime`, `cell`→`cellid`, `value`→`value`
+- 기본 컬럼 매핑: `time`→`datetime`, `peg_name`→`peg_name` (또는 `peg` 키로 지정 가능), `value`→`value`
 - 환경변수 폴백: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 
 ## 사용 방법 (MCP 툴)
@@ -99,9 +100,10 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
   "backend_url": "http://your-backend/api/analysis-result",
   "db": {"host": "127.0.0.1", "port": 5432, "user": "postgres", "password": "pass", "dbname": "netperf"},
   "table": "measurements",
-  "columns": {"time": "datetime", "cell": "cellid", "value": "value"}
+  "columns": {"time": "datetime", "peg_name": "peg_name", "value": "value"}
 }
 ```
+> 참고: `columns`에 `peg_name` 대신 `peg` 키를 사용할 수도 있습니다.
 
 ### 응답 JSON 스키마(요약)
 ```json
@@ -117,7 +119,7 @@ MCP 서버로 실행되며, MCP 클라이언트(예: Cursor)에서 툴 `analyze_
     "cells_with_significant_change": {"CELL_NAME": "..."}
   },
   "stats": [
-    {"cell_name": "...", "N-1": 0.0, "N": 0.0, "rate(%)": 0.0}
+    {"peg_name": "...", "avg_n_minus_1": 0.0, "avg_n": 0.0, "diff": 0.0, "pct_change": 0.0}
   ]
 }
 ```
