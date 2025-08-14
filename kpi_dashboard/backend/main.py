@@ -6,15 +6,13 @@ import json
 import random
 from datetime import datetime, timedelta
 import os
-import psycopg2
-import psycopg2.extras
 from fastapi import Body
 from dotenv import load_dotenv
 import logging
 import time
 import math
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
+from pymongo import MongoClient, DESCENDING
+from bson import ObjectId
 
 app = FastAPI(title="3GPP KPI Management API", version="1.0.0")
 
@@ -68,52 +66,23 @@ class AnalysisResult(BaseModel):
 analysis_results: List[AnalysisResult] = []
 analysis_counter: int = 1
 
-# 영구 저장소 (SQLite via SQLAlchemy)
-def _build_analysis_db_url() -> str:
-    """PostgreSQL 우선 영구 저장 DSN 구성.
-    - ANALYSIS_DB_URL 이 지정되면 그대로 사용 (예: postgresql+psycopg2://user:pass@host:5432/db)
-    - 아니면 ANALYSIS_PG_* 환경변수로 DSN 생성
-    - 미설정 시 명시적으로 오류 발생 (요구사항: PostgreSQL 영구 저장)
-    """
-    dsn = os.getenv("ANALYSIS_DB_URL")
-    if dsn:
-        return dsn
-    host = os.getenv("ANALYSIS_PG_HOST")
-    if host:
-        port = os.getenv("ANALYSIS_PG_PORT", "5432")
-        user = os.getenv("ANALYSIS_PG_USER", "postgres")
-        password = os.getenv("ANALYSIS_PG_PASSWORD", "")
-        dbname = os.getenv("ANALYSIS_PG_DBNAME", "postgres")
-        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
-    raise RuntimeError("Set ANALYSIS_DB_URL or ANALYSIS_PG_* envs for PostgreSQL persistence")
-
-ANALYSIS_DB_URL = _build_analysis_db_url()
-engine = create_engine(ANALYSIS_DB_URL, future=True, pool_pre_ping=True)
-Base = declarative_base()
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-
-class AnalysisResultRecord(Base):
-    __tablename__ = "analysis_results"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    status = Column(String(32), nullable=False)
-    n_minus_1 = Column(String(64))
-    n = Column(String(64))
-    analysis_json = Column(Text)  # JSON 문자열
-    stats_json = Column(Text)     # JSON 문자열
-    chart_overall_base64 = Column(Text)
-    report_path = Column(Text)
-    created_at = Column(DateTime, nullable=False)
-
-# Preferences 영구 저장 모델
-class PreferenceRecord(Base):
-    __tablename__ = "preferences"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    config_json = Column(Text)  # JSON 문자열
-    created_at = Column(DateTime, nullable=False)
-
-Base.metadata.create_all(bind=engine)
+"""MongoDB 연결 (NoSQL 저장소)
+- 환경변수:
+  - MONGO_URL (예: mongodb://mongo:27017)
+  - MONGO_DB_NAME (기본: kpi)
+"""
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "kpi")
+mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
+db = mongo_client[MONGO_DB_NAME]
+analysis_col = db["analysis_results"]
+prefs_col = db["preferences"]
+# 인덱스 권장
+try:
+    analysis_col.create_index([("created_at", DESCENDING)])
+    prefs_col.create_index([("created_at", DESCENDING)])
+except Exception as e:
+    logging.warning("Mongo 인덱스 생성 경고: %s", e)
 
 def _sanitize_for_json(value: Any) -> Any:
     """JSON 직렬화 호환을 위해 NaN/Infinity 값을 None으로 정규화한다.
@@ -132,29 +101,28 @@ def _sanitize_for_json(value: Any) -> Any:
         # 예외 시 원본을 안전하게 반환 (로깅은 호출부에서 수행)
         return value
 
-def _record_to_model(rec: AnalysisResultRecord) -> AnalysisResult:
-    # 저장된 JSON 문자열에 비표준 NaN 토큰이 포함되어 있어도 Python json.loads 는 파싱하나,
-    # 응답 직렬화 시 allow_nan=False 정책으로 인해 오류가 발생할 수 있으므로 정규화한다.
+def _doc_to_analysis_model(doc: Dict[str, Any]) -> AnalysisResult:
     try:
-        raw_analysis = json.loads(rec.analysis_json or "{}")
-        raw_stats = json.loads(rec.stats_json or "[]")
-    except Exception as e:
-        logging.warning("레코드 JSON 로드 실패(id=%s): %s", rec.id, e)
+        raw_analysis = doc.get("analysis") or {}
+        raw_stats = doc.get("stats") or []
+    except Exception:
         raw_analysis, raw_stats = {}, []
 
     safe_analysis = _sanitize_for_json(raw_analysis)
     safe_stats = _sanitize_for_json(raw_stats)
 
+    created = doc.get("created_at")
+    created_iso = created.isoformat() if hasattr(created, "isoformat") else str(created)
     return AnalysisResult(
-        id=rec.id,
-        status=rec.status,
-        n_minus_1=rec.n_minus_1,
-        n=rec.n,
+        id=int(doc.get("_numeric_id", 0)) if isinstance(doc.get("_numeric_id"), int) else 0,
+        status=str(doc.get("status", "success")),
+        n_minus_1=doc.get("n_minus_1"),
+        n=doc.get("n"),
         analysis=safe_analysis,
         stats=safe_stats,
-        chart_overall_base64=rec.chart_overall_base64,
-        report_path=rec.report_path,
-        created_at=rec.created_at.isoformat(),
+        chart_overall_base64=doc.get("chart_overall_base64"),
+        report_path=doc.get("report_path"),
+        created_at=created_iso,
     )
 
 # 가상 데이터 생성 함수
@@ -261,36 +229,33 @@ async def root():
 @app.post("/api/analysis-result")
 async def post_analysis_result(payload: dict):
     try:
-        # 필수 키 점검 및 생성 시간 부여
         created_dt = datetime.utcnow()
         logging.info("POST /api/analysis-result 호출: created_at=%s", created_dt.isoformat())
-        with SessionLocal() as s:
-            # NaN/Infinity 값 방지: DB 저장 전 정규화 후 직렬화
-            analysis_obj = _sanitize_for_json(payload.get("analysis") or {})
-            stats_obj = _sanitize_for_json(payload.get("stats") or [])
-            try:
-                analysis_json = json.dumps(analysis_obj, ensure_ascii=False, allow_nan=False)
-                stats_json = json.dumps(stats_obj, ensure_ascii=False, allow_nan=False)
-            except ValueError as ve:
-                # 여전히 직렬화 실패 시 상세 로그 및 400 반환
-                logging.error("분석결과 직렬화 실패(NaN 포함 가능): %s", ve)
-                raise HTTPException(status_code=400, detail=f"Invalid numeric values in analysis/stats: {ve}")
+        analysis_obj = _sanitize_for_json(payload.get("analysis") or {})
+        stats_obj = _sanitize_for_json(payload.get("stats") or [])
+        # allow_nan=False 정책 유지: 직렬화 가능 여부 사전 확인
+        try:
+            json.dumps(analysis_obj, ensure_ascii=False, allow_nan=False)
+            json.dumps(stats_obj, ensure_ascii=False, allow_nan=False)
+        except ValueError as ve:
+            logging.error("분석결과 직렬화 실패(NaN 포함 가능): %s", ve)
+            raise HTTPException(status_code=400, detail=f"Invalid numeric values in analysis/stats: {ve}")
 
-            rec = AnalysisResultRecord(
-                status=str(payload.get("status", "success")),
-                n_minus_1=payload.get("n_minus_1"),
-                n=payload.get("n"),
-                analysis_json=analysis_json,
-                stats_json=stats_json,
-                chart_overall_base64=payload.get("chart_overall_base64"),
-                report_path=payload.get("report_path"),
-                created_at=created_dt,
-            )
-            s.add(rec)
-            s.commit()
-            s.refresh(rec)
-            logging.info("분석결과 저장 성공: id=%s", rec.id)
-            return {"id": rec.id, "created_at": created_dt.isoformat()}
+        doc = {
+            "status": str(payload.get("status", "success")),
+            "n_minus_1": payload.get("n_minus_1"),
+            "n": payload.get("n"),
+            "analysis": analysis_obj,
+            "stats": stats_obj,
+            "chart_overall_base64": payload.get("chart_overall_base64"),
+            "report_path": payload.get("report_path"),
+            "created_at": created_dt,
+        }
+        result = analysis_col.insert_one(doc)
+        logging.info("분석결과 저장 성공: _id=%s", result.inserted_id)
+        return {"id": str(result.inserted_id), "created_at": created_dt.isoformat()}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.exception("분석결과 저장 실패")
         raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
@@ -298,27 +263,28 @@ async def post_analysis_result(payload: dict):
 @app.get("/api/analysis-result/latest")
 async def get_latest_analysis_result():
     logging.info("GET /api/analysis-result/latest 호출")
-    with SessionLocal() as s:
-        rec = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="No analysis results")
-        return _record_to_model(rec)
+    doc = analysis_col.find_one(sort=[("created_at", DESCENDING)])
+    if not doc:
+        raise HTTPException(status_code=404, detail="No analysis results")
+    return _doc_to_analysis_model(doc)
 
 @app.get("/api/analysis-result/{result_id}")
-async def get_analysis_result(result_id: int):
+async def get_analysis_result(result_id: str):
     logging.info("GET /api/analysis-result/%s 호출", result_id)
-    with SessionLocal() as s:
-        rec = s.query(AnalysisResultRecord).filter(AnalysisResultRecord.id == result_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Result not found")
-        return _record_to_model(rec)
+    try:
+        oid = ObjectId(result_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    doc = analysis_col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return _doc_to_analysis_model(doc)
 
 @app.get("/api/analysis-result")
 async def list_analysis_results():
     logging.info("GET /api/analysis-result 호출 (list)")
-    with SessionLocal() as s:
-        recs = s.query(AnalysisResultRecord).order_by(AnalysisResultRecord.id.desc()).all()
-        return {"results": [_record_to_model(r) for r in recs]}
+    docs = list(analysis_col.find().sort("created_at", DESCENDING))
+    return {"results": [_doc_to_analysis_model(d) for d in docs]}
 
 @app.post("/api/kpi/query")
 async def kpi_query(payload: dict = Body(...)):
@@ -342,22 +308,6 @@ async def kpi_query(payload: dict = Body(...)):
         entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
         if not start_date or not end_date or not kpi_type:
             raise ValueError("start_date, end_date, kpi_type는 필수입니다")
-
-        # 실제 DB 프록시 시도
-        db = payload.get("db") or {}
-        table = payload.get("table") or "summary"
-        columns = payload.get("columns") or {"time": "datetime", "peg_name": "peg_name", "value": "value", "ne": "ne", "cellid": "cellid"}
-        time_col = columns.get("time", "datetime")
-        peg_col = columns.get("peg_name", "peg_name")
-        value_col = columns.get("value", "value")
-        ne_col = columns.get("ne", "ne")
-        cell_col = columns.get("cell") or columns.get("cellid", "cellid")
-
-        # 식별자 검증 (SQL Injection 방지): 영문/숫자/_ 만 허용
-        def _valid_ident(name: str) -> bool:
-            return bool(name) and name.replace('_','a').replace('0','0').replace('1','1').isalnum() and all(c.isalnum() or c=='_' for c in name)
-        if not all(map(_valid_ident, [table, time_col, peg_col, value_col, ne_col, cell_col])):
-            raise ValueError("Invalid identifiers in table/columns")
 
         # 날짜 문자열(YYYY-MM-DD) → 하루 범위
         try:
@@ -385,73 +335,10 @@ async def kpi_query(payload: dict = Body(...)):
         logging.info("/api/kpi/query 매개변수: kpi_type=%s, ids=%d, ne=%d, cellid=%d, 기간=%s~%s",
                      kpi_type, len(ids), len(ne_filters), len(cellid_filters), start_date, end_date)
 
-        # SQL: 시간(hour) 버킷으로 평균값 집계. entity_id는 peg_name으로 대응
-        sql = (
-            f"SELECT date_trunc('hour', {time_col}) AS ts, {peg_col} AS entity_id, AVG({value_col}) AS avg_value "
-            f"FROM {table} "
-            f"WHERE {time_col} BETWEEN %s AND %s "
-        )
-        params = [start_dt, end_dt]
-        # entity_ids는 레거시. KPI 매핑이 제공되면 entity_ids 대신 우선 적용
-        if kpi_peg_names:
-            sql += f" AND {peg_col} = ANY(%s) "
-            params.append(kpi_peg_names)
-        elif ids:
-            sql += f" AND {peg_col} = ANY(%s) "
-            params.append(ids)
-        if kpi_peg_like:
-            like_clauses = " OR ".join([f"{peg_col} ILIKE %s" for _ in kpi_peg_like])
-            sql += f" AND ({like_clauses}) "
-            # 패턴에 %가 없으면 포함 검색으로 자동 래핑
-            for p in kpi_peg_like:
-                params.append(p if ('%' in p or '_' in p) else f"%{p}%")
-        if ne_filters:
-            sql += f" AND {ne_col} = ANY(%s) "
-            params.append(ne_filters)
-        if cellid_filters:
-            sql += f" AND {cell_col} = ANY(%s) "
-            params.append(cellid_filters)
-        sql += f" GROUP BY ts, {peg_col} ORDER BY ts ASC"
-
-        # 간단 재시도(최대 3회)
-        attempt = 0
-        last_err = None
-        rows = []
-        while attempt < 3:
-            try:
-                attempt += 1
-                logging.info("DB 프록시 시도 %d/3: host=%s db=%s table=%s", attempt, db.get('host'), db.get('dbname'), table)
-                conn = psycopg2.connect(
-                    host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
-                    password=db.get("password"), dbname=db.get("dbname")
-                )
-                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                    cur.execute(sql, tuple(params))
-                    rows = cur.fetchall()
-                conn.close()
-                break
-            except Exception as e:
-                last_err = e
-                logging.warning("DB 프록시 실패(%d): %s", attempt, e)
-                time.sleep(0.5 * attempt)
-            finally:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-        if last_err and not rows:
-            raise last_err
-
-        data = []
-        for r in rows:
-            data.append({
-                "timestamp": r["ts"].isoformat(),
-                "entity_id": r["entity_id"],
-                "kpi_type": kpi_type,
-                "value": float(r["avg_value"]),
-            })
-        logging.info("/api/kpi/query 성공: rows=%d (proxy-db)", len(data))
-        return {"data": data, "source": "proxy-db"}
+        # NoSQL 전환에 따라 외부 SQL 프록시는 비활성화하고 mock 데이터 제공
+        data = generate_mock_kpi_data(start_date, end_date, kpi_type, ids)
+        logging.info("/api/kpi/query mock 응답: rows=%d", len(data))
+        return {"data": data, "source": "proxy-mock"}
     except Exception:
         # 실패 시 mock 으로 폴백하여 프론트 사용성 보장
         start_date = payload.get("start_date")
@@ -545,110 +432,122 @@ async def get_summary_reports(report_id: Optional[int] = None):
 @app.get("/api/preferences")
 async def get_preferences():
     logging.info("GET /api/preferences 호출(DB)")
-    with SessionLocal() as s:
-        recs = s.query(PreferenceRecord).order_by(PreferenceRecord.id.asc()).all()
-        items = [_pref_record_to_model(r) for r in recs]
-        logging.info("/api/preferences 응답 count=%d", len(items))
-        return {"preferences": items}
+    docs = list(prefs_col.find().sort("created_at", DESCENDING))
+    items = []
+    for d in docs:
+        items.append(PreferenceModel(
+            id=str(d.get("_id")),
+            name=d.get("name", ""),
+            description=d.get("description"),
+            config=(d.get("config") or {}),
+        ))
+    logging.info("/api/preferences 응답 count=%d", len(items))
+    return {"preferences": items}
 
 @app.get("/api/preferences/{preference_id}")
-async def get_preference(preference_id: int):
+async def get_preference(preference_id: str):
     logging.info("GET /api/preferences/%s 호출(DB)", preference_id)
-    with SessionLocal() as s:
-        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Preference not found")
-        return _pref_record_to_model(rec)
+    try:
+        oid = ObjectId(preference_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    d = prefs_col.find_one({"_id": oid})
+    if not d:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    return _pref_record_to_model(type("_R", (), {
+        "id": preference_id,
+        "name": d.get("name", ""),
+        "description": d.get("description"),
+        "config_json": json.dumps(d.get("config") or {}, ensure_ascii=False),
+    }))
 
 @app.post("/api/preferences")
 async def create_preference(preference: PreferenceModel):
     logging.info("POST /api/preferences 호출(DB): name=%s", preference.name)
     created_dt = datetime.utcnow()
     try:
-        cfg_json = json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
+        json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
     except ValueError as ve:
         logging.error("Preference 직렬화 실패: %s", ve)
         raise HTTPException(status_code=400, detail=f"Invalid config: {ve}")
-    with SessionLocal() as s:
-        rec = PreferenceRecord(
-            name=preference.name,
-            description=preference.description,
-            config_json=cfg_json,
-            created_at=created_dt,
-        )
-        s.add(rec)
-        s.commit()
-        s.refresh(rec)
-        logging.info("Preference 저장 성공: id=%s", rec.id)
-        return {"id": rec.id, "message": "Preference created successfully"}
+    d = {
+        "name": preference.name,
+        "description": preference.description,
+        "config": preference.config or {},
+        "created_at": created_dt,
+    }
+    res = prefs_col.insert_one(d)
+    logging.info("Preference 저장 성공: id=%s", res.inserted_id)
+    return {"id": str(res.inserted_id), "message": "Preference created successfully"}
 
 @app.put("/api/preferences/{preference_id}")
-async def update_preference(preference_id: int, preference: PreferenceModel):
+async def update_preference(preference_id: str, preference: PreferenceModel):
     logging.info("PUT /api/preferences/%s 호출(DB)", preference_id)
     try:
-        cfg_json = json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
+        json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
     except ValueError as ve:
         logging.error("Preference 직렬화 실패: %s", ve)
         raise HTTPException(status_code=400, detail=f"Invalid config: {ve}")
-    with SessionLocal() as s:
-        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Preference not found")
-        rec.name = preference.name
-        rec.description = preference.description
-        rec.config_json = cfg_json
-        s.add(rec)
-        s.commit()
+    try:
+        oid = ObjectId(preference_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    result = prefs_col.update_one({"_id": oid}, {"$set": {
+        "name": preference.name,
+        "description": preference.description,
+        "config": preference.config or {},
+    }})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Preference not found")
     return {"message": "Preference updated successfully"}
 
 @app.delete("/api/preferences/{preference_id}")
-async def delete_preference(preference_id: int):
+async def delete_preference(preference_id: str):
     logging.info("DELETE /api/preferences/%s 호출(DB)", preference_id)
-    with SessionLocal() as s:
-        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Preference not found")
-        s.delete(rec)
-        s.commit()
+    try:
+        oid = ObjectId(preference_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    result = prefs_col.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Preference not found")
     return {"message": "Preference deleted successfully"}
 
 @app.get("/api/preferences/{preference_id}/derived-pegs")
-async def get_preference_derived_pegs(preference_id: int):
+async def get_preference_derived_pegs(preference_id: str):
     logging.info("GET /api/preferences/%s/derived-pegs 호출(DB)", preference_id)
-    with SessionLocal() as s:
-        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Preference not found")
-        try:
-            cfg = json.loads(rec.config_json or "{}")
-        except Exception:
-            cfg = {}
-        derived = (cfg or {}).get("derived_pegs") or {}
-        return {"derived_pegs": derived}
+    try:
+        oid = ObjectId(preference_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    d = prefs_col.find_one({"_id": oid})
+    if not d:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    cfg = d.get("config") or {}
+    derived = (cfg or {}).get("derived_pegs") or {}
+    return {"derived_pegs": derived}
 
 @app.put("/api/preferences/{preference_id}/derived-pegs")
-async def update_preference_derived_pegs(preference_id: int, payload: dict = Body(...)):
+async def update_preference_derived_pegs(preference_id: str, payload: dict = Body(...)):
     logging.info("PUT /api/preferences/%s/derived-pegs 호출(DB)", preference_id)
     if not isinstance(payload.get("derived_pegs"), dict):
         raise HTTPException(status_code=400, detail="derived_pegs must be an object {name: expr}")
-    with SessionLocal() as s:
-        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
-        if not rec:
-            raise HTTPException(status_code=404, detail="Preference not found")
-        try:
-            cfg = json.loads(rec.config_json or "{}")
-        except Exception:
-            cfg = {}
-        cfg = cfg or {}
-        cfg["derived_pegs"] = payload["derived_pegs"]
-        try:
-            rec.config_json = json.dumps(cfg, ensure_ascii=False, allow_nan=False)
-        except ValueError as ve:
-            logging.error("Preference 직렬화 실패: %s", ve)
-            raise HTTPException(status_code=400, detail=f"Invalid derived_pegs: {ve}")
-        s.add(rec)
-        s.commit()
-        return {"message": "Derived PEGs updated", "derived_pegs": cfg["derived_pegs"]}
+    try:
+        oid = ObjectId(preference_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
+    d = prefs_col.find_one({"_id": oid})
+    if not d:
+        raise HTTPException(status_code=404, detail="Preference not found")
+    cfg = d.get("config") or {}
+    cfg["derived_pegs"] = payload["derived_pegs"]
+    try:
+        json.dumps(cfg, ensure_ascii=False, allow_nan=False)
+    except ValueError as ve:
+        logging.error("Preference 직렬화 실패: %s", ve)
+        raise HTTPException(status_code=400, detail=f"Invalid derived_pegs: {ve}")
+    prefs_col.update_one({"_id": oid}, {"$set": {"config": cfg}})
+    return {"message": "Derived PEGs updated", "derived_pegs": cfg["derived_pegs"]}
 
 @app.get("/api/master/pegs")
 async def get_pegs():
@@ -672,34 +571,18 @@ async def get_cells():
 
 @app.post("/api/db/ping")
 async def db_ping(payload: dict = Body(...)):
-    """프런트엔드에서 제공한 DB 설정으로 연결이 가능한지 즉시 확인한다.
-    - 입력: {"db": {host, port, user, password, dbname}}
+    """MongoDB 연결 확인.
+    - 입력: {"mongo_url": "mongodb://..."} (옵션)
     - 성공: {"ok": true}
-    - 실패: 400 + detail 메시지
     """
-    logging.info("POST /api/db/ping 호출")
-    db = payload.get("db") or {}
+    logging.info("POST /api/db/ping 호출 (Mongo)")
+    mongo_url = (payload or {}).get("mongo_url") or MONGO_URL
     try:
-        conn = psycopg2.connect(
-            host=db.get("host"),
-            port=db.get("port", 5432),
-            user=db.get("user"),
-            password=db.get("password"),
-            dbname=db.get("dbname"),
-        )
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-                cur.fetchone()
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        logging.info("DB ping 성공: host=%s db=%s", db.get("host"), db.get("dbname"))
+        test_client = MongoClient(mongo_url, serverSelectionTimeoutMS=3000)
+        test_client.admin.command("ping")
         return {"ok": True}
     except Exception as e:
-        logging.warning("DB ping 실패: %s", e)
+        logging.warning("Mongo ping 실패: %s", e)
         raise HTTPException(status_code=400, detail=f"DB connection failed: {e}")
 
 def _valid_ident(name: str) -> bool:
@@ -707,117 +590,13 @@ def _valid_ident(name: str) -> bool:
 
 @app.post("/api/master/ne-list")
 async def list_ne(payload: dict = Body(...)):
-    """지정된 테이블에서 NE 컬럼의 distinct 목록을 조회한다.
-    입력: { db, table, columns: {ne, time?}, q?, start_date?, end_date?, limit? }
-    반환: { items: ["nvgnb#10000", ...] }
-    """
-    db = payload.get("db") or {}
-    table = payload.get("table") or "summary"
-    columns = payload.get("columns") or {"ne": "ne", "time": "datetime"}
-    ne_col = columns.get("ne", "ne")
-    time_col = columns.get("time")
-    q = payload.get("q")
-    start_date = payload.get("start_date")
-    end_date = payload.get("end_date")
-    limit = int(payload.get("limit") or 50)
-    if limit <= 0 or limit > 1000:
-        limit = 50
-
-    if not _valid_ident(table) or not _valid_ident(ne_col) or (time_col and not _valid_ident(time_col)):
-        raise HTTPException(status_code=400, detail="Invalid identifiers in table/columns")
-
-    params = []
-    where = "WHERE TRUE"
-    if start_date and end_date and time_col:
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
-            where += f" AND {time_col} BETWEEN %s AND %s"
-            params.extend([start_dt, end_dt])
-        except Exception:
-            pass
-    if q:
-        where += f" AND {ne_col} ILIKE %s"
-        params.append(f"%{q}%")
-
-    sql = f"SELECT DISTINCT {ne_col} AS ne FROM {table} {where} ORDER BY {ne_col} ASC LIMIT %s"
-    params.append(limit)
-    try:
-        conn = psycopg2.connect(
-            host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
-            password=db.get("password"), dbname=db.get("dbname")
-        )
-        try:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(sql, tuple(params))
-                rows = cur.fetchall()
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        items = [r["ne"] for r in rows if r and r["ne"]]
-        return {"items": items}
-    except Exception as e:
-        logging.warning("NE distinct 조회 실패: %s", e)
-        raise HTTPException(status_code=400, detail=f"failed: {e}")
+    """NoSQL 모드: 외부 DB 조회 비활성화. 빈 목록 반환."""
+    return {"items": []}
 
 @app.post("/api/master/cellid-list")
 async def list_cellid(payload: dict = Body(...)):
-    """지정된 테이블에서 cellid 컬럼의 distinct 목록을 조회한다.
-    입력: { db, table, columns: {cellid, time?}, q?, start_date?, end_date?, limit? }
-    반환: { items: ["2010", ...] }
-    """
-    db = payload.get("db") or {}
-    table = payload.get("table") or "summary"
-    columns = payload.get("columns") or {"cellid": "cellid", "time": "datetime"}
-    cell_col = columns.get("cell") or columns.get("cellid", "cellid")
-    time_col = columns.get("time")
-    q = payload.get("q")
-    start_date = payload.get("start_date")
-    end_date = payload.get("end_date")
-    limit = int(payload.get("limit") or 50)
-    if limit <= 0 or limit > 1000:
-        limit = 50
-
-    if not _valid_ident(table) or not _valid_ident(cell_col) or (time_col and not _valid_ident(time_col)):
-        raise HTTPException(status_code=400, detail="Invalid identifiers in table/columns")
-
-    params = []
-    where = "WHERE TRUE"
-    if start_date and end_date and time_col:
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
-            where += f" AND {time_col} BETWEEN %s AND %s"
-            params.extend([start_dt, end_dt])
-        except Exception:
-            pass
-    if q:
-        where += f" AND {cell_col} ILIKE %s"
-        params.append(f"%{q}%")
-
-    sql = f"SELECT DISTINCT {cell_col} AS cellid FROM {table} {where} ORDER BY {cell_col} ASC LIMIT %s"
-    params.append(limit)
-    try:
-        conn = psycopg2.connect(
-            host=db.get("host"), port=db.get("port", 5432), user=db.get("user"),
-            password=db.get("password"), dbname=db.get("dbname")
-        )
-        try:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(sql, tuple(params))
-                rows = cur.fetchall()
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        items = [r["cellid"] for r in rows if r and r["cellid"]]
-        return {"items": items}
-    except Exception as e:
-        logging.warning("cellid distinct 조회 실패: %s", e)
-        raise HTTPException(status_code=400, detail=f"failed: {e}")
+    """NoSQL 모드: 외부 DB 조회 비활성화. 빈 목록 반환."""
+    return {"items": []}
 
 if __name__ == "__main__":
     import uvicorn

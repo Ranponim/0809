@@ -1,0 +1,40 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: kpi-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+
+  backend:
+    build:
+      context: ./kpi_dashboard/backend
+    image: kpi-backend:latest
+    container_name: kpi-backend
+    depends_on:
+      - mongo
+    environment:
+      # FastAPI/분석 영구 저장용 Mongo URL 전달
+      MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-kpi}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./kpi_dashboard/frontend
+      args:
+        # 빌드 타임에 API 엔드포인트 주입 (Nginx 정적 배포)
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    image: kpi-frontend:latest
+    container_name: kpi-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mongodata:
+
+
