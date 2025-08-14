@@ -65,7 +65,14 @@ const Dashboard = () => {
 
         // 배치 엔드포인트 호출
         // 대시보드는 평균 시계열 표시 목적이므로 per-KPI 쿼리 후 평균 집계 포맷에 재활용 가능
+        let dbConfig = {}
+        try {
+          const rawDb = localStorage.getItem('dbConfig')
+          if (rawDb) dbConfig = JSON.parse(rawDb)
+        } catch {}
         const requests = keys.map(kt => apiClient.post('/api/kpi/query', {
+          db: dbConfig,
+          table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
           start_date: startDate,
           end_date: endDate,
           kpi_type: kt,
