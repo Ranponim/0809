@@ -104,6 +104,15 @@ class AnalysisResultRecord(Base):
     report_path = Column(Text)
     created_at = Column(DateTime, nullable=False)
 
+# Preferences 영구 저장 모델
+class PreferenceRecord(Base):
+    __tablename__ = "preferences"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    config_json = Column(Text)  # JSON 문자열
+    created_at = Column(DateTime, nullable=False)
+
 Base.metadata.create_all(bind=engine)
 
 def _sanitize_for_json(value: Any) -> Any:
@@ -203,9 +212,18 @@ def generate_mock_kpi_data(start_date: str, end_date: str, kpi_type: str, entity
     
     return data
 
-# 가상 preference 저장소
-preferences_db = []
-preference_counter = 1
+def _pref_record_to_model(rec: "PreferenceRecord") -> PreferenceModel:
+    try:
+        cfg = json.loads(rec.config_json or "{}")
+    except Exception as e:
+        logging.warning("Preference JSON 로드 실패(id=%s): %s", rec.id, e)
+        cfg = {}
+    return PreferenceModel(
+        id=rec.id,
+        name=rec.name,
+        description=rec.description,
+        config=cfg,
+    )
 
 # 가상 리포트 데이터
 mock_reports = [
@@ -526,66 +544,111 @@ async def get_summary_reports(report_id: Optional[int] = None):
 
 @app.get("/api/preferences")
 async def get_preferences():
-    logging.info("GET /api/preferences 호출: count=%d", len(preferences_db))
-    return {"preferences": preferences_db}
+    logging.info("GET /api/preferences 호출(DB)")
+    with SessionLocal() as s:
+        recs = s.query(PreferenceRecord).order_by(PreferenceRecord.id.asc()).all()
+        items = [_pref_record_to_model(r) for r in recs]
+        logging.info("/api/preferences 응답 count=%d", len(items))
+        return {"preferences": items}
 
 @app.get("/api/preferences/{preference_id}")
 async def get_preference(preference_id: int):
-    logging.info("GET /api/preferences/%s 호출", preference_id)
-    preference = next((p for p in preferences_db if p.id == preference_id), None)
-    if not preference:
-        raise HTTPException(status_code=404, detail="Preference not found")
-    return preference
+    logging.info("GET /api/preferences/%s 호출(DB)", preference_id)
+    with SessionLocal() as s:
+        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Preference not found")
+        return _pref_record_to_model(rec)
 
 @app.post("/api/preferences")
 async def create_preference(preference: PreferenceModel):
-    logging.info("POST /api/preferences 호출: name=%s", preference.name)
-    global preference_counter
-    preference.id = preference_counter
-    preference_counter += 1
-    preferences_db.append(preference)
-    return {"id": preference.id, "message": "Preference created successfully"}
+    logging.info("POST /api/preferences 호출(DB): name=%s", preference.name)
+    created_dt = datetime.utcnow()
+    try:
+        cfg_json = json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
+    except ValueError as ve:
+        logging.error("Preference 직렬화 실패: %s", ve)
+        raise HTTPException(status_code=400, detail=f"Invalid config: {ve}")
+    with SessionLocal() as s:
+        rec = PreferenceRecord(
+            name=preference.name,
+            description=preference.description,
+            config_json=cfg_json,
+            created_at=created_dt,
+        )
+        s.add(rec)
+        s.commit()
+        s.refresh(rec)
+        logging.info("Preference 저장 성공: id=%s", rec.id)
+        return {"id": rec.id, "message": "Preference created successfully"}
 
 @app.put("/api/preferences/{preference_id}")
 async def update_preference(preference_id: int, preference: PreferenceModel):
-    logging.info("PUT /api/preferences/%s 호출", preference_id)
-    existing = next((p for p in preferences_db if p.id == preference_id), None)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Preference not found")
-    
-    existing.name = preference.name
-    existing.description = preference.description
-    existing.config = preference.config
+    logging.info("PUT /api/preferences/%s 호출(DB)", preference_id)
+    try:
+        cfg_json = json.dumps(preference.config or {}, ensure_ascii=False, allow_nan=False)
+    except ValueError as ve:
+        logging.error("Preference 직렬화 실패: %s", ve)
+        raise HTTPException(status_code=400, detail=f"Invalid config: {ve}")
+    with SessionLocal() as s:
+        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Preference not found")
+        rec.name = preference.name
+        rec.description = preference.description
+        rec.config_json = cfg_json
+        s.add(rec)
+        s.commit()
     return {"message": "Preference updated successfully"}
 
 @app.delete("/api/preferences/{preference_id}")
 async def delete_preference(preference_id: int):
-    logging.info("DELETE /api/preferences/%s 호출", preference_id)
-    global preferences_db
-    preferences_db = [p for p in preferences_db if p.id != preference_id]
+    logging.info("DELETE /api/preferences/%s 호출(DB)", preference_id)
+    with SessionLocal() as s:
+        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Preference not found")
+        s.delete(rec)
+        s.commit()
     return {"message": "Preference deleted successfully"}
 
 @app.get("/api/preferences/{preference_id}/derived-pegs")
 async def get_preference_derived_pegs(preference_id: int):
-    logging.info("GET /api/preferences/%s/derived-pegs 호출", preference_id)
-    pref = next((p for p in preferences_db if p.id == preference_id), None)
-    if not pref:
-        raise HTTPException(status_code=404, detail="Preference not found")
-    derived = (pref.config or {}).get("derived_pegs") or {}
-    return {"derived_pegs": derived}
+    logging.info("GET /api/preferences/%s/derived-pegs 호출(DB)", preference_id)
+    with SessionLocal() as s:
+        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Preference not found")
+        try:
+            cfg = json.loads(rec.config_json or "{}")
+        except Exception:
+            cfg = {}
+        derived = (cfg or {}).get("derived_pegs") or {}
+        return {"derived_pegs": derived}
 
 @app.put("/api/preferences/{preference_id}/derived-pegs")
 async def update_preference_derived_pegs(preference_id: int, payload: dict = Body(...)):
-    logging.info("PUT /api/preferences/%s/derived-pegs 호출", preference_id)
-    pref = next((p for p in preferences_db if p.id == preference_id), None)
-    if not pref:
-        raise HTTPException(status_code=404, detail="Preference not found")
+    logging.info("PUT /api/preferences/%s/derived-pegs 호출(DB)", preference_id)
     if not isinstance(payload.get("derived_pegs"), dict):
         raise HTTPException(status_code=400, detail="derived_pegs must be an object {name: expr}")
-    cfg = pref.config or {}
-    cfg["derived_pegs"] = payload["derived_pegs"]
-    pref.config = cfg
-    return {"message": "Derived PEGs updated", "derived_pegs": cfg["derived_pegs"]}
+    with SessionLocal() as s:
+        rec = s.query(PreferenceRecord).filter(PreferenceRecord.id == preference_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Preference not found")
+        try:
+            cfg = json.loads(rec.config_json or "{}")
+        except Exception:
+            cfg = {}
+        cfg = cfg or {}
+        cfg["derived_pegs"] = payload["derived_pegs"]
+        try:
+            rec.config_json = json.dumps(cfg, ensure_ascii=False, allow_nan=False)
+        except ValueError as ve:
+            logging.error("Preference 직렬화 실패: %s", ve)
+            raise HTTPException(status_code=400, detail=f"Invalid derived_pegs: {ve}")
+        s.add(rec)
+        s.commit()
+        return {"message": "Derived PEGs updated", "derived_pegs": cfg["derived_pegs"]}
 
 @app.get("/api/master/pegs")
 async def get_pegs():

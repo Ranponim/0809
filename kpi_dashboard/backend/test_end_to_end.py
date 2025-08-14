@@ -116,6 +116,42 @@ def test_preferences_and_derived_pegs():
     _assert(r4.status_code == 200, f"get derived status {r4.status_code}")
     _assert("derived_pegs" in r4.json(), "derived_pegs missing")
 
+    # Update preference (name/description/config)
+    logging.info("[TEST] PUT /api/preferences/{id}")
+    updated = {
+        "name": "E2E Test Pref - Updated",
+        "description": "updated",
+        "config": {
+            "defaultKPIs": ["availability"],
+            "defaultNEs": ["nvgnb#30000"],
+            "defaultCellIDs": ["2012"],
+            "availableKPIs": [
+                {"value": "availability", "label": "Availability (%)", "threshold": 99.0}
+            ],
+            "kpiMappings": {"availability": {"peg_like": ["Access_%"]}}
+        }
+    }
+    r5 = requests.put(f"{BASE}/api/preferences/{pref_id}", json=updated)
+    _assert(r5.status_code == 200, f"update pref status {r5.status_code}")
+
+    # Verify get returns updated values
+    r6 = requests.get(f"{BASE}/api/preferences/{pref_id}")
+    _assert(r6.status_code == 200, f"get updated pref status {r6.status_code}")
+    body = r6.json()
+    _assert(body.get("name") == updated["name"], "updated name mismatch")
+    _assert(body.get("description") == updated["description"], "updated description mismatch")
+    cfg = body.get("config") or {}
+    _assert(cfg.get("kpiMappings", {}).get("availability") is not None, "updated config not applied")
+
+    # Delete preference
+    logging.info("[TEST] DELETE /api/preferences/{id}")
+    r7 = requests.delete(f"{BASE}/api/preferences/{pref_id}")
+    _assert(r7.status_code == 200, f"delete pref status {r7.status_code}")
+
+    # Ensure not found after delete
+    r8 = requests.get(f"{BASE}/api/preferences/{pref_id}")
+    _assert(r8.status_code == 404, f"expected 404 after delete, got {r8.status_code}")
+
 
 def test_analysis_result_pipeline_mock():
     """LLM 외부 없이, mock 데이터 기반으로 분석 결과를 저장하는 시나리오 검증."""
