@@ -87,6 +87,12 @@ const AdvancedChart = () => {
           kpiMap = parsed?.config?.kpiMappings || {}
         }
       } catch {}
+      // DB 설정 로드
+      let dbConfig = {}
+      try {
+        const rawDb = localStorage.getItem('dbConfig')
+        if (rawDb) dbConfig = JSON.parse(rawDb)
+      } catch {}
       
       // Fetch primary/secondary KPI for configured periods with NE/CELL filters
       const promises = []
@@ -94,6 +100,8 @@ const AdvancedChart = () => {
       // Period 1 data
       promises.push(
         apiClient.post('/api/kpi/query', {
+          db: dbConfig,
+          table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
           start_date: chartConfig.startDate1,
           end_date: chartConfig.endDate1,
           kpi_type: chartConfig.primaryKPI,
@@ -108,6 +116,8 @@ const AdvancedChart = () => {
       if (chartConfig.showComparison) {
         promises.push(
           apiClient.post('/api/kpi/query', {
+            db: dbConfig,
+            table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.primaryKPI,
@@ -123,6 +133,8 @@ const AdvancedChart = () => {
       if (chartConfig.showSecondaryAxis && chartConfig.secondaryKPI !== chartConfig.primaryKPI) {
         promises.push(
           apiClient.post('/api/kpi/query', {
+            db: dbConfig,
+            table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.secondaryKPI,
