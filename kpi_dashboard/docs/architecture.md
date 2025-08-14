@@ -16,7 +16,8 @@ graph LR
   F -- "Call" --> G
 ```
 
-- Persistence DB: 분석결과 영구 저장(필수). 환경변수 `ANALYSIS_DB_URL`(PostgreSQL DSN) 필요
+- Persistence DB: 분석결과 영구 저장(필수). 환경변수 `ANALYSIS_DB_URL`(SQLAlchemy DSN) 필요
+- 지원 DSN: `postgresql+psycopg2://...`(권장), `sqlite:///analysis.db`(로컬 개발용)
 - Query DB: 통계 조회 대상(선택). 프런트의 Database Settings로 접속 정보 전달 → `/api/kpi/query`에서 사용
 
 ## KPI Data Flow (Dashboard/Statistics)
@@ -53,7 +54,7 @@ sequenceDiagram
 ```
 
 ## Key Endpoints
-- POST `/api/kpi/query`: 시간 단위 평균. 필터: `ne`, `cellid`, `kpi_peg_names`, `kpi_peg_like`
+- POST `/api/kpi/query`: 시간 단위 평균. 필터: `ne`, `cellid`, `kpi_peg_names`, `kpi_peg_like`. 실패 시 mock 폴백
 - POST `/api/kpi/statistics/batch`: 다중 KPI mock(프록시 실패 폴백용)
 - POST `/api/db/ping`: DB 연결 테스트
 - POST `/api/master/ne-list`, `/api/master/cellid-list`: 자동완성용 DISTINCT 조회

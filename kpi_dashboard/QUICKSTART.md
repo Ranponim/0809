@@ -14,20 +14,38 @@ python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 ```
 
-2) 빠른 실행용 SQLite 설정(권장) 또는 PostgreSQL DSN 설정
+2) 환경 변수 설정 (.env 사용 권장)
 ```powershell
-# SQLite (가장 간단)
-$env:ANALYSIS_DB_URL = 'sqlite:///analysis.db'
+# .env 파일 사용 (권장) — kpi_dashboard/backend/.env 생성
+# 예시 1) 로컬 개발 간단 실행: SQLite
+# ANALYSIS_DB_URL=sqlite:///analysis.db
 
-# 또는 PostgreSQL (예시)
-# $env:ANALYSIS_DB_URL = 'postgresql+psycopg2://postgres:postgres@localhost:5432/postgres'
+# 예시 2) PostgreSQL (프로덕션 권장)
+# ANALYSIS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+
+# 또는 개별 항목으로도 설정 가능
+# ANALYSIS_PG_HOST=localhost
+# ANALYSIS_PG_PORT=5432
+# ANALYSIS_PG_USER=postgres
+# ANALYSIS_PG_PASSWORD=postgres
+# ANALYSIS_PG_DBNAME=postgres
 ```
+
+- 백엔드는 `.env`를 자동 로드합니다(`python-dotenv`).
+- `ANALYSIS_DB_URL`은 SQLAlchemy DSN 형식이며, PostgreSQL/SQLite 모두 지원됩니다. 운영 환경은 PostgreSQL 사용을 권장합니다.
 
 3) 서버 기동
 ```powershell
 .\.venv\Scripts\python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 - 헬스체크: http://localhost:8000/ → {"message":"3GPP KPI Management API"}
+
+4) (선택) DB 연결 테스트
+```powershell
+curl -X POST "http://localhost:8000/api/db/ping" -H "Content-Type: application/json" -d '{
+  "db": {"host":"localhost","port":5432,"user":"postgres","password":"postgres","dbname":"postgres"}
+}'
+```
 
 ## 3. Frontend (React + Vite)
 1) 의존성 설치 (npm 또는 pnpm 중 택1)
@@ -74,6 +92,10 @@ curl -X POST "http://localhost:8000/api/kpi/statistics/batch" -H "Content-Type: 
   \"interval_minutes\": 60
 }"
 ```
+- 자동완성 (NE/cellid)
+```powershell
+curl -X POST "http://localhost:8000/api/master/ne-list" -H "Content-Type: application/json" -d "{\"db\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"postgres\",\"password\":\"postgres\",\"dbname\":\"postgres\"},\"table\":\"summary\",\"columns\":{\"ne\":\"ne\",\"time\":\"datetime\"},\"q\":\"nvgnb#\",\"limit\":20}"
+```
 
 ## 6. Preference 예시 (UI에서 생성 후 "Set as Active Preference")
 ```json
@@ -100,3 +122,4 @@ cd kpi_dashboard/backend
 - 포트 충돌: 백엔드(8000)/프론트(5173) 사용 포트가 점유된 경우 포트 변경 실행
 - 프론트 설치 실패: npm 사용 시 --legacy-peer-deps로 재시도
 - 로그 확인: 백엔드(INFO)와 프론트 콘솔 로그로 요청/응답 및 건수 확인
+- 백엔드 기동 실패: `.env`의 DB 설정 누락 여부 확인. 최소 `ANALYSIS_DB_URL` 또는 `ANALYSIS_PG_*` 중 하나가 필요합니다.

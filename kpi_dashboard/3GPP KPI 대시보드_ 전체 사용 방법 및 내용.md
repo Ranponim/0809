@@ -39,7 +39,7 @@ kpi_dashboard/
 
 ## 3. 백엔드 설정 및 실행 (FastAPI)
 
-백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 PostgreSQL 영구 저장소를 사용합니다. 통계 조회는 프런트에서 입력한 별도 Query DB(PostgreSQL)에 프록시로 접속합니다.
+백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 SQLAlchemy DSN 기반 영구 저장소를 사용하며, 운영 환경은 PostgreSQL를 권장합니다(로컬 개발은 SQLite 가능). 통계 조회는 프런트에서 입력한 별도 Query DB(PostgreSQL)에 프록시로 접속합니다. 프록시 실패 시 자동으로 mock 데이터로 폴백하여 프런트 사용성을 보장합니다.
 
 ### 3.1. 종속성 설치
 
@@ -52,7 +52,7 @@ pip install -r requirements.txt
 
 ### 3.2. 환경 변수 설정 (.env)
 
-분석 결과 영구 저장을 위해 PostgreSQL 연결 정보를 반드시 설정해야 합니다. `kpi_dashboard/backend/.env` 파일을 생성하고 아래 중 하나를 설정하세요.
+분석 결과 영구 저장을 위해 데이터베이스 연결 정보를 설정해야 합니다. `kpi_dashboard/backend/.env` 파일을 생성하고 아래 중 하나를 설정하세요.
 
 ```bash
 # 방법 A: 완전한 DSN 작성 (권장)
@@ -123,7 +123,7 @@ pnpm run dev --host
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
-일부 컴포넌트(`Dashboard.jsx`)는 현재 직접 `http://localhost:8000`로 호출합니다. 장기적으로는 공용 `apiClient`(`src/lib/apiClient.js`)를 사용하도록 통합하는 것을 권장합니다.
+모든 API 호출은 공용 `apiClient`(`src/lib/apiClient.js`)를 통해 이루어지며, `VITE_API_BASE_URL`이 없으면 자동으로 `http://localhost:8000`으로 폴백합니다.
 
 ### 4.4. 프로덕션 빌드
 
@@ -138,7 +138,7 @@ pnpm run build
 
 ### 5.1. 대시보드 (Dashboard)
 
-Preference의 `config.defaultKPIs`를 읽어 KPI 카드 구성을 결정합니다. 각 KPI는 Preference의 `config.kpiMappings`에 정의된 peg_name/패턴을 기준으로 `/api/kpi/query`로 조회하며, 매핑이 없으면 기본집계(NE/CellID 필터만 적용)로 표시합니다.
+Preference의 `config.defaultKPIs`를 읽어 KPI 카드 구성을 결정합니다. 각 KPI는 `/api/kpi/query`로 개별 조회하며, Preference의 `config.defaultNEs`/`config.defaultCellIDs`가 있으면 `ne`/`cellid` 필터로 전달합니다. KPI별 peg 매핑이 필요할 경우 `config.kpiMappings`의 `peg_names`/`peg_like`를 사용하세요(백엔드가 동일 키를 지원).
 
 ### 5.2. 종합 분석 리포트 (Summary Report)
 
@@ -150,7 +150,7 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 -   **기본 분석 (Basic Analysis)**:
     -   기간, KPI 타입, NE, CellID를 기준으로 데이터를 조회합니다.
-    -   Preference의 `config.kpiMappings`에 따라 KPI별로 peg 필터(`kpi_peg_names`/`kpi_peg_like`)를 적용하여 `/api/kpi/query`를 병렬 호출합니다.
+    -   `kpi_peg_names`(정확 매칭) 또는 `kpi_peg_like`(ILIKE 패턴)를 전달하여 KPI→peg 매핑이 가능합니다.
     -   매핑이 없는 KPI는 기본집계(필터만 적용)로 표시합니다.
     -   NE/CellID 입력에는 자동완성(datalist)이 제공되며, `/api/master/ne-list`, `/api/master/cellid-list`를 사용합니다.
 
@@ -176,7 +176,7 @@ KPI 데이터를 조회하고 분석하는 두 가지 모드를 제공합니다.
 
 ## 7. 배포 정보
 
-배포 환경과 도메인은 인프라 구성에 따라 달라집니다. 프론트엔드의 `VITE_API_BASE_URL`과 백엔드의 데이터베이스 DSN을 환경에 맞게 설정하세요. 백엔드는 INFO 로그로 모든 주요 요청/응답 건수를 기록합니다.
+배포 환경과 도메인은 인프라 구성에 따라 달라집니다. 프론트엔드의 `VITE_API_BASE_URL`과 백엔드의 데이터베이스 DSN을 환경에 맞게 설정하세요. 백엔드는 INFO 로그로 주요 함수/엔드포인트 진입/성공/실패, DB 프록시 시도/폴백 여부를 기록합니다.
 
 ## 8. 향후 개선 사항
 
