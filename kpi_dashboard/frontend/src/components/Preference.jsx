@@ -20,10 +20,10 @@ const Preference = () => {
   })
   const [loading, setLoading] = useState(true)
   const [derivedEditor, setDerivedEditor] = useState('{\n  "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"\n}')
-  const [mappingEditor, setMappingEditor] = useState('{
+  const [mappingEditor, setMappingEditor] = useState(`{
   "availability": { "peg_like": ["Accessibility_%"] },
   "rrc": { "peg_like": ["RRC_%"] }
-}')
+}`)
 
   useEffect(() => {
     fetchPreferences()
