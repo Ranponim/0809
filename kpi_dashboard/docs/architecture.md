@@ -6,7 +6,7 @@ graph LR
   A["User Browser"] --> B["Frontend (React + Vite)"]
   B --> C["API Client (axios)"]
   C --> D["Backend (FastAPI)"]
-  D --> E[("DB (Persistence): PostgreSQL")]
+  D --> E[("DB (Persistence): MongoDB")]
   subgraph Analysis
     F["MCP Server: analysis_llm.py"]
     G["LLM Endpoints (vLLM)"]
@@ -16,9 +16,8 @@ graph LR
   F -- "Call" --> G
 ```
 
-- Persistence DB: 분석결과 영구 저장(필수). 환경변수 `ANALYSIS_DB_URL`(SQLAlchemy DSN) 필요
-- 지원 DSN: `postgresql+psycopg2://...`(권장), `sqlite:///analysis.db`(로컬 개발용)
-- Query DB: 통계 조회 대상(선택). 프런트의 Database Settings로 접속 정보 전달 → `/api/kpi/query`에서 사용
+- Persistence DB: 분석결과/환경설정 영구 저장(필수). 환경변수 `MONGO_URL`, `MONGO_DB_NAME`
+- Query DB: 통계 조회 대상(선택). 현 버전에서는 `/api/kpi/query`가 mock 생성기를 사용하며, 추후 실제 프록시 통합 가능
 
 ## KPI Data Flow (Dashboard/Statistics)
 ```mermaid
@@ -54,8 +53,8 @@ sequenceDiagram
 ```
 
 ## Key Endpoints
-- POST `/api/kpi/query`: 시간 단위 평균. 필터: `ne`, `cellid`, `kpi_peg_names`, `kpi_peg_like`. 실패 시 mock 폴백
-- POST `/api/kpi/statistics/batch`: 다중 KPI mock(프록시 실패 폴백용)
+- POST `/api/kpi/query`: 시간 단위 평균(mock). 필터 파라미터 수집만 수행
+- POST `/api/kpi/statistics/batch`: 다중 KPI mock
 - POST `/api/db/ping`: DB 연결 테스트
 - POST `/api/master/ne-list`, `/api/master/cellid-list`: 자동완성용 DISTINCT 조회
 - Preferences: `GET/POST/PUT/DELETE /api/preferences`, `GET/PUT /api/preferences/{id}/derived-pegs`

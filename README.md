@@ -7,12 +7,12 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688.svg?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg?logo=vite&logoColor=white)
-![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-CC0000.svg)
+![MongoDB](https://img.shields.io/badge/MongoDB-7.0+-47A248.svg?logo=mongodb&logoColor=white)
 ![License](https://img.shields.io/badge/License-Private-lightgrey.svg)
 
 네트워크 KPI 대시보드(React + FastAPI)와 셀 성능 LLM 분석기(MCP)를 함께 제공하는 저장소입니다.
 
-- 백엔드: FastAPI 기반 KPI/리포트/Preference API, PostgreSQL/SQLite 영구 저장 지원
+- 백엔드: FastAPI 기반 KPI/리포트/Preference API, MongoDB 영구 저장 사용 (`MONGO_URL`, `MONGO_DB_NAME`)
 - 프론트엔드: Vite + React, Dashboard/Statistics/AdvancedChart/Preference UI 제공
 - 분석기: `analysis_llm.py` MCP 서버, 두 기간(N-1/N) 비교·시각화·LLM 종합 분석/HTML 리포트
 
@@ -88,6 +88,28 @@ LLM 엔드포인트/모델은 코드 내부 `query_llm()`에 하드코딩되어 
   - `kpi_dashboard/3GPP KPI 대시보드_ 전체 사용 방법 및 내용.md`
   - `kpi_dashboard/백엔드-프론트엔드 데이터 구조 양식.md`
   - `kpi_dashboard/docs/architecture.md` (아키텍처/데이터 흐름 다이어그램)
+
+백엔드 현재 버전은 NoSQL(MongoDB) 기반으로 분석 결과/환경설정을 저장하며, `/api/kpi/*`는 외부 SQL 프록시 대신 mock 생성기를 사용합니다. 실제 DB 프록시가 필요하면 추후 토글/구현으로 확장 가능합니다.
+
+### Docker Compose 실행 (권장)
+프로젝트 루트에 `.env` 파일을 만들고 다음과 같이 설정할 수 있습니다(선택):
+
+```
+# ./.env (루트)
+MONGO_URL=mongodb://mongo:27017
+MONGO_DB_NAME=kpi
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+실행:
+
+```powershell
+cd D:\Coding\0809
+docker compose up -d --build
+```
+
+- 백엔드: `http://localhost:8000`
+- 프론트엔드: `http://localhost:5173`
 
 ---
 

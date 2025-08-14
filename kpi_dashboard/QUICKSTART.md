@@ -17,22 +17,20 @@ python -m venv .venv
 2) 환경 변수 설정 (.env 사용 권장)
 ```powershell
 # .env 파일 사용 (권장) — kpi_dashboard/backend/.env 생성
-# 예시 1) 로컬 개발 간단 실행: SQLite
-# ANALYSIS_DB_URL=sqlite:///analysis.db
+# 저장용 DB (필수): MongoDB 연결 정보
+MONGO_URL=mongodb://mongo:27017
+MONGO_DB_NAME=kpi
 
-# 예시 2) PostgreSQL (프로덕션 권장)
-# ANALYSIS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
-
-# 또는 개별 항목으로도 설정 가능
-# ANALYSIS_PG_HOST=localhost
-# ANALYSIS_PG_PORT=5432
-# ANALYSIS_PG_USER=postgres
-# ANALYSIS_PG_PASSWORD=postgres
-# ANALYSIS_PG_DBNAME=postgres
+# (선택) 분석기/프록시용 Postgres 접속 정보는 analysis_llm.py 사용 시에만 필요
+# DB_HOST=localhost
+# DB_PORT=5432
+# DB_USER=postgres
+# DB_PASSWORD=postgres
+# DB_NAME=postgres
 ```
 
 - 백엔드는 `.env`를 자동 로드합니다(`python-dotenv`).
-- `ANALYSIS_DB_URL`은 SQLAlchemy DSN 형식이며, PostgreSQL/SQLite 모두 지원됩니다. 운영 환경은 PostgreSQL 사용을 권장합니다.
+- 현재 백엔드는 MongoDB를 사용합니다(`MONGO_URL`, `MONGO_DB_NAME`). `/api/kpi/*`는 기본 mock 데이터 생성기로 동작합니다.
 
 3) 서버 기동
 ```powershell
@@ -40,12 +38,19 @@ python -m venv .venv
 ```
 - 헬스체크: http://localhost:8000/ → {"message":"3GPP KPI Management API"}
 
-4) (선택) DB 연결 테스트
+4) (선택) DB 연결 테스트 (MongoDB)
 ```powershell
-curl -X POST "http://localhost:8000/api/db/ping" -H "Content-Type: application/json" -d '{
-  "db": {"host":"localhost","port":5432,"user":"postgres","password":"postgres","dbname":"postgres"}
-}'
+curl -X POST "http://localhost:8000/api/db/ping" -H "Content-Type: application/json" -d '{"mongo_url": "mongodb://localhost:27017"}'
 ```
+
+## 2-1. Docker Compose로 빠르게 실행하기
+```powershell
+cd D:\Coding\0809
+# (선택) .env 작성: MONGO_URL, MONGO_DB_NAME, VITE_API_BASE_URL
+docker compose up -d --build
+```
+- 백엔드: http://localhost:8000
+- 프론트엔드: http://localhost:5173
 
 ## 3. Frontend (React + Vite)
 1) 의존성 설치 (npm 또는 pnpm 중 택1)
