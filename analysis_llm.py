@@ -1077,6 +1077,15 @@ def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optio
     try:
         # allow_nan=False 보장 직렬화 후 전송 (서버와 규격 일치)
         json_text = json.dumps(safe_payload, ensure_ascii=False, allow_nan=False)
+        try:
+            parsed_preview = json.loads(json_text)
+        except Exception:
+            parsed_preview = safe_payload
+        logging.info("PAYLOAD %s", json.dumps({
+            "url": url,
+            "method": "POST",
+            "payload": parsed_preview,
+        }, ensure_ascii=False, indent=2))
         resp = requests.post(url, data=json_text.encode('utf-8'), headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=timeout)
         resp.raise_for_status()
         logging.info("백엔드 POST 성공: status=%s", resp.status_code)
