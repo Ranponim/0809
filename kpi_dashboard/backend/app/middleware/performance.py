@@ -160,4 +160,3 @@ def get_performance_stats():
         "num_threads": process.num_threads(),
         "create_time": process.create_time()
     }
-

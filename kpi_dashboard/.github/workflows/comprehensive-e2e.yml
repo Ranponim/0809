@@ -396,4 +396,3 @@ jobs:
           echo "❌ Tests failed - please check the detailed reports" >> $GITHUB_STEP_SUMMARY
         fi
 
-

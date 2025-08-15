@@ -261,8 +261,8 @@ async def get_analysis_result(result_id: PyObjectId):
         
         logger.info(f"분석 결과 상세 조회: ID={result_id}")
         
-        # 문서 조회 (동기식)
-        document = collection.find_one({"_id": result_id})
+        # 문서 조회
+        document = await collection.find_one({"_id": result_id})
         
         if not document:
             raise AnalysisResultNotFoundException(str(result_id))

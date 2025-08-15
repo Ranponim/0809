@@ -289,4 +289,3 @@ export function usePerformanceMetrics(componentName) {
   
   return { measure, measureAsync, logMetrics }
 }
-

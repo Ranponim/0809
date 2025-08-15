@@ -46,6 +46,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  X,
   Download,
   Copy,
   Eye,
@@ -193,7 +194,10 @@ const ResultDetail = ({
       if (result.error) {
         return generateMockData(result)
       }
-      return result.kpiResults ? result : generateMockData(result)
+      // LLM 구조(results[0].kpi_results) 또는 mock 구조(kpiResults)를 모두 지원
+      const hasLlmKpis = !!(result?.results?.[0]?.kpi_results?.length)
+      const hasMockKpis = !!(result?.kpiResults?.length)
+      return (hasLlmKpis || hasMockKpis) ? result : generateMockData(result)
     })
   }, [results])
 
@@ -353,7 +357,8 @@ const ResultDetail = ({
 
     // 단일 결과 차트 - 개선된 N-1/N 비교 차트
     const result = results[0]
-    const kpiResults = result?.results?.[0]?.kpi_results || []
+    // 백엔드(LLM) 구조(results[0].kpi_results)와 mock 구조(kpiResults)를 모두 지원
+    const kpiResults = (result?.results?.[0]?.kpi_results || result?.kpiResults || [])
     
     if (!kpiResults.length) {
       return <div className="text-center text-muted-foreground">차트 데이터가 없습니다.</div>
@@ -672,7 +677,7 @@ const ResultDetail = ({
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
-              {/* DialogContent에 기본 X 버튼이 있으므로 여기서는 제거 */}
+              {/* ❌ 커스텀 닫기 버튼 제거: DialogContent 기본 X만 사용 */}
             </div>
           </div>
         </DialogHeader>
