@@ -50,8 +50,9 @@ async def connect_to_mongo():
         analysis_collection = db["analysis_results"]
         preference_collection = db["user_preferences"]
         
-        # 인덱스 생성
-        await create_indexes()
+        # 인덱스 최적화 수행
+        from .utils.db_optimization import optimize_all_collections
+        await optimize_all_collections(db)
         
         logger.info(f"데이터베이스 '{MONGO_DB_NAME}' 초기화 완료")
         

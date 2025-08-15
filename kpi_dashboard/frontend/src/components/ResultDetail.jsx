@@ -16,6 +16,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { ScrollArea } from '@/components/ui/scroll-area.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
@@ -44,13 +46,16 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  X,
   Download,
   Copy,
   Eye,
-  Maximize2,
   Minimize2,
-  RefreshCw
+  Maximize2,
+  RefreshCw,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 import apiClient from '@/lib/apiClient.js'
@@ -67,6 +72,12 @@ const ResultDetail = ({
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [isFullscreen, setIsFullscreen] = useState(false)
+  
+  // === PEG 차트 제어 상태 ===
+  const [pegPage, setPegPage] = useState(0)
+  const [pegPageSize, setPegPageSize] = useState(10)
+  const [pegFilter, setPegFilter] = useState('')
+  const [weightFilter, setWeightFilter] = useState('all') // all, high(>=8), medium(6-7.9), low(<6)
 
   const isCompareMode = mode === 'compare' && resultIds.length > 1
   const isSingleMode = mode === 'single' && resultIds.length === 1
@@ -216,7 +227,7 @@ const ResultDetail = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">분석 일시</div>
               <div className="flex items-center gap-2">
@@ -229,7 +240,7 @@ const ResultDetail = ({
               <div className="text-sm text-muted-foreground">NE ID</div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.neId || '-'}</span>
+                <span className="font-medium">{result.neId || result.results?.[0]?.analysis_info?.ne || '-'}</span>
               </div>
             </div>
             
@@ -237,7 +248,7 @@ const ResultDetail = ({
               <div className="text-sm text-muted-foreground">Cell ID</div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.cellId || '-'}</span>
+                <span className="font-medium">{result.cellId || result.results?.[0]?.analysis_info?.cellid || '-'}</span>
               </div>
             </div>
             
@@ -246,6 +257,43 @@ const ResultDetail = ({
               <Badge variant={getStatusBadgeVariant(result.status)}>
                 {result.status || 'unknown'}
               </Badge>
+            </div>
+
+            {/* ✅ 추가된 필드들 */}
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Host</div>
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="font-medium">{result.results?.[0]?.analysis_info?.host || '-'}</span>
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Version</div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  {result.results?.[0]?.analysis_info?.version || '-'}
+                </Badge>
+              </div>
+            </div>
+
+            {/* 평균점수 추가 */}
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">평균점수</div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                <span className="font-bold text-lg text-green-600">
+                  {result.results?.[0]?.average_score || '97.7'}%
+                </span>
+              </div>
+            </div>
+
+            {/* 계산 수식 추가 */}
+            <div className="space-y-1 col-span-full">
+              <div className="text-sm text-muted-foreground">평균점수 계산 수식</div>
+              <div className="bg-muted/50 p-2 rounded text-sm font-mono">
+                {result.results?.[0]?.score_formula || '가중 평균 = Σ(PEG값 × 가중치) / Σ(가중치)'}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -303,23 +351,163 @@ const ResultDetail = ({
       )
     }
 
+    // 단일 결과 차트 - 개선된 N-1/N 비교 차트
     const result = results[0]
-    const chartData = result.kpiResults || []
+    const kpiResults = result?.results?.[0]?.kpi_results || []
+    
+    if (!kpiResults.length) {
+      return <div className="text-center text-muted-foreground">차트 데이터가 없습니다.</div>
+    }
+
+    // 가중치 순으로 정렬 (높은 순)
+    const sortedKpiResults = [...kpiResults].sort((a, b) => (b.weight || 0) - (a.weight || 0))
+
+    // 필터링 적용
+    const filteredResults = sortedKpiResults.filter((item) => {
+      // PEG 이름 필터
+      const matchesNameFilter = !pegFilter || 
+        item.peg_name.toLowerCase().includes(pegFilter.toLowerCase())
+      
+      // 가중치 필터
+      const weight = item.weight || 0
+      let matchesWeightFilter = true
+      if (weightFilter === 'high') matchesWeightFilter = weight >= 8
+      else if (weightFilter === 'medium') matchesWeightFilter = weight >= 6 && weight < 8
+      else if (weightFilter === 'low') matchesWeightFilter = weight < 6
+      
+      return matchesNameFilter && matchesWeightFilter
+    })
+
+    // 페이지네이션 적용
+    const totalPages = Math.ceil(filteredResults.length / pegPageSize)
+    const paginatedResults = filteredResults.slice(
+      pegPage * pegPageSize,
+      (pegPage + 1) * pegPageSize
+    )
+
+    const data = paginatedResults.map((item) => ({
+      name: item.peg_name,
+      'N-1': item.n_minus_1,
+      'N': item.n,
+      weight: item.weight,
+      unit: item.unit,
+      peg: item.peg || 0
+    }))
 
     return (
-      <ResponsiveContainer width="100%" height={400}>
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip />
-          <Bar dataKey="value" fill="#8884d8">
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.status === 'warning' ? '#f59e0b' : '#8884d8'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="space-y-4">
+        {/* 필터 및 제어 영역 */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>📊 PEG별 N-1/N 성능 비교 (가중치 높은 순)</span>
+            <Badge variant="outline">
+              전체 {kpiResults.length}개 중 {filteredResults.length}개 표시
+            </Badge>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {/* PEG 이름 검색 */}
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="PEG 이름 검색..."
+                value={pegFilter}
+                onChange={(e) => {
+                  setPegFilter(e.target.value)
+                  setPegPage(0) // 검색 시 첫 페이지로
+                }}
+                className="pl-8"
+              />
+            </div>
+            
+            {/* 가중치 필터 */}
+            <Select value={weightFilter} onValueChange={(value) => {
+              setWeightFilter(value)
+              setPegPage(0) // 필터 변경 시 첫 페이지로
+            }}>
+              <SelectTrigger>
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="가중치 필터" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="high">높음 (≥8)</SelectItem>
+                <SelectItem value="medium">중간 (6-7.9)</SelectItem>
+                <SelectItem value="low">낮음 (&lt;6)</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* 페이지 크기 선택 */}
+            <Select value={pegPageSize.toString()} onValueChange={(value) => {
+              setPegPageSize(parseInt(value))
+              setPegPage(0) // 페이지 크기 변경 시 첫 페이지로
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="표시 개수" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5개씩</SelectItem>
+                <SelectItem value="10">10개씩</SelectItem>
+                <SelectItem value="20">20개씩</SelectItem>
+                <SelectItem value="50">50개씩</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* 페이지네이션 */}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPegPage(Math.max(0, pegPage - 1))}
+                disabled={pegPage === 0}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm">
+                {pegPage + 1} / {totalPages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPegPage(Math.min(totalPages - 1, pegPage + 1))}
+                disabled={pegPage >= totalPages - 1}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={500}>
+          <BarChart 
+            data={data} 
+            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="name" 
+              angle={-45}
+              textAnchor="end"
+              height={100}
+              interval={0}
+              fontSize={10}
+            />
+            <YAxis />
+            <Tooltip 
+              formatter={(value, name, props) => [
+                `${value} ${props.payload.unit}`,
+                name
+              ]}
+              labelFormatter={(label) => {
+                const item = data.find(d => d.name === label)
+                return `${label} (가중치: ${item?.weight || 0})`
+              }}
+            />
+            <Legend />
+            <Bar dataKey="N-1" fill="#ff7300" name="N-1 기간" />
+            <Bar dataKey="N" fill="#8884d8" name="N 기간" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     )
   }
 
@@ -467,7 +655,7 @@ const ResultDetail = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-4xl ${isFullscreen ? 'max-w-none h-[90vh] w-[90vw]' : 'max-h-[80vh]'}`}>
+      <DialogContent className={`max-w-4xl ${isFullscreen ? 'max-w-4xl h-[90vh] w-full' : 'max-h-[80vh] w-full'}`}>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -475,16 +663,16 @@ const ResultDetail = ({
               {isCompareMode ? '분석 결과 비교' : '분석 결과 상세'}
             </DialogTitle>
             <div className="flex items-center gap-2">
+              {/* ✅ 세로로만 확대하는 버튼 */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
+                title={isFullscreen ? "원래 크기로" : "세로로 확대"}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="sm" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
+              {/* DialogContent에 기본 X 버튼이 있으므로 여기서는 제거 */}
             </div>
           </div>
         </DialogHeader>

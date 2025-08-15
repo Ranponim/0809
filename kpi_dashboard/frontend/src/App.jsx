@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import Layout from './components/Layout.jsx'
-import Dashboard from './components/Dashboard.jsx'
-import SummaryReport from './components/SummaryReport.jsx'
-import Statistics from './components/Statistics.jsx'
+import {
+  SuspenseDashboard as Dashboard,
+  SuspenseStatistics as Statistics,
+  SuspensePreferenceManager as PreferenceManager,
+  SuspenseResultsList as ResultsList,
+  SuspenseSummaryReport as SummaryReport,
+  SuspenseLLMAnalysisManager as LLMAnalysisManager
+} from './components/LazyComponents.jsx'
 import Preference from './components/Preference.jsx'
-import PreferenceManager from './components/PreferenceManager.jsx'
-import ResultsList from './components/ResultsList.jsx'
 import PreferenceTest from './components/PreferenceTest.jsx'
 import { PreferenceProvider } from './contexts/PreferenceContext.jsx'
 import './App.css'
@@ -29,6 +32,8 @@ function App() {
         return <Preference />
       case 'preference-test':
         return <PreferenceTest />
+      case 'llm-analysis':
+        return <LLMAnalysisManager />
       default:
         return <Dashboard />
     }

@@ -96,11 +96,12 @@ export const useAnalysisResults = ({
       const response = await apiClient.get('/api/analysis/results', { params })
       
       logInfo('분석 결과 조회 성공', {
-        resultCount: response.data?.length || 0,
+        resultCount: response.data?.items?.length || 0,
+        total: response.data?.total || 0,
         totalRequested: limit
       })
       
-      const newResults = response.data || []
+      const newResults = response.data?.items || []  // ✅ items 배열에서 데이터 추출
       
       // 결과 업데이트
       if (append) {
@@ -113,11 +114,11 @@ export const useAnalysisResults = ({
       setPagination(prev => ({
         ...prev,
         skip: append ? prev.skip + newResults.length : skip + newResults.length,
-        total: prev.total // 실제로는 response에서 total을 받아와야 하지만, 현재 API에서 제공하지 않음
+        total: response.data?.total || 0  // ✅ Backend에서 받은 total 사용
       }))
       
       // 더 가져올 데이터가 있는지 확인
-      setHasMore(newResults.length === limit)
+      setHasMore(response.data?.has_next || false)  // ✅ Backend의 has_next 활용
       
       // 성공 메시지 (옵션)
       if (showToast && !append) {

@@ -524,13 +524,63 @@ def create_llm_analysis_prompt_specific_pegs(processed_df_subset: pd.DataFrame, 
     logging.info("create_llm_analysis_prompt_specific_pegs() 완료")
     return prompt
 
+# --- 테스트용 가상 LLM 응답 생성 ---
+def generate_mock_llm_response(processed_df: pd.DataFrame, is_test_mode: bool = False) -> dict:
+    """
+    테스트 모드에서 사용할 가상 LLM 응답을 생성합니다.
+    실제 LLM 서버가 없을 때 사용됩니다.
+    """
+    logging.info("generate_mock_llm_response() 호출: 가상 LLM 응답 생성 (test_mode=%s)", is_test_mode)
+    
+    # 가장 변화율이 큰 PEG 찾기
+    if not processed_df.empty and 'pct_change' in processed_df.columns:
+        top_changes = processed_df.nlargest(3, 'pct_change', keep='all')
+        top_peg = top_changes.iloc[0] if len(top_changes) > 0 else None
+    else:
+        top_peg = None
+    
+    mock_response = {
+        "executive_summary": f"테스트 분석 결과: {len(processed_df)}개의 PEG 분석 완료. " + 
+                           (f"주요 변화는 {top_peg['peg_name']} ({top_peg['pct_change']:.1f}% 변화)입니다." if top_peg is not None else "데이터가 부족합니다."),
+        "diagnostic_findings": [
+            {
+                "primary_hypothesis": "테스트 모드에서 생성된 가상 가설입니다. 실제 분석에서는 실제 네트워크 상황에 맞는 가설이 제시됩니다.",
+                "supporting_evidence": f"분석된 {len(processed_df)}개 PEG 중 일부에서 변화가 관찰되었습니다.",
+                "confounding_factors_assessment": "테스트 환경에서는 실제 교란 요인 분석이 제한적입니다."
+            }
+        ],
+        "recommended_actions": [
+            {
+                "priority": "P1",
+                "action": "테스트 데이터 검증",
+                "details": "실제 운영 환경에서 분석을 재실행하여 결과를 검증해주세요."
+            },
+            {
+                "priority": "P2", 
+                "action": "LLM 서버 연결 확인",
+                "details": "실제 LLM 분석을 위해 LLM 서버 연결 상태를 확인해주세요."
+            }
+        ]
+    }
+    
+    logging.info("가상 LLM 응답 생성 완료: findings=%d, actions=%d", 
+                len(mock_response['diagnostic_findings']), 
+                len(mock_response['recommended_actions']))
+    
+    return mock_response
+
+
 # --- LLM API 호출 함수 (subprocess + curl) ---
-def query_llm(prompt: str) -> dict:
+def query_llm(prompt: str, enable_mock: bool = False) -> dict:
     """내부 vLLM 서버로 분석 요청. 응답 본문에서 JSON만 추출.
     실패 시 다음 엔드포인트로 페일오버.
+    
+    Args:
+        prompt: LLM에게 보낼 프롬프트
+        enable_mock: True면 LLM 서버 연결 실패 시 가상 응답 반환
     """
     # 장애 대비를 위해 복수 엔드포인트로 페일오버. 응답에서 JSON 블록만 추출
-    logging.info("query_llm() 호출: vLLM 분석 요청 시작")
+    logging.info("query_llm() 호출: vLLM 분석 요청 시작 (enable_mock=%s)", enable_mock)
     endpoints = [
         'http://10.251.204.93:10000',
         'http://100.105.188.117:8888',
@@ -599,7 +649,30 @@ def query_llm(prompt: str) -> dict:
         except Exception as e:
             logging.error("예기치 못한 오류 (%s): %s", type(e).__name__, e, exc_info=True)
             continue
-    raise ConnectionError("모든 LLM API 엔드포인트에 연결하지 못했습니다.")
+    
+    # 모든 엔드포인트 실패 시 mock 모드 처리
+    if enable_mock:
+        logging.warning("모든 LLM API 엔드포인트 연결 실패. Mock 모드로 가상 응답 생성합니다.")
+        # processed_df는 없으므로 기본적인 mock 응답 생성
+        return {
+            "executive_summary": "LLM 서버 연결 실패로 인한 테스트 응답입니다.",
+            "diagnostic_findings": [
+                {
+                    "primary_hypothesis": "LLM 서버에 연결할 수 없어 가상 분석을 제공합니다.",
+                    "supporting_evidence": "네트워크 연결 또는 LLM 서버 상태를 확인해주세요.",
+                    "confounding_factors_assessment": "실제 분석을 위해서는 LLM 서버 연결이 필요합니다."
+                }
+            ],
+            "recommended_actions": [
+                {
+                    "priority": "P1",
+                    "action": "LLM 서버 연결 상태 점검",
+                    "details": "vLLM 서버가 정상 동작하는지 확인하고 네트워크 연결을 점검해주세요."
+                }
+            ]
+        }
+    else:
+        raise ConnectionError("모든 LLM API 엔드포인트에 연결하지 못했습니다.")
 
 
 # --- HTML 리포트 생성 (통합 분석 전용) ---
@@ -1193,11 +1266,20 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         processed_df, charts_base64 = process_and_visualize(n1_df, n_df)
         logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
-        # LLM 프롬프트 & 분석
+        # LLM 프롬프트 & 분석 (테스트 모드 감지)
+        test_mode = request.get('test_mode', False) or request.get('enable_mock', False)
         prompt = create_llm_analysis_prompt_enhanced(processed_df, n1_text, n_text)
-        logging.info("프롬프트 길이: %d자", len(prompt))
-        llm_analysis = query_llm(prompt)
-        logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
+        logging.info("프롬프트 길이: %d자, test_mode=%s", len(prompt), test_mode)
+        
+        try:
+            llm_analysis = query_llm(prompt, enable_mock=test_mode)
+            logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
+        except ConnectionError as e:
+            if test_mode:
+                logging.warning("LLM 연결 실패하지만 test_mode이므로 가상 응답 생성: %s", e)
+                llm_analysis = generate_mock_llm_response(processed_df, is_test_mode=True)
+            else:
+                raise
 
         # '특정 peg 분석' 처리: preference / peg_definitions / selected_pegs
         try:
@@ -1243,7 +1325,26 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
 
                 sp_prompt = create_llm_analysis_prompt_specific_pegs(subset_df, unique_selected, n1_text, n_text)
                 logging.info("특정 PEG 프롬프트 길이: %d자, 선택 PEG=%d개", len(sp_prompt), len(unique_selected))
-                sp_result = query_llm(sp_prompt)
+                
+                try:
+                    sp_result = query_llm(sp_prompt, enable_mock=test_mode)
+                except ConnectionError as e:
+                    if test_mode:
+                        logging.warning("특정 PEG LLM 연결 실패하지만 test_mode이므로 가상 응답 생성: %s", e)
+                        sp_result = {
+                            "summary": f"테스트 모드: {len(unique_selected)}개 선택 PEG에 대한 가상 분석 결과입니다.",
+                            "peg_insights": {peg: f"{peg}에 대한 테스트 분석 결과" for peg in unique_selected[:5]},  # 최대 5개만
+                            "prioritized_actions": [
+                                {
+                                    "priority": "P1",
+                                    "action": f"선택된 PEG {len(unique_selected)}개에 대한 상세 검토",
+                                    "details": "실제 운영 환경에서 재분석 필요"
+                                }
+                            ]
+                        }
+                    else:
+                        raise
+                
                 if isinstance(llm_analysis, dict):
                     llm_analysis['specific_peg_analysis'] = {
                         "selected_pegs": unique_selected,
@@ -1257,7 +1358,9 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         report_path = generate_multitab_html_report(llm_analysis, charts_base64, output_dir, processed_df)
         logging.info("리포트 경로: %s", report_path)
 
-        # 백엔드 POST payload 구성
+        # 백엔드 POST payload 구성 - 원본 PostgreSQL 스키마 정보 포함
+        # 원본 스키마: id(int), datetime(ts), value(double), version(text), 
+        # family_name(text), cellid(text), peg_name(text), host(text), ne(text)
         result_payload = {
             "status": "success",
             "n_minus_1": n1_text,
@@ -1267,6 +1370,35 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             "chart_overall_base64": charts_base64.get("overall"),
             "report_path": report_path,
             "assumption_same_environment": True,
+            # 원본 스키마 정보 추가 - Frontend validation 오류 해결
+            "source_metadata": {
+                "db_config": db,
+                "table": table,
+                "columns": columns,
+                "time_ranges": {
+                    "n_minus_1": {"start": n1_start.isoformat(), "end": n1_end.isoformat()},
+                    "n": {"start": n_start.isoformat(), "end": n_end.isoformat()}
+                },
+                "filters": {
+                    "ne_filters": ne_filters,
+                    "cellid_filters": cellid_filters
+                },
+                # 대표 ne_id, cell_id - 필터링된 첫 번째 값 또는 "ALL"
+                "ne_id": ne_filters[0] if ne_filters else "ALL",
+                "cell_id": cellid_filters[0] if cellid_filters else "ALL",
+                # 원본 스키마 정보 명시
+                "schema_info": {
+                    "id": "auto_increment_integer",
+                    "datetime": "timestamp",
+                    "value": "double_precision",
+                    "version": "text",
+                    "family_name": "text", 
+                    "cellid": "text",
+                    "peg_name": "text",
+                    "host": "text",
+                    "ne": "text"
+                }
+            }
         }
         logging.info("payload 준비 완료: stats_rows=%d", len(result_payload.get("stats", [])))
 
@@ -1302,5 +1434,34 @@ def analyze_cell_performance_with_llm(request: dict) -> dict:
 
 
 if __name__ == '__main__':
-    logging.info("stdio 모드로 MCP를 실행합니다.")
-    mcp.run(transport="stdio")
+    import sys
+    
+    # CLI 모드 지원: Backend에서 subprocess로 호출 시 사용
+    if len(sys.argv) > 2 and sys.argv[1] == "--request":
+        try:
+            request_json = sys.argv[2]
+            request_data = json.loads(request_json)
+            
+            logging.info("CLI 모드로 LLM 분석을 실행합니다.")
+            logging.info("요청 데이터: %s", json.dumps(request_data, ensure_ascii=False, indent=2))
+            
+            # 분석 실행
+            result = _analyze_cell_performance_logic(request_data)
+            
+            # JSON 결과 출력 (Backend에서 capture)
+            print(json.dumps(result, ensure_ascii=False))
+            
+            # 성공 종료
+            sys.exit(0)
+            
+        except Exception as e:
+            logging.exception("CLI 모드 실행 중 오류 발생: %s", e)
+            error_result = {
+                "status": "error",
+                "message": f"CLI 모드 실행 오류: {str(e)}"
+            }
+            print(json.dumps(error_result, ensure_ascii=False))
+            sys.exit(1)
+    else:
+        logging.info("stdio 모드로 MCP를 실행합니다.")
+        mcp.run(transport="stdio")

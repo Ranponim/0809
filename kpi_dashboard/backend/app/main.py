@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 
 # 내부 모듈 임포트
 from .db import connect_to_mongo, close_mongo_connection, get_db_stats
-from .routers import analysis, preference, kpi, statistics, master
+from .routers import analysis, preference, kpi, statistics, master, llm_analysis
+from .middleware.performance import performance_middleware, setup_mongo_monitoring, get_performance_stats
 from .exceptions import (
     BaseAPIException,
     AnalysisResultNotFoundException,
@@ -55,8 +56,12 @@ async def lifespan(app: FastAPI):
     try:
         await connect_to_mongo()
         logger.info("데이터베이스 연결 완료")
+        
+        # MongoDB 성능 모니터링 설정
+        setup_mongo_monitoring()
+        logger.info("성능 모니터링 설정 완료")
     except Exception as e:
-        logger.error(f"데이터베이스 연결 실패: {e}")
+        logger.error(f"애플리케이션 초기화 실패: {e}")
         raise
     
     yield
@@ -107,6 +112,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 성능 모니터링 미들웨어 추가
+app.middleware("http")(performance_middleware)
+
 # 예외 핸들러 등록
 app.add_exception_handler(BaseAPIException, base_api_exception_handler)
 app.add_exception_handler(AnalysisResultNotFoundException, analysis_result_not_found_handler)
@@ -124,6 +132,7 @@ app.include_router(preference.router)
 app.include_router(kpi.router)
 app.include_router(statistics.router)   # Task 46 - Statistics 비교 분석 API
 app.include_router(master.router)       # Master 데이터 API (PEG, Cell 목록)
+app.include_router(llm_analysis.router) # LLM 분석 API
 
 
 @app.get("/", summary="API 루트", tags=["General"])
@@ -178,6 +187,30 @@ async def health_check():
         )
 
 
+@app.get("/api/performance", summary="성능 통계", tags=["General"])
+async def performance_stats():
+    """
+    현재 애플리케이션 성능 통계
+    
+    메모리 사용량, CPU 사용률 등 실시간 성능 지표를 제공합니다.
+    """
+    try:
+        stats = get_performance_stats()
+        return {
+            "status": "success",
+            "data": stats,
+            "timestamp": "2025-01-15T12:00:00Z"
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"성능 통계 조회 실패: {str(e)}"
+            }
+        )
+
+
 @app.get("/api/info", summary="API 정보", tags=["General"])
 async def api_info():
     """
@@ -224,38 +257,7 @@ async def api_info():
     }
 
 
-# 미들웨어: 요청 로깅
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """
-    HTTP 요청 로깅 미들웨어
-    
-    모든 요청과 응답을 로깅합니다.
-    """
-    # 요청 시작 시간 기록
-    import time
-    start_time = time.time()
-    
-    # 요청 정보 로깅
-    logger.info(f"요청 시작: {request.method} {request.url.path}")
-    
-    # 다음 미들웨어/엔드포인트 실행
-    response = await call_next(request)
-    
-    # 처리 시간 계산
-    process_time = time.time() - start_time
-    
-    # 응답 정보 로깅
-    logger.info(
-        f"요청 완료: {request.method} {request.url.path} "
-        f"| Status: {response.status_code} "
-        f"| Time: {process_time:.3f}s"
-    )
-    
-    # 응답 헤더에 처리 시간 추가
-    response.headers["X-Process-Time"] = str(process_time)
-    
-    return response
+# 기존 간단한 로깅 미들웨어는 성능 미들웨어로 교체됨
 
 
 if __name__ == "__main__":

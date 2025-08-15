@@ -206,21 +206,24 @@ async def list_analysis_results(
         
         documents = await cursor.to_list(length=size)
         
-        # 응답 모델로 변환
+        # 응답 데이터 직접 구성 (Pydantic alias 문제 우회)
         items = []
         for doc in documents:
             # results_count 계산
             results_count = len(doc.get("results", []))
             
-            summary = AnalysisResultSummary(
-                id=doc["_id"],
-                analysis_date=doc["analysis_date"],
-                ne_id=doc["ne_id"],
-                cell_id=doc["cell_id"],
-                status=doc["status"],
-                results_count=results_count
-            )
-            items.append(summary)
+            # 직접 dict로 구성 (FastAPI가 JSON 직렬화 시 필드명 사용)
+            item_dict = {
+                "id": str(doc["_id"]),  # ✅ _id → id로 변환
+                "analysisDate": doc["analysis_date"].isoformat() if doc.get("analysis_date") else None,
+                "neId": doc.get("ne_id"),
+                "cellId": doc.get("cell_id"),
+                "status": doc["status"],
+                "results_count": results_count,
+                "analysis_type": doc.get("analysis_type")
+            }
+            
+            items.append(item_dict)
         
         logger.info(f"분석 결과 목록 조회 완료: {len(items)}개 항목")
         
@@ -258,8 +261,8 @@ async def get_analysis_result(result_id: PyObjectId):
         
         logger.info(f"분석 결과 상세 조회: ID={result_id}")
         
-        # 문서 조회
-        document = await collection.find_one({"_id": result_id})
+        # 문서 조회 (동기식)
+        document = collection.find_one({"_id": result_id})
         
         if not document:
             raise AnalysisResultNotFoundException(str(result_id))

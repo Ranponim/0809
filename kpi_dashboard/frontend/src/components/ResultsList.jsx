@@ -6,7 +6,7 @@
  * Task 40: Frontend LLM 분석 결과 목록 UI 컴포넌트 개발
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
@@ -128,13 +128,15 @@ const ResultsList = () => {
 
   // === 정렬 핸들러 ===
   const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }))
-    
-    logInfo('정렬 변경', { key, direction: sortConfig.direction })
-  }, [sortConfig.direction, logInfo])
+    setSortConfig(prev => {
+      const newDirection = prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+      logInfo('정렬 변경', { key, direction: newDirection })  // ✅ 새로운 방향으로 로그
+      return {
+        key,
+        direction: newDirection
+      }
+    })
+  }, [logInfo])
 
   // === 필터 핸들러 ===
   const handleFilterChange = useCallback((newFilters) => {

@@ -15,6 +15,66 @@ from .common import PyObjectId
 logger = logging.getLogger(__name__)
 
 
+class AnalysisResultFilterSettings(BaseModel):
+    """
+    분석 결과 필터 설정
+    
+    사용자가 분석 결과 페이지에서 자주 사용하는 필터 설정을 저장합니다.
+    """
+    saved_filters: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="저장된 필터 목록"
+    )
+    default_filter: Optional[Dict[str, Any]] = Field(
+        None,
+        description="기본으로 적용할 필터"
+    )
+    favorite_ne_ids: List[str] = Field(
+        default_factory=list,
+        description="즐겨찾는 NE ID 목록"
+    )
+    favorite_cell_ids: List[str] = Field(
+        default_factory=list,
+        description="즐겨찾는 Cell ID 목록"
+    )
+    multi_cell_selections: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Multi Cell 선택 저장"
+    )
+    filter_auto_apply: bool = Field(
+        default=False,
+        description="페이지 로드시 기본 필터 자동 적용"
+    )
+    
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "saved_filters": [
+                    {
+                        "name": "Production Sites",
+                        "neId": "NE_001,NE_002",
+                        "cellId": "CELL_001",
+                        "status": "completed",
+                        "analysis_type": "llm_analysis"
+                    }
+                ],
+                "default_filter": {
+                    "status": "completed"
+                },
+                "favorite_ne_ids": ["NE_001", "NE_002", "NE_003"],
+                "favorite_cell_ids": ["CELL_001", "CELL_002"],
+                "multi_cell_selections": [
+                    {
+                        "name": "Site Alpha",
+                        "cells": ["CELL_001", "CELL_002", "CELL_003"]
+                    }
+                ]
+            }
+        }
+    )
+
+
 class DashboardSettings(BaseModel):
     """
     대시보드 설정
@@ -223,6 +283,11 @@ class UserPreferenceBase(BaseModel):
         description="통계 분석 설정",
         alias="statisticsSettings"
     )
+    analysis_filter_settings: AnalysisResultFilterSettings = Field(
+        default_factory=AnalysisResultFilterSettings,
+        description="분석 결과 필터 설정",
+        alias="analysisFilterSettings"
+    )
     notification_settings: NotificationSettings = Field(
         default_factory=NotificationSettings,
         description="알림 설정",
@@ -275,6 +340,10 @@ class UserPreferenceUpdate(BaseModel):
         None,
         alias="statisticsSettings"
     )
+    analysis_filter_settings: Optional[AnalysisResultFilterSettings] = Field(
+        None,
+        alias="analysisFilterSettings"
+    )
     notification_settings: Optional[NotificationSettings] = Field(
         None,
         alias="notificationSettings"
@@ -326,6 +395,7 @@ class UserPreferenceImportExport(BaseModel):
     """
     dashboard_settings: DashboardSettings
     statistics_settings: StatisticsSettings
+    analysis_filter_settings: AnalysisResultFilterSettings
     notification_settings: NotificationSettings
     theme: str
     language: str

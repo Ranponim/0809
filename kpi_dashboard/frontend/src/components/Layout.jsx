@@ -1,16 +1,41 @@
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { BarChart3, FileText, Settings, TrendingUp, Database } from 'lucide-react'
+import { BarChart3, FileText, Settings, TrendingUp, Database, Brain } from 'lucide-react'
+import { 
+  preloadDashboard, 
+  preloadStatistics, 
+  preloadPreferenceManager, 
+  preloadResultsList, 
+  preloadSummaryReport,
+  preloadLLMAnalysisManager,
+  preloadBasedOnNetworkSpeed 
+} from './LazyComponents.jsx'
 
 const Layout = ({ children, activeMenu, setActiveMenu }) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'results', label: '분석 결과', icon: Database },
-    { id: 'summary', label: 'Summary Report', icon: FileText },
-    { id: 'statistics', label: 'Statistics', icon: TrendingUp },
-    { id: 'preference', label: 'Preference', icon: Settings }
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, preload: preloadDashboard },
+    { id: 'results', label: '분석 결과', icon: Database, preload: preloadResultsList },
+    { id: 'summary', label: 'Summary Report', icon: FileText, preload: preloadSummaryReport },
+    { id: 'statistics', label: 'Statistics', icon: TrendingUp, preload: preloadStatistics },
+    { id: 'preference', label: 'Preference', icon: Settings, preload: preloadPreferenceManager },
+    { id: 'llm-analysis', label: 'LLM 분석', icon: Brain, preload: preloadLLMAnalysisManager }
   ]
+
+  // 컴포넌트 마운트 시 네트워크 상태 기반 프리로딩 시작
+  useEffect(() => {
+    preloadBasedOnNetworkSpeed()
+  }, [])
+
+  // 메뉴 호버 시 해당 컴포넌트 프리로딩
+  const handleMenuHover = (item) => {
+    if (item.preload && activeMenu !== item.id) {
+      console.log(`🎯 메뉴 호버 감지 - ${item.label} 프리로딩 시작`)
+      item.preload().catch(error => {
+        console.warn(`⚠️ ${item.label} 프리로딩 실패:`, error)
+      })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -34,6 +59,7 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
                     variant={activeMenu === item.id ? "default" : "ghost"}
                     className="w-full justify-start"
                     onClick={() => setActiveMenu(item.id)}
+                    onMouseEnter={() => handleMenuHover(item)}
                   >
                     <Icon className="mr-2 h-4 w-4" />
                     {item.label}

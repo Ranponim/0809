@@ -10,14 +10,19 @@ python-multipart
 # 데이터베이스
 pymongo
 motor
+psycopg2-binary
 
 # 데이터 분석 및 통계
 pandas
 numpy
 scipy
+matplotlib
 
 # HTTP 요청
 requests
+
+# 성능 모니터링
+psutil
 
 # 테스트 (개발용)
 pytest
