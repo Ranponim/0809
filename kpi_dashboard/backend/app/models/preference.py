@@ -185,6 +185,31 @@ class ComparisonOptions(BaseModel):
     )
 
 
+class DatabaseSettings(BaseModel):
+    """
+    PostgreSQL Database 설정 (LLM/Statistics 공통)
+    """
+    host: str = Field(default="", description="DB Host")
+    port: int = Field(default=5432, description="DB Port")
+    user: str = Field(default="postgres", description="DB User")
+    password: str = Field(default="", description="DB Password")
+    dbname: str = Field(default="postgres", description="Database Name")
+    table: str = Field(default="summary", description="기본 테이블명(분석 파라미터의 테이블명 포함)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "host": "127.0.0.1",
+                "port": 5432,
+                "user": "postgres",
+                "password": "secret",
+                "dbname": "netperf",
+                "table": "summary"
+            }
+        }
+    )
+
+
 class StatisticsSettings(BaseModel):
     """
     통계 분석 설정
@@ -288,6 +313,11 @@ class UserPreferenceBase(BaseModel):
         description="분석 결과 필터 설정",
         alias="analysisFilterSettings"
     )
+    database_settings: DatabaseSettings = Field(
+        default_factory=DatabaseSettings,
+        description="PostgreSQL Database 설정(LLM/Statistics 공통)",
+        alias="databaseSettings"
+    )
     notification_settings: NotificationSettings = Field(
         default_factory=NotificationSettings,
         description="알림 설정",
@@ -344,6 +374,10 @@ class UserPreferenceUpdate(BaseModel):
         None,
         alias="analysisFilterSettings"
     )
+    database_settings: Optional[DatabaseSettings] = Field(
+        None,
+        alias="databaseSettings"
+    )
     notification_settings: Optional[NotificationSettings] = Field(
         None,
         alias="notificationSettings"
@@ -396,6 +430,7 @@ class UserPreferenceImportExport(BaseModel):
     dashboard_settings: DashboardSettings
     statistics_settings: StatisticsSettings
     analysis_filter_settings: AnalysisResultFilterSettings
+    database_settings: DatabaseSettings
     notification_settings: NotificationSettings
     theme: str
     language: str

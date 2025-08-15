@@ -29,16 +29,12 @@ import {
 } from 'lucide-react'
 
 import { triggerLLMAnalysis, getLLMAnalysisResult, testDatabaseConnection } from '@/lib/apiClient'
+import { usePreference } from '@/contexts/PreferenceContext.jsx'
 
 const LLMAnalysisManager = () => {
-  // Database 설정 상태
-  const [dbConfig, setDbConfig] = useState({
-    host: 'localhost',
-    port: 5432,
-    user: 'postgres',
-    password: '',
-    dbname: 'postgres'
-  })
+  // Preference에서 DB 설정 사용 (공통)
+  const { settings } = usePreference()
+  const dbConfig = settings?.databaseSettings || { host: '', port: 5432, user: 'postgres', password: '', dbname: 'postgres', table: 'summary' }
 
   // 분석 파라미터 상태
   const [analysisParams, setAnalysisParams] = useState({
@@ -64,7 +60,7 @@ const LLMAnalysisManager = () => {
   const [currentAnalysis, setCurrentAnalysis] = useState(null)
   const [analysisHistory, setAnalysisHistory] = useState([])
 
-  // Database 연결 테스트
+  // Database 연결 테스트 (Preference 기반)
   const handleTestConnection = async () => {
     if (!dbConfig.host || !dbConfig.password) {
       toast.error('Host와 Password는 필수 입력값입니다.')
@@ -108,7 +104,7 @@ const LLMAnalysisManager = () => {
     try {
       console.log('🚀 LLM 분석 시작:', { dbConfig, analysisParams })
       
-      const result = await triggerLLMAnalysis(dbConfig, analysisParams)
+      const result = await triggerLLMAnalysis(dbConfig, analysisParams, 'default')
       
       console.log('✅ LLM 분석 트리거 성공:', result)
       
@@ -185,14 +181,7 @@ const LLMAnalysisManager = () => {
     }, 600000)
   }
 
-  // 입력 핸들러들
-  const handleDbConfigChange = (field, value) => {
-    setDbConfig(prev => ({
-      ...prev,
-      [field]: value
-    }))
-    setConnectionStatus(null) // 설정 변경 시 연결 상태 초기화
-  }
+  // 입력 핸들러 제거 (DB 설정은 Preference에서 관리)
 
   const handleAnalysisParamChange = (field, value) => {
     setAnalysisParams(prev => ({
@@ -218,7 +207,7 @@ const LLMAnalysisManager = () => {
         </CardContent>
       </Card>
 
-      {/* Database 설정 */}
+      {/* Database 설정은 Preference에서 관리 안내 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -226,93 +215,27 @@ const LLMAnalysisManager = () => {
             Database 설정
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="host">Host</Label>
-              <Input
-                id="host"
-                value={dbConfig.host}
-                onChange={(e) => handleDbConfigChange('host', e.target.value)}
-                placeholder="localhost"
-              />
-            </div>
-            <div>
-              <Label htmlFor="port">Port</Label>
-              <Input
-                id="port"
-                type="number"
-                value={dbConfig.port}
-                onChange={(e) => handleDbConfigChange('port', parseInt(e.target.value))}
-                placeholder="5432"
-              />
-            </div>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Database 설정은 이제 <strong>환경설정 &gt; Database</strong> 탭에서 통합 관리됩니다. 이 화면에서는 Preference에 저장된 설정을 사용합니다.
+          </p>
+          <div className="mt-3 text-sm">
+            <div>Host: <span className="font-mono">{dbConfig.host || '-'}</span></div>
+            <div>Port: <span className="font-mono">{dbConfig.port || '-'}</span></div>
+            <div>User: <span className="font-mono">{dbConfig.user || '-'}</span></div>
+            <div>DB: <span className="font-mono">{dbConfig.dbname || '-'}</span></div>
+            <div>Table: <span className="font-mono">{dbConfig.table || '-'}</span></div>
           </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="user">User</Label>
-              <Input
-                id="user"
-                value={dbConfig.user}
-                onChange={(e) => handleDbConfigChange('user', e.target.value)}
-                placeholder="postgres"
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={dbConfig.password}
-                onChange={(e) => handleDbConfigChange('password', e.target.value)}
-                placeholder="Password"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="dbname">Database Name</Label>
-            <Input
-              id="dbname"
-              value={dbConfig.dbname}
-              onChange={(e) => handleDbConfigChange('dbname', e.target.value)}
-              placeholder="postgres"
-            />
-          </div>
-
-          {/* 연결 상태 표시 */}
-          {connectionStatus && (
-            <Alert variant={connectionStatus.type === 'success' ? 'default' : 'destructive'}>
-              <AlertDescription className="flex items-center gap-2">
-                {connectionStatus.type === 'success' ? (
-                  <CheckCircle className="h-4 w-4" />
-                ) : (
-                  <XCircle className="h-4 w-4" />
-                )}
+          <div className="mt-4">
+            <Button onClick={handleTestConnection} disabled={isConnecting}>
+              {isConnecting ? 'Testing...' : 'Test Connection (Preference 설정 사용)'}
+            </Button>
+            {connectionStatus && (
+              <Badge className="ml-2" variant={connectionStatus.type === 'success' ? 'default' : 'destructive'}>
                 {connectionStatus.message}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Button 
-            onClick={handleTestConnection} 
-            disabled={isConnecting}
-            variant="outline"
-            className="w-full"
-          >
-            {isConnecting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                연결 확인 중...
-              </>
-            ) : (
-              <>
-                <Database className="mr-2 h-4 w-4" />
-                연결 테스트
-              </>
+              </Badge>
             )}
-          </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -325,86 +248,35 @@ const LLMAnalysisManager = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 기간, 테이블명 등 파라미터 입력 */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="n_minus_1">기간 N-1</Label>
-              <Input
-                id="n_minus_1"
-                value={analysisParams.n_minus_1}
-                onChange={(e) => handleAnalysisParamChange('n_minus_1', e.target.value)}
-                placeholder="2025-07-01_00:00~2025-07-01_23:59"
-              />
+              <Label htmlFor="n_minus_1">N-1 기간</Label>
+              <Input id="n_minus_1" value={analysisParams.n_minus_1} onChange={(e) => handleAnalysisParamChange('n_minus_1', e.target.value)} placeholder="YYYY-MM-DD_HH:mm~YYYY-MM-DD_HH:mm" />
             </div>
             <div>
-              <Label htmlFor="n">기간 N</Label>
-              <Input
-                id="n"
-                value={analysisParams.n}
-                onChange={(e) => handleAnalysisParamChange('n', e.target.value)}
-                placeholder="2025-07-02_00:00~2025-07-02_23:59"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="table">테이블명</Label>
-            <Input
-              id="table"
-              value={analysisParams.table}
-              onChange={(e) => handleAnalysisParamChange('table', e.target.value)}
-              placeholder="summary"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="ne">Network Element (선택)</Label>
-              <Input
-                id="ne"
-                value={analysisParams.ne}
-                onChange={(e) => handleAnalysisParamChange('ne', e.target.value)}
-                placeholder="nvgnb#10000"
-              />
+              <Label htmlFor="n">N 기간</Label>
+              <Input id="n" value={analysisParams.n} onChange={(e) => handleAnalysisParamChange('n', e.target.value)} placeholder="YYYY-MM-DD_HH:mm~YYYY-MM-DD_HH:mm" />
             </div>
             <div>
-              <Label htmlFor="cellid">Cell ID (선택)</Label>
-              <Input
-                id="cellid"
-                value={analysisParams.cellid}
-                onChange={(e) => handleAnalysisParamChange('cellid', e.target.value)}
-                placeholder="2010,2011"
-              />
+              <Label htmlFor="table">테이블명</Label>
+              <Input id="table" value={analysisParams.table} onChange={(e) => handleAnalysisParamChange('table', e.target.value)} placeholder="summary" />
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="preference">특정 PEG 분석 (선택)</Label>
-            <Textarea
-              id="preference"
-              value={analysisParams.preference}
-              onChange={(e) => handleAnalysisParamChange('preference', e.target.value)}
-              placeholder="Random_access_preamble_count,Random_access_response"
-              rows={2}
-            />
+          <div className="flex items-center gap-3">
+            <Button onClick={handleStartAnalysis} disabled={isAnalyzing}>
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> 분석 중...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" /> 분석 시작
+                </>
+              )}
+            </Button>
           </div>
-
-          <Button 
-            onClick={handleStartAnalysis} 
-            disabled={isAnalyzing || connectionStatus?.type !== 'success'}
-            className="w-full"
-          >
-            {isAnalyzing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                분석 실행 중...
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                LLM 분석 시작
-              </>
-            )}
-          </Button>
         </CardContent>
       </Card>
 

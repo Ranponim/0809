@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
+import { usePreference } from '@/contexts/PreferenceContext.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -38,9 +39,9 @@ const Statistics = () => {
   })
   
   const [chartData, setChartData] = useState([])
-  const [dbConfig, setDbConfig] = useState({
-    host: '', port: 5432, user: '', password: '', dbname: '', table: 'summary'
-  })
+  // Preference의 공통 DB 설정 사용
+  const { settings } = usePreference()
+  const dbConfig = settings?.databaseSettings || { host: '', port: 5432, user: '', password: '', dbname: '', table: 'summary' }
   const [dbTestResult, setDbTestResult] = useState({ status: 'idle', message: '' })
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [dataSource, setDataSource] = useState('')
@@ -82,16 +83,6 @@ const Statistics = () => {
   }, [defaultDateRange, defaultNe, defaultCellId])
 
   useEffect(() => {
-    // DB 설정 로컬 저장소에서 로드
-    try {
-      const rawDb = localStorage.getItem('dbConfig')
-      if (rawDb) {
-        const parsed = JSON.parse(rawDb)
-        setDbConfig(prev => ({ ...prev, ...parsed }))
-        console.info('[Statistics] Loaded dbConfig from localStorage')
-      }
-    } catch {}
-    
     const fetchMasterData = async () => {
       try {
         console.info('[Statistics] Fetching master PEGs/Cells')
@@ -306,51 +297,7 @@ const Statistics = () => {
           <Badge variant="secondary">비교 옵션</Badge>
         )}
       </div>
-      {/* DB 설정 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Database Settings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="host">Host</Label>
-              <Input id="host" value={dbConfig.host} onChange={(e)=>setDbConfig(prev=>({...prev, host: e.target.value}))} placeholder="127.0.0.1" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="port">Port</Label>
-              <Input id="port" type="number" value={dbConfig.port} onChange={(e)=>setDbConfig(prev=>({...prev, port: Number(e.target.value||5432)}))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="user">User</Label>
-              <Input id="user" value={dbConfig.user} onChange={(e)=>setDbConfig(prev=>({...prev, user: e.target.value}))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={dbConfig.password} onChange={(e)=>setDbConfig(prev=>({...prev, password: e.target.value}))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dbname">DB Name</Label>
-              <Input id="dbname" value={dbConfig.dbname} onChange={(e)=>setDbConfig(prev=>({...prev, dbname: e.target.value}))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="table">Table</Label>
-              <Input id="table" value={dbConfig.table} onChange={(e)=>setDbConfig(prev=>({...prev, table: e.target.value}))} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <Button variant="secondary" onClick={handleSaveDbConfig}>Save Settings</Button>
-            <Button onClick={handleTestConnection} disabled={dbTestResult.status === 'testing'}>
-              {dbTestResult.status === 'testing' ? 'Testing...' : 'Test Connection'}
-            </Button>
-            <div className="text-sm text-gray-500">
-              {lastSavedAt ? `Saved: ${lastSavedAt}` : 'Not saved yet'}
-              {dbTestResult.status === 'ok' && ' · DB: OK'}
-              {dbTestResult.status === 'fail' && ` · DB: FAIL (${dbTestResult.message})`}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Database 설정 UI 제거: Preference > Database에서 관리합니다. */}
       
       <Tabs defaultValue="basic" className="w-full">
         <TabsList className="grid w-full grid-cols-2">

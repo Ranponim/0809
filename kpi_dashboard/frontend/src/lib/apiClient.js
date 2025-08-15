@@ -29,10 +29,11 @@ export default apiClient
  * @param {Object} analysisParams - 분석 파라미터
  * @returns {Promise} 분석 요청 응답
  */
-export const triggerLLMAnalysis = async (dbConfig, analysisParams) => {
+export const triggerLLMAnalysis = async (dbConfig, analysisParams, userId = 'default') => {
   console.log('🤖 LLM 분석 요청 시작:', { dbConfig: { ...dbConfig, password: '[HIDDEN]' }, analysisParams })
   
   const response = await apiClient.post('/api/analysis/trigger-llm-analysis', {
+    user_id: userId,
     db_config: dbConfig,
     ...analysisParams
   })

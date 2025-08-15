@@ -38,6 +38,14 @@ const defaultSettings = {
     decimalPlaces: 2,
     autoAnalysis: false
   },
+  databaseSettings: {
+    host: '',
+    port: 5432,
+    user: 'postgres',
+    password: '',
+    dbname: 'postgres',
+    table: 'summary'
+  },
   notificationSettings: {
     enableToasts: true,
     enableSounds: false,

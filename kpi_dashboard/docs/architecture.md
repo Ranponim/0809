@@ -6,18 +6,19 @@ graph LR
   A["User Browser"] --> B["Frontend (React + Vite)"]
   B --> C["API Client (axios)"]
   C --> D["Backend (FastAPI)"]
-  D --> E[("DB (Persistence): MongoDB")]
+  D --> E(("MongoDB: Persistence"))
   subgraph Analysis
-    F["MCP Server: analysis_llm.py"]
+    F["MCP Server: analysis_llm.py (optional)"]
     G["LLM Endpoints (vLLM)"]
   end
-  F -- "POST /api/analysis-result" --> D
+  F -- "HTTP POST (analyze)" --> D
   F -- "Read/Write Files" --> H["HTML Reports"]
   F -- "Call" --> G
 ```
 
-- Persistence DB: 분석결과/환경설정 영구 저장(필수). 환경변수 `MONGO_URL`, `MONGO_DB_NAME`
-- Query DB: 통계 조회 대상(선택). 현 버전에서는 `/api/kpi/query`가 mock 생성기를 사용하며, 추후 실제 프록시 통합 가능
+- Persistence DB: 분석결과/환경설정 영구 저장. `MONGO_URL`, `MONGO_DB_NAME`
+- Preference: `user_preferences.database_settings`에 PostgreSQL 설정(host/port/user/password/dbname/table)
+- LLM 호출: `MCP_ANALYZER_URL` 설정 시 실제 호출, 미설정/실패 시 Mock 폴백
 
 ## KPI Data Flow (Dashboard/Statistics)
 ```mermaid
@@ -25,36 +26,39 @@ sequenceDiagram
   participant U as "User"
   participant FE as "Frontend (React)"
   participant BE as "Backend (FastAPI)"
-  participant DB as "Query DB (PostgreSQL)"
+  participant DB as "Query DB (PostgreSQL via Preference)"
 
   U->>FE: Select KPIs / Date Range / NE / CellID
-  FE->>BE: POST /api/kpi/query (per KPI, with kpi_peg_names/like, ne/cellid)
-  BE->>DB: Aggregate by hour (or generate mock on failure)
-  DB-->>BE: Rows
-  BE-->>FE: { data: KPIData[], source }
-  FE->>U: Render per-KPI averaged time-series
+  FE->>BE: POST /api/statistics/compare
+  BE->>DB: Query by Preference.database_settings
+  DB-->>BE: Rows/Aggregations
+  BE-->>FE: { data, summary }
+  FE->>U: Render comparisons
 ```
 
-## Analysis Flow (N-1 vs N)
+## LLM Analysis Flow (N-1 vs N)
 ```mermaid
 sequenceDiagram
-  participant Tool as "MCP Tool (analysis_llm.py)"
-  participant DB as "Query DB (PostgreSQL)"
-  participant LLM as "vLLM API"
-  participant HTML as "HTML Reports"
+  participant FE as "Frontend"
   participant BE as "FastAPI"
+  participant Pref as "Preference.database_settings"
+  participant MCP as "MCP Analyzer"
+  participant MDB as "MongoDB"
 
-  Tool->>DB: Fetch averages (N-1 / N)
-  Tool->>Tool: Merge + diff/pct_change + charts
-  Tool->>LLM: Prompt with processed table
-  LLM-->>Tool: JSON analysis
-  Tool->>HTML: Generate multi-tab report
-  Tool->>BE: POST /api/analysis-result (JSON)
+  FE->>BE: POST /api/analysis/trigger-llm-analysis { user_id, n_minus_1, n }
+  BE->>Pref: Load DB config by user_id (merge with request if provided)
+  alt MCP URL set & reachable
+    BE->>MCP: HTTP analyze with effective DB config
+    MCP-->>BE: JSON analysis
+  else Mock fallback
+    BE->>BE: Generate mock result
+  end
+  BE->>MDB: Save analysis_results
+  FE->>BE: GET /api/analysis/llm-analysis/{id}
+  BE-->>FE: Analysis result (includes source_metadata)
 ```
 
-## Key Endpoints
-- POST `/api/kpi/query`: 시간 단위 평균(mock). 필터 파라미터 수집만 수행
-- POST `/api/kpi/statistics/batch`: 다중 KPI mock
-- POST `/api/db/ping`: DB 연결 테스트
-- POST `/api/master/ne-list`, `/api/master/cellid-list`: 자동완성용 DISTINCT 조회
-- Preferences: `GET/POST/PUT/DELETE /api/preferences`, `GET/PUT /api/preferences/{id}/derived-pegs`
+## Key Endpoints (excerpt)
+- POST `/api/analysis/trigger-llm-analysis`: Preference 기반 DB 설정 자동 주입, MCP 우선/Mock 폴백
+- GET `/api/analysis/llm-analysis/{id}`: 단건 결과 조회
+- Preferences: `GET/PUT /api/preference/settings?user_id=...` (databaseSettings 포함)

@@ -660,7 +660,7 @@ const ResultDetail = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-4xl ${isFullscreen ? 'max-w-4xl h-[90vh] w-full' : 'max-h-[80vh] w-full'}`}>
+      <DialogContent className={`${isFullscreen ? 'max-w-7xl h-[92vh] w-[95vw]' : 'max-w-6xl max-h-[85vh] w-[90vw]'}`}>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -673,7 +673,7 @@ const ResultDetail = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                title={isFullscreen ? "원래 크기로" : "세로로 확대"}
+                title={isFullscreen ? "원래 크기로" : "최대화"}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
@@ -682,7 +682,7 @@ const ResultDetail = ({
           </div>
         </DialogHeader>
 
-        <ScrollArea className={isFullscreen ? 'h-full' : 'max-h-[60vh]'}>
+        <ScrollArea className={isFullscreen ? 'h-full' : 'max-h-[70vh]'}>
           <div className="px-1">
             {renderContent()}
           </div>

@@ -200,6 +200,16 @@ const PreferenceManager = () => {
     }
   ]
 
+  // Database Settings 필드 정의 (LLM/Statistics 공통)
+  const databaseFields = [
+    { key: 'host', label: 'Host', type: 'text', placeholder: '예: 127.0.0.1' },
+    { key: 'port', label: 'Port', type: 'number', min: 1, max: 65535, placeholder: '5432' },
+    { key: 'user', label: 'User', type: 'text', placeholder: 'postgres' },
+    { key: 'password', label: 'Password', type: 'text', placeholder: '비밀번호' },
+    { key: 'dbname', label: 'DB Name', type: 'text', placeholder: 'postgres' },
+    { key: 'table', label: '기본 테이블명', type: 'text', placeholder: 'summary' }
+  ]
+
   // Notification Settings 필드 정의
   const notificationFields = [
     {
@@ -286,7 +296,7 @@ const PreferenceManager = () => {
 
       {/* 설정 탭 */}
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="dashboard" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             Dashboard
@@ -294,6 +304,10 @@ const PreferenceManager = () => {
           <TabsTrigger value="statistics" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
             Statistics
+          </TabsTrigger>
+          <TabsTrigger value="database" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Database
           </TabsTrigger>
           <TabsTrigger value="derived-peg" className="flex items-center gap-2">
             <Calculator className="h-4 w-4" />
@@ -429,6 +443,18 @@ const PreferenceManager = () => {
             description="Statistics 페이지의 기본값, 소수점 자릿수, 비교 옵션 등을 설정합니다"
             settingKey="statisticsSettings"
             fields={statisticsFields}
+            defaultOpen={true}
+            showResetButton={true}
+            showSaveButton={false}
+          />
+        </TabsContent>
+
+        <TabsContent value="database" className="space-y-6">
+          <SettingBox
+            title="Database 설정"
+            description="LLM 분석과 Statistics에서 공통으로 사용할 PostgreSQL DB 설정입니다 (테이블명 포함)."
+            settingKey="databaseSettings"
+            fields={databaseFields}
             defaultOpen={true}
             showResetButton={true}
             showSaveButton={false}
