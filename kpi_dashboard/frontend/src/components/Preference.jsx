@@ -32,10 +32,65 @@ const Preference = () => {
   const fetchPreferences = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get('/api/preferences')
-      setPreferences(response.data.preferences || [])
+      // 새로운 API 엔드포인트 사용
+      const response = await apiClient.get('/api/preference/settings', {
+        params: { user_id: 'default' }
+      })
+      
+      // 응답 구조에 맞게 데이터 변환
+      if (response.data?.data) {
+        const userPreference = response.data.data
+        const preferences = [{
+          id: userPreference.id || 'default',
+          name: 'Default Settings',
+          description: 'Default user preferences',
+          config: {
+            dashboardSettings: userPreference.dashboard_settings,
+            statisticsSettings: userPreference.statistics_settings,
+            notificationSettings: userPreference.notification_settings,
+            theme: userPreference.theme,
+            language: userPreference.language
+          }
+        }]
+        setPreferences(preferences)
+        
+        // 자동으로 첫 번째(유일한) preference 선택
+        if (preferences.length > 0) {
+          setSelectedPreference(preferences[0])
+        }
+      }
     } catch (error) {
       console.error('Error fetching preferences:', error)
+      // 기본 설정으로 폴백
+      const defaultPreferences = [{
+        id: 'default',
+        name: 'Default Settings',
+        description: 'Default user preferences',
+        config: {
+          dashboardSettings: {
+            selected_pegs: [],
+            selected_nes: [],
+            selected_cell_ids: [],
+            auto_refresh: true,
+            refresh_interval: 30
+          },
+          statisticsSettings: {
+            date_range_1: {},
+            date_range_2: {},
+            comparison_options: {
+              show_delta: true,
+              show_rsd: true,
+              show_percentage: true,
+              decimal_places: 2,
+              chart_type: 'bar'
+            }
+          },
+          theme: 'light',
+          language: 'ko'
+        }
+      }]
+      setPreferences(defaultPreferences)
+      setSelectedPreference(defaultPreferences[0])
     } finally {
       setLoading(false)
     }
@@ -388,16 +443,23 @@ const Preference = () => {
                       onClick={async () => {
                         try {
                           if (!selectedPreference) return
-                          await apiClient.put(`/api/preferences/${selectedPreference.id}`, {
-                            name: selectedPreference.name,
-                            description: selectedPreference.description,
-                            config: selectedPreference.config || {}
+                          
+                          // 새로운 API 형식에 맞게 데이터 변환
+                          const updateData = {
+                            dashboard_settings: selectedPreference.config?.dashboardSettings || {},
+                            statistics_settings: selectedPreference.config?.statisticsSettings || {},
+                            notification_settings: selectedPreference.config?.notificationSettings || {},
+                            theme: selectedPreference.config?.theme || 'light',
+                            language: selectedPreference.config?.language || 'ko'
+                          }
+                          
+                          await apiClient.put('/api/preference/settings', updateData, {
+                            params: { user_id: 'default' }
                           })
                           toast.success('Preference saved')
-                          // 목록 갱신 및 선택 유지
+                          
+                          // 목록 갱신
                           await fetchPreferences()
-                          const updated = (preferences || []).find(p => p.id === selectedPreference.id)
-                          if (updated) setSelectedPreference(updated)
                         } catch (e) {
                           console.error('Failed to save preference', e)
                           toast.error('Save failed')

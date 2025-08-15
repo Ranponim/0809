@@ -1,0 +1,133 @@
+{
+	"meta": {
+		"generatedAt": "2025-08-14T19:55:50.282Z",
+		"tasksAnalyzed": 15,
+		"totalTasks": 15,
+		"analysisCount": 15,
+		"thresholdScore": 5,
+		"projectName": "Taskmaster",
+		"usedResearch": true
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 39,
+			"taskTitle": "Backend: LLM 분석 결과 API 및 DB 스키마 구현",
+			"complexityScore": 4,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Backend: LLM 분석 결과 API 및 DB 스키마 구현' into 4 detailed subtasks. The subtasks should cover: 1. Defining the MongoDB schema and Pydantic models for 'analysis_results'. 2. Implementing the POST and GET (list) endpoints in FastAPI. 3. Implementing the GET (detail by ID) and DELETE endpoints. 4. Writing unit and integration tests for all CRUD operations.",
+			"reasoning": "This is a standard backend CRUD implementation. The complexity is moderate because it involves setting up a database schema and four distinct API endpoints, but the logic for each follows well-established REST patterns."
+		},
+		{
+			"taskId": 40,
+			"taskTitle": "Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down the task 'Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발' into 4 actionable subtasks. These should include: 1. Creating the `useAnalysisResults.js` custom hook for data fetching logic. 2. Building the static `ResultsList.jsx` table component with Tailwind CSS. 3. Integrating the hook with the component to handle and display data, including loading and error states. 4. Writing unit tests for the component using mock data.",
+			"reasoning": "This task combines UI development, asynchronous data fetching, state management (loading/error), and logic encapsulation into a custom hook. The interaction between these parts makes it moderately complex."
+		},
+		{
+			"taskId": 41,
+			"taskTitle": "Frontend: LLM 분석 결과 필터링 기능 구현",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Frontend: LLM 분석 결과 필터링 기능 구현' into 4 specific subtasks. These should cover: 1. Creating the `ResultFilter.jsx` UI component with date pickers and text inputs. 2. Managing the local state of the filter inputs. 3. Modifying the `useAnalysisResults.js` hook to accept filter state as arguments and construct API query parameters. 4. Integrating the filter component to trigger API re-fetching when filter values change.",
+			"reasoning": "This task adds significant state management complexity. It requires modifying a shared custom hook, handling multiple user inputs, and ensuring the UI updates reactively, which is more complex than a simple data display."
+		},
+		{
+			"taskId": 42,
+			"taskTitle": "Backend: Preference 시스템 API 및 DB 스키마 구현",
+			"complexityScore": 3,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down the task 'Backend: Preference 시스템 API 및 DB 스키마 구현' into 3 subtasks. The subtasks should cover: 1. Defining the MongoDB schema and Pydantic model for 'user_preferences'. 2. Implementing the GET and PUT API endpoints in FastAPI for retrieving and updating settings. 3. Writing API tests to validate the get and update operations.",
+			"reasoning": "This is a straightforward backend task involving a simple data model and two standard REST API endpoints (GET and PUT). The complexity is low as it doesn't involve complex business logic or relationships."
+		},
+		{
+			"taskId": 43,
+			"taskTitle": "Frontend: Preference 관리 UI 컴포넌트 개발",
+			"complexityScore": 6,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Frontend: Preference 관리 UI 컴포넌트 개발' into 4 detailed subtasks. The breakdown should include: 1. Setting up a global state store (Zustand or Context) for preferences. 2. Creating a `usePreference.js` custom hook with debounced update logic for API calls. 3. Building the `PreferenceManager.jsx` and `SettingBox.jsx` UI components. 4. Integrating the UI components to read from and write to the global state.",
+			"reasoning": "The task requires implementing a robust feature with global state management, asynchronous API calls, and performance considerations like debouncing. Coordinating these elements effectively presents a moderate level of complexity."
+		},
+		{
+			"taskId": 44,
+			"taskTitle": "Backend/Frontend: Preference JSON Import/Export 기능 구현",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down the full-stack task 'Preference JSON Import/Export 기능 구현' into 5 subtasks. Clearly separate backend and frontend work: 1. Backend: Implement the `/api/preference/export` GET endpoint. 2. Backend: Implement the `/api/preference/import` POST endpoint with JSON validation. 3. Frontend: Implement the export button and file download logic. 4. Frontend: Implement the import UI with file upload and API call logic. 5. Frontend: Handle the import response to update global state and provide user feedback.",
+			"reasoning": "This is a full-stack feature involving both backend API development and frontend UI/logic. Frontend file handling (upload/download) and backend validation of the imported JSON add layers of complexity beyond standard CRUD."
+		},
+		{
+			"taskId": 45,
+			"taskTitle": "Frontend: Dashboard 레이아웃 및 Preference 연동 구현",
+			"complexityScore": 4,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Frontend: Dashboard 레이아웃 및 Preference 연동 구현' into 4 subtasks. The subtasks should cover: 1. Setting up the main `Dashboard.jsx` component structure. 2. Implementing the split-pane layout using a library like `react-split-pane`. 3. Fetching user preferences on component mount using the `usePreference` hook. 4. Passing the fetched preference data as initial values to child selector components.",
+			"reasoning": "The task focuses on UI composition and data integration rather than complex logic. While it involves integrating with a global state hook, the core work of implementing the layout and passing props is a standard and moderately simple frontend task."
+		},
+		{
+			"taskId": 46,
+			"taskTitle": "Backend: Statistics 비교 분석 API 구현",
+			"complexityScore": 7,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down the task 'Backend: Statistics 비교 분석 API 구현' into 5 detailed subtasks. These should cover: 1. Defining the API request/response Pydantic models. 2. Implementing the MongoDB aggregation query to fetch data for two date ranges. 3. Implementing the core analysis logic using Pandas to calculate mean, delta, and RSD. 4. Creating the FastAPI endpoint that integrates the query and calculation logic. 5. Writing unit tests for the calculation logic with various data scenarios.",
+			"reasoning": "This task involves significant business logic beyond simple data retrieval. It requires data aggregation, manipulation with a library like Pandas, and performing specific statistical calculations. The complexity lies in the correctness of the algorithm and handling edge cases."
+		},
+		{
+			"taskId": 47,
+			"taskTitle": "Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현",
+			"complexityScore": 4,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현' into 4 subtasks. The breakdown should include: 1. Building the `BasicComparison.jsx` UI with two date range selectors and a button. 2. Managing the state of the selected date ranges. 3. Implementing the function to call the `/api/statistics/compare` API on button click. 4. Handling the API response by updating the component's state, including loading and error states.",
+			"reasoning": "This is a typical frontend task of building a form to trigger an API call. The complexity is moderate, involving UI construction, local state management for the form inputs, and handling an asynchronous API request."
+		},
+		{
+			"taskId": 48,
+			"taskTitle": "Frontend: Statistics 비교 결과 시각화 구현",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down the task 'Frontend: Statistics 비교 결과 시각화 구현' into 4 subtasks. These should cover: 1. Setting up a charting library like Recharts or Chart.js. 2. Creating a reusable `ComparisonChart.jsx` component. 3. Writing the logic to transform the API response data into the structure required by the chart library. 4. Configuring the chart's visual elements like axes, tooltips, legends, and colors.",
+			"reasoning": "While using a library simplifies charting, there is moderate complexity in data transformation and configuration. Ensuring the chart is responsive, accessible, and correctly displays various data shapes requires careful implementation."
+		},
+		{
+			"taskId": 49,
+			"taskTitle": "Frontend: Statistics 분석 결과 저장 및 Dashboard 연동",
+			"complexityScore": 7,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Expand the task 'Frontend: Statistics 분석 결과 저장 및 Dashboard 연동' into 5 subtasks. These should cover: 1. Adding checkboxes to the statistics results table UI. 2. Managing the state of the selected items. 3. Implementing the 'Save to Dashboard' button and its API call to update preferences. 4. Ensuring the global preference state is correctly updated upon a successful API response. 5. Verifying that the Dashboard component automatically reflects the new preferences.",
+			"reasoning": "The complexity is high due to the tight integration between multiple application features (Statistics, Preferences, Dashboard). It requires careful state management to ensure that a change in one part of the app is correctly persisted and reflected in another."
+		},
+		{
+			"taskId": 50,
+			"taskTitle": "Full Stack: 전체 시스템 통합 테스트 및 E2E 테스트 케이스 작성",
+			"complexityScore": 8,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down the task 'Full Stack: 전체 시스템 통합 테스트 및 E2E 테스트 케이스 작성' into 5 actionable subtasks. The breakdown should include: 1. Defining 3-5 critical user journey test cases. 2. Setting up and configuring an E2E testing framework like Cypress or Playwright. 3. Scripting the primary user flow test (e.g., preference -> statistics -> dashboard). 4. Scripting tests for secondary features (e.g., LLM result filtering). 5. Integrating the E2E test suite into a CI pipeline.",
+			"reasoning": "This task has high complexity because it spans the entire application and requires specialized tools. Writing reliable E2E tests that mimic user behavior and handle asynchronous operations is challenging. Setting up the testing infrastructure adds another layer of work."
+		},
+		{
+			"taskId": 51,
+			"taskTitle": "Optimization: API 응답 시간 및 프론트엔드 렌더링 성능 최적화",
+			"complexityScore": 8,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Expand the task 'Optimization: API 응답 시간 및 프론트엔드 렌더링 성능 최적화' into 5 subtasks. These should cover: 1. Establishing performance baselines using Lighthouse, Web Vitals, and API load testing. 2. Profiling the backend to identify and add indexes to slow MongoDB queries. 3. Profiling the frontend with React Profiler to identify and memoize components causing re-renders. 4. Implementing structural optimizations like code splitting and bundle analysis. 5. Re-measuring performance to validate and document improvements.",
+			"reasoning": "Optimization is a high-complexity task because it is investigative. It requires specialized tools to diagnose bottlenecks and a deep understanding of both backend and frontend performance patterns. The solutions are often not obvious and require experimentation."
+		},
+		{
+			"taskId": 52,
+			"taskTitle": "Frontend: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break down the task 'Frontend: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현' into 5 subtasks. These should cover: 1. Implementing the single-item detail view within a modal component. 2. Adding multi-select functionality (e.g., checkboxes) to the results list. 3. Managing the state of selected items for comparison. 4. Creating a new component or view for side-by-side comparison. 5. Fetching and rendering the data for both the detail and comparison views.",
+			"reasoning": "The task involves creating multiple new UI states and components (a modal for detail, a new view for comparison). Managing the state for multi-selection and designing an effective comparison layout adds moderate complexity."
+		},
+		{
+			"taskId": 53,
+			"taskTitle": "Documentation: 컴포넌트 및 API 문서화",
+			"complexityScore": 4,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Expand the task 'Documentation: 컴포넌트 및 API 문서화' into 4 subtasks. These should cover: 1. Setting up and configuring Storybook for the frontend project. 2. Creating stories for at least 5 key reusable UI components with controls for props. 3. Reviewing and augmenting the auto-generated FastAPI documentation (Swagger UI) with detailed descriptions and examples. 4. Performing a peer review of all documentation for clarity and accuracy.",
+			"reasoning": "While not technically difficult, creating good documentation requires significant effort and attention to detail. Setting up tools like Storybook involves configuration, and writing clear, useful documentation for both components and APIs is a moderately complex task."
+		}
+	]
+}

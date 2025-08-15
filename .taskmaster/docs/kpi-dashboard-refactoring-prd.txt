@@ -1,0 +1,215 @@
+# KPI 대시보드 프론트엔드 리팩토링 PRD
+
+## 프로젝트 개요
+기존 KPI 대시보드의 프론트엔드, 백엔드, NoSQL DB 간의 상호작용을 사용자 중심의 UI/UX 관점에서 리팩토링하여 사용자 의도에 맞는 직관적이고 효율적인 시스템을 구축합니다.
+
+## 목표
+- 사용자 중심의 직관적인 UI/UX 구현
+- 프론트엔드, 백엔드, DB 간의 효율적인 통신 구조 개선
+- LLM 분석 결과의 체계적인 관리 및 조회 시스템 구축
+- 사용자 설정(Preference)의 완전한 CRUD 기능 구현
+- 통계 분석 및 시각화 기능 강화
+
+## 핵심 기능 요구사항
+
+### 1. LLM 분석 결과 관리 시스템
+
+#### 1.1 결과 저장 및 관리
+- **기능**: LLM 분석 결과를 체계적으로 저장하고 관리
+- **요구사항**:
+  - 분석 결과에 날짜, 시험된 NE, Cell ID 정보를 명확히 표기
+  - 결과 간 구분이 용이하도록 구조화된 저장 시스템
+  - 검색 및 필터링 기능 제공
+- **기술적 요구사항**:
+  - NoSQL DB에 메타데이터와 함께 저장
+  - 프론트엔드에서 결과 목록을 테이블 형태로 표시
+  - 각 결과 항목에 고유 식별자 부여
+
+#### 1.2 결과 조회 및 표시
+- **기능**: 저장된 분석 결과를 효율적으로 조회하고 표시
+- **요구사항**:
+  - 날짜별, NE별, Cell ID별 필터링 기능
+  - 결과 미리보기 및 상세 보기 기능
+  - 결과 비교 기능
+- **UI/UX 요구사항**:
+  - 직관적인 테이블 형태의 결과 목록
+  - 필터 옵션을 상단에 배치
+  - 결과 선택 시 상세 정보 표시
+
+### 2. Preference 시스템 개선
+
+#### 2.1 설정 관리 기능
+- **기능**: 사용자 설정의 완전한 CRUD 기능
+- **요구사항**:
+  - 각 설정 박스별 수정 및 저장 기능
+  - JSON 형태의 설정 import/export 기능
+  - 설정 변경 시 실시간 저장
+- **기술적 요구사항**:
+  - 프론트엔드에서 설정 변경 시 백엔드 API 호출
+  - 백엔드에서 NoSQL DB에 설정 저장
+  - 설정 변경 시 프론트엔드에 즉시 반영
+
+#### 2.2 Dashboard 설정 연동
+- **기능**: Preference의 설정을 Dashboard에 반영
+- **요구사항**:
+  - 저장된 JSON 설정을 기반으로 Dashboard PEG 출력
+  - 저장된 NE, Cell ID를 Statistics에서 기본값으로 제공
+  - PEG와 NE, Cell ID를 좌우 분할하여 선택 가능
+- **UI/UX 요구사항**:
+  - 좌측: PEG 선택 영역
+  - 우측: NE, Cell ID 선택 영역
+  - 선택된 항목들의 시각적 피드백
+  - 설정 변경 시 Dashboard 즉시 업데이트
+
+### 3. Statistics 시스템 강화
+
+#### 3.1 Basic 탭 개선
+- **기능**: 두 날짜 구간의 비교 분석
+- **요구사항**:
+  - 날짜 구간 1, 날짜 구간 2 지정 기능
+  - 두 구간의 평균값, delta, RSD 비교 분석
+  - 비교 결과의 시각화 옵션 제공
+- **기술적 요구사항**:
+  - 프론트엔드에서 날짜 선택 UI 제공
+  - 백엔드에서 두 구간 데이터 비교 로직 구현
+  - 차트 라이브러리를 활용한 시각화
+
+#### 3.2 결과 저장 및 Dashboard 연동
+- **기능**: Statistics 결과를 Preference에 저장하고 Dashboard에 반영
+- **요구사항**:
+  - 체크박스로 원하는 PEG 선택
+  - Save 버튼으로 Preference의 Dashboard JSON에 반영
+  - 저장된 PEG가 Dashboard에 즉시 표시
+- **UI/UX 요구사항**:
+  - 체크박스 선택 시 시각적 피드백
+  - Save 버튼 클릭 시 성공 메시지 표시
+  - Dashboard로 자동 이동 또는 새로고침
+
+## 기술적 아키텍처
+
+### 프론트엔드 구조
+```
+src/
+├── components/
+│   ├── AnalysisResults/
+│   │   ├── ResultsList.jsx
+│   │   ├── ResultDetail.jsx
+│   │   └── ResultFilter.jsx
+│   ├── Preference/
+│   │   ├── PreferenceManager.jsx
+│   │   ├── ImportExport.jsx
+│   │   └── SettingBox.jsx
+│   ├── Statistics/
+│   │   ├── BasicComparison.jsx
+│   │   ├── DateRangeSelector.jsx
+│   │   └── ComparisonChart.jsx
+│   └── Dashboard/
+│       ├── Dashboard.jsx
+│       ├── PEGSelector.jsx
+│       └── NECellSelector.jsx
+├── hooks/
+│   ├── useAnalysisResults.js
+│   ├── usePreference.js
+│   └── useStatistics.js
+├── services/
+│   ├── analysisService.js
+│   ├── preferenceService.js
+│   └── statisticsService.js
+└── utils/
+    ├── dateUtils.js
+    ├── filterUtils.js
+    └── chartUtils.js
+```
+
+### 백엔드 API 구조
+```
+/api/
+├── analysis/
+│   ├── GET /results - 분석 결과 목록 조회
+│   ├── GET /results/:id - 특정 결과 상세 조회
+│   ├── POST /results - 분석 결과 저장
+│   └── DELETE /results/:id - 분석 결과 삭제
+├── preference/
+│   ├── GET /settings - 사용자 설정 조회
+│   ├── PUT /settings - 사용자 설정 업데이트
+│   ├── POST /import - 설정 import
+│   └── GET /export - 설정 export
+└── statistics/
+    ├── POST /compare - 두 구간 비교 분석
+    ├── GET /dashboard-data - Dashboard용 데이터 조회
+    └── POST /save-selection - 선택된 PEG 저장
+```
+
+### 데이터베이스 스키마
+```javascript
+// 분석 결과 컬렉션
+{
+  _id: ObjectId,
+  analysisDate: Date,
+  neId: String,
+  cellId: String,
+  analysisType: String,
+  results: Object,
+  metadata: {
+    createdAt: Date,
+    updatedAt: Date,
+    createdBy: String
+  }
+}
+
+// 사용자 설정 컬렉션
+{
+  _id: ObjectId,
+  userId: String,
+  dashboardSettings: {
+    selectedPEGs: Array,
+    selectedNEs: Array,
+    selectedCellIds: Array
+  },
+  statisticsSettings: {
+    dateRange1: Object,
+    dateRange2: Object,
+    comparisonOptions: Object
+  },
+  metadata: {
+    createdAt: Date,
+    updatedAt: Date
+  }
+}
+```
+
+## 구현 우선순위
+
+### Phase 1: 기본 구조 및 LLM 분석 결과 관리
+1. 분석 결과 저장 및 조회 시스템 구현
+2. 결과 목록 UI 구현
+3. 필터링 및 검색 기능 구현
+
+### Phase 2: Preference 시스템
+1. 설정 관리 CRUD 기능 구현
+2. Import/Export 기능 구현
+3. Dashboard 연동 기능 구현
+
+### Phase 3: Statistics 시스템
+1. Basic 탭 개선 및 비교 분석 기능
+2. 시각화 옵션 구현
+3. Dashboard 연동 및 저장 기능
+
+### Phase 4: 통합 및 최적화
+1. 전체 시스템 통합 테스트
+2. 성능 최적화
+3. 사용자 피드백 반영
+
+## 성공 지표
+- 사용자가 원하는 분석 결과를 3클릭 이내에 찾을 수 있음
+- Preference 설정 변경이 Dashboard에 1초 이내 반영됨
+- Statistics 비교 분석 결과가 5초 이내 생성됨
+- 전체 시스템 응답 시간이 2초 이내 유지됨
+
+## 기술 스택
+- **프론트엔드**: React, Vite, Tailwind CSS, Chart.js
+- **백엔드**: Python FastAPI
+- **데이터베이스**: MongoDB (NoSQL)
+- **상태 관리**: React Context API 또는 Zustand
+- **HTTP 클라이언트**: Axios
+- **차트 라이브러리**: Chart.js 또는 Recharts

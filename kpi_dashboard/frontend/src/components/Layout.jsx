@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { BarChart3, FileText, Settings, TrendingUp } from 'lucide-react'
+import { BarChart3, FileText, Settings, TrendingUp, Database } from 'lucide-react'
 
 const Layout = ({ children, activeMenu, setActiveMenu }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'results', label: '분석 결과', icon: Database },
     { id: 'summary', label: 'Summary Report', icon: FileText },
     { id: 'statistics', label: 'Statistics', icon: TrendingUp },
     { id: 'preference', label: 'Preference', icon: Settings }

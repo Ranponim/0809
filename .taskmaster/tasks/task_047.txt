@@ -1,0 +1,11 @@
+# Task ID: 47
+# Title: Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현
+# Status: pending
+# Dependencies: 46
+# Priority: medium
+# Description: 사용자가 두 날짜 구간을 선택하고 비교 분석을 실행할 수 있는 `BasicComparison.jsx` 컴포넌트를 개발합니다.
+# Details:
+두 개의 `DateRangeSelector.jsx` 컴포넌트와 '분석 실행' 버튼을 포함한 UI를 구현합니다. 버튼 클릭 시 선택된 날짜 구간 정보를 `/api/statistics/compare` API로 전송하고, 반환된 결과를 상태에 저장합니다.
+
+# Test Strategy:
+날짜 선택 UI가 정상적으로 동작하는지 확인합니다. '분석 실행' 버튼 클릭 시 올바른 페이로드로 API가 호출되는지 네트워크 탭에서 검증합니다. API 응답 데이터가 컴포넌트 상태에 올바르게 저장되는지 React DevTools로 확인합니다.

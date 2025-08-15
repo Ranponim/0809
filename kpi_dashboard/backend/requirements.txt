@@ -1,9 +1,25 @@
 
+# FastAPI 및 웹 프레임워크
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
+pydantic-settings
 python-dotenv
-requests
-pymongo
+python-multipart
 
+# 데이터베이스
+pymongo
+motor
+
+# 데이터 분석 및 통계
+pandas
+numpy
+scipy
+
+# HTTP 요청
+requests
+
+# 테스트 (개발용)
+pytest
+pytest-asyncio
 

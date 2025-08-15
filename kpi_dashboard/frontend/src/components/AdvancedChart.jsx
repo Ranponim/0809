@@ -37,6 +37,7 @@ const AdvancedChart = () => {
 
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(false)
+  const [pegOptionsLoading, setPegOptionsLoading] = useState(false)
 
   const defaultKpiOptions = [
     { value: 'availability', label: 'Availability (%)', threshold: 99.0 },
@@ -48,6 +49,8 @@ const AdvancedChart = () => {
   ]
 
   const [kpiOptions, setKpiOptions] = useState(defaultKpiOptions)
+  const [dbPegOptions, setDbPegOptions] = useState([])
+  const [useDbPegs, setUseDbPegs] = useState(false)
 
   useEffect(()=>{
     // Preference에서 availableKPIs 로드 (없으면 기본값)
@@ -74,25 +77,63 @@ const AdvancedChart = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const generateChart = async () => {
+  // DB에서 실제 PEG 목록 가져오기
+  const fetchDbPegs = async () => {
     try {
-      setLoading(true)
-      console.info('[AdvancedChart] Generate with config:', chartConfig)
-      // KPI 매핑 로드 (없으면 기본집계 경로)
-      let kpiMap = {}
-      try {
-        const raw = localStorage.getItem('activePreference')
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          kpiMap = parsed?.config?.kpiMappings || {}
-        }
-      } catch {}
+      setPegOptionsLoading(true)
+      console.info('[AdvancedChart] Fetching DB PEGs')
+      
       // DB 설정 로드
       let dbConfig = {}
       try {
         const rawDb = localStorage.getItem('dbConfig')
         if (rawDb) dbConfig = JSON.parse(rawDb)
       } catch {}
+
+      if (!dbConfig.host) {
+        console.warn('[AdvancedChart] No DB config found')
+        return
+      }
+
+      // DB에서 PEG 목록 조회
+      const response = await apiClient.post('/api/master/pegs', {
+        db: dbConfig,
+        table: dbConfig.table || 'summary',
+        limit: 100
+      })
+
+      const pegs = response?.data?.pegs || []
+      console.info('[AdvancedChart] DB PEGs loaded:', pegs.length)
+
+      // PEG 목록을 KPI 옵션 형식으로 변환
+      const pegOptions = pegs.map(peg => ({
+        value: peg.id || peg.name,
+        label: `${peg.name || peg.id} (DB)`,
+        threshold: 0, // 기본 임계값
+        isDbPeg: true
+      }))
+
+      setDbPegOptions(pegOptions)
+      
+    } catch (error) {
+      console.error('[AdvancedChart] Error fetching DB PEGs:', error)
+    } finally {
+      setPegOptionsLoading(false)
+    }
+  }
+
+  // 현재 사용할 KPI 옵션 결정
+  const getCurrentKpiOptions = () => {
+    if (useDbPegs && dbPegOptions.length > 0) {
+      return dbPegOptions
+    }
+    return kpiOptions
+  }
+
+  const generateChart = async () => {
+    try {
+      setLoading(true)
+      console.info('[AdvancedChart] Generate with config:', chartConfig, 'useDbPegs:', useDbPegs)
       
       // Fetch primary/secondary KPI for configured periods with NE/CELL filters
       const promises = []
@@ -100,15 +141,12 @@ const AdvancedChart = () => {
       // Period 1 data
       promises.push(
         apiClient.post('/api/kpi/query', {
-          db: dbConfig,
-          table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
           start_date: chartConfig.startDate1,
           end_date: chartConfig.endDate1,
           kpi_type: chartConfig.primaryKPI,
-          kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_names) ? kpiMap[chartConfig.primaryKPI].peg_names : undefined,
-          kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_like) ? kpiMap[chartConfig.primaryKPI].peg_like : undefined,
           ne: chartConfig.ne,
           cellid: chartConfig.cellid,
+          ids: 2 // Mock 데이터용
         })
       )
 
@@ -116,15 +154,12 @@ const AdvancedChart = () => {
       if (chartConfig.showComparison) {
         promises.push(
           apiClient.post('/api/kpi/query', {
-            db: dbConfig,
-            table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.primaryKPI,
-            kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_names) ? kpiMap[chartConfig.primaryKPI].peg_names : undefined,
-            kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.primaryKPI]?.peg_like) ? kpiMap[chartConfig.primaryKPI].peg_like : undefined,
             ne: chartConfig.ne,
             cellid: chartConfig.cellid,
+            ids: 2 // Mock 데이터용
           })
         )
       }
@@ -133,15 +168,12 @@ const AdvancedChart = () => {
       if (chartConfig.showSecondaryAxis && chartConfig.secondaryKPI !== chartConfig.primaryKPI) {
         promises.push(
           apiClient.post('/api/kpi/query', {
-            db: dbConfig,
-            table: (dbConfig && dbConfig.table) ? dbConfig.table : 'summary',
             start_date: chartConfig.startDate2,
             end_date: chartConfig.endDate2,
             kpi_type: chartConfig.secondaryKPI,
-            kpi_peg_names: Array.isArray(kpiMap?.[chartConfig.secondaryKPI]?.peg_names) ? kpiMap[chartConfig.secondaryKPI].peg_names : undefined,
-            kpi_peg_like: Array.isArray(kpiMap?.[chartConfig.secondaryKPI]?.peg_like) ? kpiMap[chartConfig.secondaryKPI].peg_like : undefined,
             ne: chartConfig.ne,
             cellid: chartConfig.cellid,
+            ids: 2 // Mock 데이터용
           })
         )
       }
@@ -154,7 +186,7 @@ const AdvancedChart = () => {
       setChartData(formattedData)
       
     } catch (error) {
-      console.error('Error generating advanced chart:', error)
+      console.error('[AdvancedChart] Error generating advanced chart:', error)
     } finally {
       setLoading(false)
     }
@@ -212,6 +244,50 @@ const AdvancedChart = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* DB PEG 옵션 토글 */}
+          <div className="mb-4 p-4 border rounded-lg bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">PEG 데이터 소스</Label>
+                <p className="text-xs text-muted-foreground">
+                  {useDbPegs ? 'Database에서 실제 PEG 목록을 사용합니다' : '기본 KPI 목록을 사용합니다'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={useDbPegs ? "secondary" : "default"}
+                  size="sm"
+                  onClick={() => setUseDbPegs(false)}
+                >
+                  기본 KPI
+                </Button>
+                <Button
+                  variant={useDbPegs ? "default" : "secondary"}
+                  size="sm"
+                  onClick={() => {
+                    setUseDbPegs(true)
+                    if (dbPegOptions.length === 0) {
+                      fetchDbPegs()
+                    }
+                  }}
+                  disabled={pegOptionsLoading}
+                >
+                  {pegOptionsLoading ? '로딩 중...' : 'DB PEG'}
+                </Button>
+              </div>
+            </div>
+            {useDbPegs && dbPegOptions.length === 0 && !pegOptionsLoading && (
+              <p className="text-xs text-amber-600 mt-2">
+                ⚠️ DB PEG를 불러올 수 없습니다. Database Settings를 확인하세요.
+              </p>
+            )}
+            {useDbPegs && dbPegOptions.length > 0 && (
+              <p className="text-xs text-green-600 mt-2">
+                ✅ {dbPegOptions.length}개의 DB PEG를 사용할 수 있습니다
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Primary KPI */}
             <div className="space-y-2">
@@ -224,7 +300,7 @@ const AdvancedChart = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {kpiOptions.map(option => (
+                  {getCurrentKpiOptions().map(option => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -245,7 +321,7 @@ const AdvancedChart = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {kpiOptions.map(option => (
+                  {getCurrentKpiOptions().map(option => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -393,8 +469,8 @@ const AdvancedChart = () => {
       <Card>
         <CardHeader>
           <CardTitle>
-            {kpiOptions.find(opt => opt.value === chartConfig.primaryKPI)?.label || 'KPI'} Analysis
-            {chartConfig.showSecondaryAxis && ` vs ${kpiOptions.find(opt => opt.value === chartConfig.secondaryKPI)?.label}`}
+            {getCurrentKpiOptions().find(opt => opt.value === chartConfig.primaryKPI)?.label || 'KPI'} Analysis
+            {chartConfig.showSecondaryAxis && ` vs ${getCurrentKpiOptions().find(opt => opt.value === chartConfig.secondaryKPI)?.label}`}
           </CardTitle>
         </CardHeader>
         <CardContent>

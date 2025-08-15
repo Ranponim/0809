@@ -1,0 +1,11 @@
+# Task ID: 40
+# Title: Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발
+# Status: done
+# Dependencies: 39
+# Priority: high
+# Description: LLM 분석 결과를 테이블 형태로 표시하는 `ResultsList.jsx` 컴포넌트를 개발합니다. 백엔드 API를 호출하여 데이터를 가져오고, 각 행에는 날짜, NE, Cell ID 등의 주요 정보가 포함되어야 합니다.
+# Details:
+React와 Axios를 사용하여 `/api/analysis/results` API에서 데이터를 비동기적으로 가져옵니다. Tailwind CSS를 사용하여 테이블 스타일을 지정합니다. 로딩 및 오류 상태에 대한 UI를 구현합니다. `useAnalysisResults.js` 커스텀 훅을 생성하여 데이터 페칭 로직을 캡슐화합니다.
+
+# Test Strategy:
+컴포넌트가 목(mock) 데이터를 올바르게 렌더링하는지 확인하는 단위 테스트를 작성합니다. 실제 API와 연동하여 데이터가 테이블에 정상적으로 표시되는지 수동으로 테스트합니다.
