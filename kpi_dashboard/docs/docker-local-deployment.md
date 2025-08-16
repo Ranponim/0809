@@ -310,3 +310,179 @@ MCP_API_KEY=optional-key
 - 비밀정보(.env)는 소스관리 제외 및 안전한 방법으로 전달하세요.
 
 
+
+---
+
+## 리눅스 환경: `/mnt/bind-mount/` 바인드 마운트 기반 구성 가이드
+
+### 목적
+다른 팀에서 이미 사용 중인 리눅스 환경처럼, 각 컨테이너가 호스트의 `/mnt/bind-mount/<서비스>` 디렉토리를 바인드 마운트하여 운영/개발합니다. 호스트에서 코드를 수정하고 컨테이너를 재시작하면 변경 사항이 반영되는 워크플로우를 구성합니다.
+
+### 전제 조건
+- 이미지를 로컬에 로드 완료: `kpi-backend:latest`, `kpi-frontend:latest`, `mongo:7`
+- 호스트 리눅스에 `/mnt/bind-mount/` 경로 사용 가능 (권한 확보)
+- 현재 저장소의 `docker-compose.yml`을 그대로 사용하고, 추가로 override 파일로 바인드 마운트를 적용
+
+### 1) 호스트 디렉토리 표준 레이아웃 만들기
+```bash
+sudo mkdir -p /mnt/bind-mount/kpi-mongo/data
+sudo mkdir -p /mnt/bind-mount/kpi-backend
+sudo mkdir -p /mnt/bind-mount/kpi-frontend
+
+# 권한(예: 현재 사용자 UID:GID가 1000:1000인 경우)
+sudo chown -R $USER:$USER /mnt/bind-mount
+```
+
+권장 레이아웃
+```
+/mnt/bind-mount/
+  ├─ kpi-mongo/
+  │   └─ data/               # MongoDB 데이터 영구화 디렉토리
+  ├─ kpi-backend/            # 백엔드 앱 소스(호스트에서 수정)
+  └─ kpi-frontend/           # 프론트엔드 빌드 산출물(dist) 또는 소스(옵션)
+```
+
+### 2) 백엔드 소스를 호스트에 준비
+- 방법 A: 현재 저장소의 `kpi_dashboard/backend` 내용을 통째로 복사
+```bash
+rsync -a --delete kpi_dashboard/backend/ /mnt/bind-mount/kpi-backend/
+```
+- 방법 B: 별도 저장소/브랜치를 `git clone`하여 `/mnt/bind-mount/kpi-backend`로 가져오기
+
+이후 호스트에서 `/mnt/bind-mount/kpi-backend` 내 코드를 수정하고, 컨테이너 재시작 시 반영됩니다.
+
+### 3) 프론트엔드 정적 배포(nginx)용 빌드 산출물 준비
+현재 `kpi-frontend:latest` 이미지는 nginx 런타임으로 `dist` 정적 파일을 서빙합니다. 바인드 마운트로 운영하려면 호스트에서 `dist`를 만들어 nginx 컨테이너에 마운트합니다.
+
+호스트에서 빌드 생성(로컬에 Node가 없으면 컨테이너로 빌드 권장):
+```bash
+# 원본 소스가 ./kpi_dashboard/frontend 에 있을 때
+rsync -a --delete kpi_dashboard/frontend/ /mnt/bind-mount/kpi-frontend-src/
+
+# 컨테이너로 빌드 → /mnt/bind-mount/kpi-frontend/dist 생성
+docker run --rm \
+  -v /mnt/bind-mount/kpi-frontend-src:/app \
+  -v /mnt/bind-mount/kpi-frontend:/out \
+  -w /app node:20-alpine sh -lc "\
+    if [ -f package-lock.json ]; then npm ci; else npm i; fi && \
+    npm run build && \
+    mkdir -p /out && cp -a dist/. /out/dist/"
+
+# dist 확인
+ls -lah /mnt/bind-mount/kpi-frontend/dist
+```
+
+참고: 개발 단계에서 Vite dev 서버를 쓰고 싶다면 아래 "프론트엔드 개발 모드(옵션)"를 참고하세요.
+
+### 4) compose override 파일로 바인드 마운트 적용
+프로젝트 루트(예: `/path/to/project`)에 `docker-compose.bind.yml` 파일을 하나 만들어 기본 compose를 덮어씌웁니다.
+
+```yaml
+version: "3.9"
+services:
+  mongo:
+    volumes:
+      - /mnt/bind-mount/kpi-mongo/data:/data/db
+
+  backend:
+    # 이미지 로드 전제: kpi-backend:latest
+    volumes:
+      - /mnt/bind-mount/kpi-backend:/app
+    environment:
+      # 예: compose 기본값을 덮어써야 할 때 사용
+      MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-kpi}
+
+  frontend:
+    # nginx 정적 서빙 경로에 빌드 산출물 dist 마운트
+    volumes:
+      - /mnt/bind-mount/kpi-frontend/dist:/usr/share/nginx/html:ro
+```
+
+실행:
+```bash
+cd /path/to/project
+docker compose -f docker-compose.yml -f docker-compose.bind.yml up -d --no-build
+```
+
+### 5) 변경 반영 워크플로우
+- 백엔드 코드 수정 → 재시작만으로 반영
+```bash
+# 코드 수정은 /mnt/bind-mount/kpi-backend 에서 진행
+docker compose restart backend
+docker compose logs backend --tail=100
+```
+  - 의존성(requirements.txt) 변경 시에는 이미지 재빌드가 필요합니다. 간단히 컨테이너 내에서 임시로 설치해 볼 수도 있으나, 재현성과 일관성을 위해 빌드/로드를 권장합니다.
+  ```bash
+  # 임시(권장 X): 컨테이너 안에서 pip 설치
+  docker exec -it kpi-backend sh -lc "pip install -r requirements.txt"
+  ```
+
+- 프론트엔드(nginx 정적) 수정 → 호스트에서 다시 빌드 후 재시작
+```bash
+# 빌드 재수행 (위 3) 절차 반복 → dist 갱신)
+docker compose restart frontend
+```
+
+### 6) 프론트엔드 개발 모드(옵션)
+nginx 정적 배포 대신 개발 편의를 위해 Vite dev 서버 컨테이너를 별도 서비스로 띄울 수 있습니다. 아래를 `docker-compose.bind.yml`에 추가하고 필요 시 `frontend` 서비스는 중지하세요.
+
+```yaml
+services:
+  frontend-dev:
+    image: node:20-alpine
+    container_name: kpi-frontend-dev
+    working_dir: /app
+    command: sh -lc "npm i && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - /mnt/bind-mount/kpi-frontend-src:/app
+    environment:
+      # 백엔드 주소 주입 (Vite: import.meta.env.VITE_*)
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
+```
+
+### 7) 권한/퍼미션 유의사항
+- 컨테이너는 기본적으로 root(UID 0)로 실행됩니다. 호스트에서 생성되는 파일 소유권이 root가 되는 것이 싫다면, `user: "1000:1000"` 같은 설정을 서비스에 추가하거나, 사전에 `/mnt/bind-mount` 하위 디렉토리 권한을 조정하세요.
+- SELinux/AppArmor 정책에 의해 마운트가 거부될 수 있습니다. 해당 보안 정책이 있는 배포판에서는 `:Z`(SELinux 컨텍스트) 같은 옵션이 필요할 수 있습니다.
+
+### 8) 새 컨테이너를 동일 패턴으로 추가하기(템플릿)
+다른 이미지를 같은 방식으로 운영하려면 `/mnt/bind-mount/<이름>` 디렉토리를 만들고, 아래처럼 override에 볼륨을 추가합니다.
+
+```yaml
+services:
+  myservice:
+    image: my-image:latest
+    container_name: myservice
+    volumes:
+      - /mnt/bind-mount/myservice:/work
+    ports:
+      - "9000:9000"
+    environment:
+      - EXAMPLE_ENV=value
+```
+
+### 9) 운영 명령(요약)
+```bash
+# 상태/로그
+docker compose ps
+docker compose logs backend --tail=200
+
+# 재시작
+docker compose restart backend
+docker compose restart frontend
+
+# 중지/정리(데이터 보존)
+docker compose down
+
+# 볼륨 포함 정리(데이터 삭제 주의)
+docker compose down -v
+```
+
+### 10) 트러블슈팅(바인드 마운트 특화)
+- 컨테이너가 최신 코드를 못 읽음: 마운트 경로가 맞는지, 오버라이드 파일이 적용되었는지(`-f docker-compose.bind.yml`) 확인
+- 프론트 정적 파일이 이전 상태로 보임: 브라우저 캐시 비우기, nginx 캐시 비활성화 확인, `dist` 재빌드 확인
+- 권한 에러: `/mnt/bind-mount` 하위 소유권/퍼미션 점검, 필요 시 `user:` 지정
+- 이미지 재빌드 요구: 의존성/런타임 변경은 바인드 마운트만으로 해결되지 않습니다. 새 이미지를 빌드(save)/로드(load) 후 재기동하세요.
+
