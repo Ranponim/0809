@@ -113,8 +113,9 @@ docker run -d --name kpi-mongo -p 27017:27017 -v mongo_data:/data/db mongo:7
 Backend (환경변수는 실제 환경에 맞게 조정)
 ```powershell
 docker run -d --name kpi-backend -p 8000:8000 ^
-  --link kpi-mongo:kpi-mongo ^
-  -e MONGO_URI="mongodb://kpi-mongo:27017/kpi" ^
+  --link kpi-mongo:mongo ^
+  -e MONGO_URL="mongodb://mongo:27017" ^
+  -e MONGO_DB_NAME="kpi" ^
   -e BACKEND_LOG_LEVEL="info" ^
   -e CORS_ORIGINS="http://localhost:5173" ^
   -e MCP_ANALYZER_URL="http://mcp-host:8001/analyze" ^
@@ -179,7 +180,7 @@ docker compose down -v
 - CORS 오류
   - 해결: 백엔드 `CORS_ORIGINS` 환경변수에 프론트 주소(`http://localhost:5173`) 포함
 - MongoDB 연결 실패
-  - 해결: `MONGO_URI`가 `mongodb://kpi-mongo:27017/kpi`로 설정되었는지, 같은 네트워크인지 확인
+  - 해결: `MONGO_URL`이 `mongodb://mongo:27017`로 설정되었는지, `MONGO_DB_NAME`이 `kpi`인지, 같은 네트워크인지 확인
 - MCP가 항상 Mock으로 동작
   - 해결: 백엔드에 `MCP_ANALYZER_URL` 설정, 네트워크 접근 가능 여부 확인, 실패 시 로그에서 예외 메시지 확인
 
@@ -306,7 +307,7 @@ MCP_API_KEY=optional-key
 ## 참고 및 권장 사항
 - 완전 오프라인 환경이면 `mongo:7` 이미지도 반드시 함께 save/load 하세요.
 - `docker-compose.yml`의 `image` 태그가 로드된 태그와 일치해야 `--no-build`로 바로 실행됩니다.
-- 환경변수(`MONGO_URI`, `CORS_ORIGINS`, 프론트의 `BACKEND_BASE_URL`, 백엔드의 `MCP_ANALYZER_URL`)는 대상 환경에 맞게 조정하세요.
+- 환경변수(`MONGO_URL`, `MONGO_DB_NAME`, `CORS_ORIGINS`, 프론트의 `BACKEND_BASE_URL`, 백엔드의 `MCP_ANALYZER_URL`)는 대상 환경에 맞게 조정하세요.
 - 비밀정보(.env)는 소스관리 제외 및 안전한 방법으로 전달하세요.
 
 
