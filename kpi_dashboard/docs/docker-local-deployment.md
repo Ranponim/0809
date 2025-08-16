@@ -7,11 +7,11 @@
 
 ### 전제 조건
 - 양쪽 PC에 Docker Desktop(Windows) 또는 Docker Engine(리눅스/맥) 설치
-- 현재 PC에 빌드된 이미지 존재: `kpi-backend:latest`, `kpi-frontend:latest` (권장: `mongo:6` 포함)
+- 현재 PC에 빌드된 이미지 존재: `kpi-backend:latest`, `kpi-frontend:latest` (권장: `mongo:7` 포함)
 - 프로젝트 디렉터리와 `docker-compose.yml`(및 필요한 `.env`)을 함께 이전
 
 ### 이동할 산출물
-- Docker 이미지: `kpi-backend:latest`, `kpi-frontend:latest`, `mongo:6`
+- Docker 이미지: `kpi-backend:latest`, `kpi-frontend:latest`, `mongo:7`
 - 프로젝트 폴더: `kpi_dashboard/` (앱 소스, compose 파일, 설정 등)
 - 필요 시 비밀키/환경 파일: `.env` 등(별도 안전 경로로 전달 권장)
 
@@ -29,12 +29,12 @@ docker images | findstr mongo
 ```powershell
 docker save -o kpi-backend_latest.tar kpi-backend:latest
 docker save -o kpi-frontend_latest.tar kpi-frontend:latest
-docker save -o mongo_latest.tar mongo:6
+docker save -o mongo_latest.tar mongo:7
 ```
 
 번들 저장(권장, 한 파일로 이동)
 ```powershell
-docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest mongo:6
+docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest mongo:7
 ```
 
 선택: 압축(전송 최적화)
@@ -88,7 +88,7 @@ docker compose logs backend --tail=100 | cat
 docker compose logs frontend --tail=100 | cat
 ```
 
-> compose 파일의 `image` 태그가 로드된 태그(`kpi-backend:latest`, `kpi-frontend:latest`, `mongo:6`)와 일치해야 `--no-build`가 제대로 동작합니다.
+> compose 파일의 `image` 태그가 로드된 태그(`kpi-backend:latest`, `kpi-frontend:latest`, `mongo:7`)와 일치해야 `--no-build`가 제대로 동작합니다.
 
 > MCP 실제 호출을 사용하려면 `.env` 또는 compose 환경변수에 아래를 추가하세요:
 ```env
@@ -98,22 +98,22 @@ MCP_API_KEY=optional-key
 
 ---
 
-## 5) 실행 방법 B: docker run으로 개별 실행(대안)
+## 5) 실행 방법 B: docker run으로 개별 실행(대안, 기본 bridge 네트워크 사용)
 
-네트워크/볼륨 생성
+볼륨 생성(데이터 지속화)
 ```powershell
-docker network create kpi-net
 docker volume create mongo_data
 ```
 
-MongoDB
+MongoDB (기본 bridge 네트워크 사용)
 ```powershell
-docker run -d --name kpi-mongo --network kpi-net -p 27017:27017 -v mongo_data:/data/db mongo:6
+docker run -d --name kpi-mongo -p 27017:27017 -v mongo_data:/data/db mongo:7
 ```
 
 Backend (환경변수는 실제 환경에 맞게 조정)
 ```powershell
-docker run -d --name kpi-backend --network kpi-net -p 8000:8000 ^
+docker run -d --name kpi-backend -p 8000:8000 ^
+  --link kpi-mongo:kpi-mongo ^
   -e MONGO_URI="mongodb://kpi-mongo:27017/kpi" ^
   -e BACKEND_LOG_LEVEL="info" ^
   -e CORS_ORIGINS="http://localhost:5173" ^
@@ -124,7 +124,7 @@ docker run -d --name kpi-backend --network kpi-net -p 8000:8000 ^
 
 Frontend (백엔드 주소 노출 방식에 따라 필요 시 조정)
 ```powershell
-docker run -d --name kpi-frontend --network kpi-net -p 5173:80 ^
+docker run -d --name kpi-frontend -p 5173:80 ^
   -e BACKEND_BASE_URL="http://localhost:8000" ^
   kpi-frontend:latest
 ```
@@ -208,7 +208,7 @@ docker exec kpi-mongo sh -c "mkdir -p /restore && tar -xzf /dump.tgz -C /restore
 ```powershell
 docker tag kpi-backend:latest kpi-backend:v1.0.0
 docker tag kpi-frontend:latest kpi-frontend:v1.0.0
-docker save -o kpi_v1.0.0_bundle.tar kpi-backend:v1.0.0 kpi-frontend:v1.0.0 mongo:6
+docker save -o kpi_v1.0.0_bundle.tar kpi-backend:v1.0.0 kpi-frontend:v1.0.0 mongo:7
 ```
 
 대상 PC 업데이트
@@ -223,7 +223,7 @@ docker compose up -d --no-build
 
 저장/로드
 ```bash
-docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest mongo:6
+docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest mongo:7
 docker load -i kpi_images_bundle.tar
 ```
 
@@ -242,8 +242,69 @@ docker compose logs frontend --tail=100
 
 ---
 
+## 부록: WSL(Windows) 환경 예시 및 주의사항
+
+Windows PowerShell/명령 프롬프트에서 WSL(Ubuntu 등) 내부의 Docker CLI를 호출해 작업할 수 있습니다. 경로는 `/mnt/<드라이브문자>/...`로 매핑됩니다.
+
+### 사전 준비
+- Docker Desktop 실행 및 WSL 통합 활성화: Docker Desktop → Settings → Resources → WSL integration → 사용 중인 배포판 체크
+- 배포판/버전 확인: `wsl -l -v`
+- PowerShell에서 WSL 명령 실행 패턴: `wsl -e bash -lc "<리눅스 명령들>"`
+
+### 이미지 로드(save→load)
+```powershell
+# 예: Windows 경로의 tar를 WSL에서 로드
+wsl -e bash -lc "docker load -i /mnt/d/Coding/0809/kpi-backend_latest.tar"
+wsl -e bash -lc "docker load -i /mnt/d/Coding/0809/kpi-frontend_latest.tar"
+wsl -e bash -lc "docker load -i /mnt/d/Coding/0809/mongo_latest.tar"
+
+# 로드 확인
+wsl -e bash -lc "docker images | grep -E 'kpi-|mongo' || true"
+```
+
+### 버전 태그 맞추기(중요)
+`docker-compose.yml`의 Mongo 버전이 `mongo:7`인 경우, 로드된 이미지가 `mongo:6`이라면 태그를 맞춰주세요.
+```powershell
+wsl -e bash -lc "docker tag mongo:6 mongo:7"
+```
+
+### compose로 기동/재기동
+```powershell
+# 프로젝트 디렉터리로 이동 후 기동(빌드 없이 로드된 이미지만 사용)
+wsl -e bash -lc "cd /mnt/d/Coding/0809/kpi_dashboard && docker compose up -d --no-build"
+
+# 특정 서비스만 강제 재생성(예: Mongo)
+wsl -e bash -lc "cd /mnt/d/Coding/0809/kpi_dashboard && docker compose up -d --force-recreate --no-deps mongo"
+
+# 백엔드/프론트엔드 재빌드(WSL에서 무캐시 빌드)
+wsl -e bash -lc "cd /mnt/d/Coding/0809/kpi_dashboard && docker compose build backend --no-cache && docker compose build frontend --no-cache && docker compose up -d"
+```
+
+### 상태/로그/헬스 확인
+```powershell
+wsl -e bash -lc "cd /mnt/d/Coding/0809/kpi_dashboard && docker compose ps"
+wsl -e bash -lc "docker logs -f kpi-mongo | tail -n 100"
+wsl -e bash -lc "docker logs -f kpi-backend | tail -n 100"
+```
+
+### 환경변수 적용(MCP 등)
+`.env`는 `kpi_dashboard/` 폴더에 두면 compose가 자동 로드합니다.
+```env
+# 파일: D:\Coding\0809\kpi_dashboard\.env (WSL에서는 /mnt/d/Coding/0809/kpi_dashboard/.env)
+MCP_ANALYZER_URL=http://mcp-host:8001/analyze
+MCP_API_KEY=optional-key
+```
+
+### 트러블슈팅(WSL)
+- "Cannot connect to the Docker daemon": Docker Desktop이 실행 중인지 확인. `docker context ls`로 컨텍스트가 `default`(desktop)인지 확인 후 `docker context use default` 시도
+- PowerShell에서 `grep`, `sed` 미인식: 해당 유틸은 리눅스 도구입니다. 반드시 `wsl -e bash -lc "... | grep ..."` 형태로 WSL 내부에서 실행하세요
+- 경로 이슈: Windows 경로는 WSL에서 `/mnt/d/...`로 접근. 공백/특수문자는 작은따옴표 또는 이스케이프 처리
+- Mongo 버전 불일치로 pull/빌드 시도: 위의 "버전 태그 맞추기" 절차로 `mongo:7` 태그를 보정
+
+---
+
 ## 참고 및 권장 사항
-- 완전 오프라인 환경이면 `mongo:6` 이미지도 반드시 함께 save/load 하세요.
+- 완전 오프라인 환경이면 `mongo:7` 이미지도 반드시 함께 save/load 하세요.
 - `docker-compose.yml`의 `image` 태그가 로드된 태그와 일치해야 `--no-build`로 바로 실행됩니다.
 - 환경변수(`MONGO_URI`, `CORS_ORIGINS`, 프론트의 `BACKEND_BASE_URL`, 백엔드의 `MCP_ANALYZER_URL`)는 대상 환경에 맞게 조정하세요.
 - 비밀정보(.env)는 소스관리 제외 및 안전한 방법으로 전달하세요.
