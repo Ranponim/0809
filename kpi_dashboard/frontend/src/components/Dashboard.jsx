@@ -61,45 +61,45 @@ const Dashboard = () => {
 
   // 데이터 fetching 함수
   const fetchKPIData = async () => {
+    if (selectedPegs.length === 0) {
+      setKpiData({})
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
-      console.log('[Dashboard] 데이터 fetching 시작', {
+      console.log('[Dashboard] 데이터 fetching 시작 (최적화)', {
         selectedPegs,
         defaultNe,
         defaultCellId,
-        chartStyle
       })
 
       const endDate = new Date().toISOString().split('T')[0]
       const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      // 새로운 API 형식으로 요청
-      const requests = selectedPegs.map(kt => apiClient.post('/api/kpi/query', {
+      // 단일 API 요청으로 변경
+      const response = await apiClient.post('/api/kpi/query', {
         start_date: startDate,
         end_date: endDate,
-        kpi_type: kt,
+        kpi_types: selectedPegs, // kpi_type -> kpi_types
         ne: defaultNe,
         cellid: defaultCellId,
-        ids: 2 // Mock 데이터용
-      }))
-
-      const responses = await Promise.all(requests)
-      const dataByKpi = {}
-      
-      responses.forEach((res, idx) => { 
-        dataByKpi[selectedPegs[idx]] = res?.data?.data || [] 
       })
+
+      const dataByKpi = response?.data?.data || {}
       
       setKpiData(dataByKpi)
       setLastRefresh(new Date())
       
-      console.log('[Dashboard] 데이터 fetching 완료', {
+      console.log('[Dashboard] 데이터 fetching 완료 (최적화)', {
         kpiCount: Object.keys(dataByKpi).length,
-        totalRows: Object.values(dataByKpi).reduce((sum, arr) => sum + arr.length, 0)
+        totalRows: Object.values(dataByKpi).reduce((sum, arr) => sum + (arr?.length || 0), 0)
       })
       
     } catch (error) {
       console.error('[Dashboard] 데이터 fetching 오류:', error)
+      setKpiData({}) // 오류 발생 시 데이터 초기화
     } finally {
       setLoading(false)
     }
