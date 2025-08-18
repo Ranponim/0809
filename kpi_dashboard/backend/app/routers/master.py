@@ -5,8 +5,10 @@ PEG 목록, Cell 목록 등 기준 정보를 제공하는 API 엔드포인트들
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
+import psycopg2
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..db import get_database
@@ -107,3 +109,58 @@ async def get_master_info():
             {"path": "/api/master/cells", "description": "Cell 마스터 데이터 조회"}
         ]
     }
+
+
+class PostgresConnectionConfig(BaseModel):
+    """PostgreSQL 연결 테스트 요청 모델"""
+    host: str = Field(..., description="DB Host")
+    port: int = Field(default=5432, description="DB Port")
+    user: str = Field(default="postgres", description="DB User")
+    password: str = Field(default="", description="DB Password")
+    dbname: str = Field(default="postgres", description="Database Name")
+    table: Optional[str] = Field(default=None, description="존재 여부를 확인할 테이블명(선택)")
+
+
+@router.post("/test-connection")
+async def test_postgres_connection(config: PostgresConnectionConfig) -> Dict[str, Any]:
+    """
+    PostgreSQL 연결을 테스트합니다.
+
+    요청 본문에 포함된 접속 정보로 DB에 접속해 간단한 쿼리를 수행하고,
+    선택적으로 특정 테이블 존재 여부를 확인합니다.
+    """
+    try:
+        logger.info(
+            "PostgreSQL 연결 테스트 시작: host=%s port=%s db=%s user=%s",
+            config.host, config.port, config.dbname, config.user,
+        )
+
+        conn = psycopg2.connect(
+            host=config.host,
+            port=config.port,
+            user=config.user,
+            password=config.password,
+            dbname=config.dbname,
+            connect_timeout=5,
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        _ = cur.fetchone()
+
+        table_exists: Optional[bool] = None
+        if config.table:
+            # PostgreSQL에서 테이블 존재 여부 확인
+            cur.execute("SELECT to_regclass(%s)", (config.table,))
+            table_exists = cur.fetchone()[0] is not None
+
+        cur.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "message": "Connection successful",
+            "table_exists": table_exists,
+        }
+    except Exception as e:
+        logger.error("PostgreSQL 연결 실패: %s", e)
+        raise HTTPException(status_code=400, detail=f"Connection failed: {e}")
