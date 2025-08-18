@@ -130,27 +130,22 @@ def generate_mock_kpi_data(
         logger.error(f"Mock 데이터 생성 실패: {e}")
         return []
 
-@router.post("/query", summary="KPI 데이터 쿼리", tags=["KPI Query"])
+@router.post("/query", summary="KPI 데이터 쿼리 (개선된)", tags=["KPI Query"])
 async def kpi_query(payload: dict = Body(...)):
     """
-    KPI 데이터 쿼리 엔드포인트
+    KPI 데이터 쿼리 엔드포인트 (여러 KPI 동시 지원)
     
-    기존 main_legacy.py의 /api/kpi/query 로직을 새로운 모듈 구조로 이식.
-    현재는 Mock 데이터를 반환하며, 추후 실제 DB 연동으로 확장 가능.
+    여러 `kpi_type`을 배열로 받아 한 번의 요청으로 모든 PEG 데이터를 반환합니다.
     
     Request Body:
     ```json
     {
-        "db": {"host": "...", "port": 5432, "user": "...", "password": "...", "dbname": "..."},
-        "table": "summary",
         "start_date": "2025-08-07",
         "end_date": "2025-08-14", 
-        "kpi_type": "availability",
+        "kpi_types": ["availability", "rrc", "erab"],
         "entity_ids": "LHK078ML1,LHK078MR1",
         "ne": "nvgnb#10000",
-        "cellid": "2010",
-        "kpi_peg_names": ["Accessibility_Attempts", "Accessibility_Success"],
-        "kpi_peg_like": ["RRC_%", "ERAB_%"]
+        "cellid": "2010"
     }
     ```
     
@@ -158,20 +153,15 @@ async def kpi_query(payload: dict = Body(...)):
     ```json
     {
         "success": true,
-        "data": [
-            {
-                "timestamp": "2025-08-07 00:00:00",
-                "entity_id": "LHK078ML1",
-                "kpi_type": "availability",
-                "value": 99.2,
-                "ne": "nvgnb#10000",
-                "cell_id": "2010"
-            }
-        ],
+        "data": {
+            "availability": [...],
+            "rrc": [...],
+            "erab": [...]
+        },
         "metadata": {
-            "total_records": 338,
-            "kpi_type": "availability",
-            "date_range": "2025-08-07 ~ 2025-08-14"
+            "kpi_types": ["availability", "rrc", "erab"],
+            "date_range": "2025-08-07 ~ 2025-08-14",
+            ...
         }
     }
     ```
@@ -180,12 +170,12 @@ async def kpi_query(payload: dict = Body(...)):
         # 필수 매개변수 검증
         start_date = payload.get("start_date")
         end_date = payload.get("end_date")
-        kpi_type = payload.get("kpi_type")
+        kpi_types = _to_list(payload.get("kpi_types") or payload.get("kpi_type"))
         
-        if not start_date or not end_date or not kpi_type:
+        if not start_date or not end_date or not kpi_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="start_date, end_date, kpi_type는 필수 매개변수입니다"
+                detail="start_date, end_date, kpi_types는 필수 매개변수입니다"
             )
 
         # 날짜 파싱 및 검증
@@ -209,39 +199,43 @@ async def kpi_query(payload: dict = Body(...)):
 
         # 로깅
         logger.info(
-            f"/api/kpi/query 매개변수: kpi_type={kpi_type}, "
+            f"/api/kpi/query 매개변수: kpi_types={kpi_types}, "
             f"ids={len(ids)}, ne={len(ne_filters)}, cellid={len(cellid_filters)}, "
             f"기간={start_date}~{end_date}"
         )
 
-        # Mock 데이터 생성
-        data = generate_mock_kpi_data(
-            start_dt=start_dt,
-            end_dt=end_dt,
-            kpi_type=kpi_type,
-            entity_ids=ids,
+        # NOTE: 실제 DB 조회와 Mock 데이터 생성 분기
+        # 환경변수 등을 이용해 제어할 수 있습니다. (예: USE_MOCK_DATA=true)
+        # 현재는 요구사항에 따라 실제 DB 조회를 우선합니다.
+        from ..utils.postgresql_db import query_kpi_data
+
+        data_by_kpi = query_kpi_data(
+            start_date=start_date,
+            end_date=end_date,
+            kpi_types=kpi_types,
             ne_filters=ne_filters,
-            cellid_filters=cellid_filters,
-            kpi_peg_names=kpi_peg_names,
-            kpi_peg_like=kpi_peg_like
+            cellid_filters=cellid_filters
         )
+
+        total_records = sum(len(v) for v in data_by_kpi.values())
 
         # 응답 생성
         result = {
             "success": True,
-            "data": data,
+            "data": data_by_kpi,
             "metadata": {
-                "total_records": len(data),
-                "kpi_type": kpi_type,
+                "total_records": total_records,
+                "kpi_types": kpi_types,
                 "date_range": f"{start_date} ~ {end_date}",
-                "entity_count": len(ids),
+                "entity_count": len(ids), # Note: This might not be accurate with real data
                 "ne_filters": ne_filters,
                 "cellid_filters": cellid_filters,
-                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "data_source": "PostgreSQL"
             }
         }
 
-        logger.info(f"/api/kpi/query mock 응답: rows={len(data)}")
+        logger.info(f"/api/kpi/query PostgreSQL 응답: rows={total_records} for {len(kpi_types)} KPIs")
         return result
 
     except HTTPException:

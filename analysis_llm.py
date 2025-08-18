@@ -581,12 +581,19 @@ def query_llm(prompt: str, enable_mock: bool = False) -> dict:
     """
     # 장애 대비를 위해 복수 엔드포인트로 페일오버. 응답에서 JSON 블록만 추출
     logging.info("query_llm() 호출: vLLM 분석 요청 시작 (enable_mock=%s)", enable_mock)
-    endpoints = [
-        'http://10.251.204.93:10000',
-        'http://100.105.188.117:8888',
-    ]
+
+    # 환경 변수에서 LLM 엔드포인트 목록을 읽어옴 (쉼표로 구분)
+    llm_endpoints_str = os.getenv('LLM_ENDPOINTS', 'http://10.251.204.93:10000,http://100.105.188.117:8888')
+    endpoints = [endpoint.strip() for endpoint in llm_endpoints_str.split(',') if endpoint.strip()]
+
+    if not endpoints:
+        raise ValueError("LLM_ENDPOINTS 환경 변수가 설정되지 않았거나 비어있습니다.")
+
+    # 환경 변수에서 모델명 읽기 (기본값: Gemma-3-27B)
+    llm_model = os.getenv('LLM_MODEL', 'Gemma-3-27B')
+
     payload = {
-        "model": "Gemma-3-27B",
+        "model": llm_model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
         "max_tokens": 4096,
