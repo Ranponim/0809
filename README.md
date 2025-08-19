@@ -92,14 +92,32 @@ LLM 엔드포인트/모델은 코드 내부 `query_llm()`에 하드코딩되어 
 백엔드 현재 버전은 NoSQL(MongoDB) 기반으로 분석 결과/환경설정을 저장하며, `/api/kpi/*`는 외부 SQL 프록시 대신 mock 생성기를 사용합니다. 실제 DB 프록시가 필요하면 추후 토글/구현으로 확장 가능합니다.
 
 ### Docker Compose 실행 (권장)
-프로젝트 루트에 `.env` 파일을 만들고 다음과 같이 설정할 수 있습니다(선택):
+프로젝트 루트에 `.env` 파일을 만들고 다음과 같이 설정할 수 있습니다(권장):
 
 ```
 # ./.env (루트)
-MONGO_URL=mongodb://mongo:27017
-MONGO_DB_NAME=kpi
+
+# --- Frontend (런타임 베이스 URL: 빌드와 무관) ---
+BACKEND_BASE_URL=http://localhost:8000
+# 선택: Vite 빌드 시 주입. 런타임은 BACKEND_BASE_URL 우선
 VITE_API_BASE_URL=http://localhost:8000
+
+# --- Backend (MongoDB) ---
+# compose의 mongo 서비스로 접근
+MONGO_URL=mongodb://mongo:27017/kpi
+MONGO_DB_NAME=kpi
+
+# --- PostgreSQL (선택: DB 연결 테스트/외부 PG 사용 시) ---
+# WSL2에서 호스트 DB에 접속 시 host.docker.internal 사용
+DB_HOST=host.docker.internal
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=pass
+DB_NAME=netperf
 ```
+
+WSL2 사용 시 주의:
+- `host.docker.internal`은 리눅스 컨테이너에서 호스트(Windows)로 접근할 때 사용합니다. 본 저장소의 `docker-compose.yml`에는 `backend` 서비스에 `extra_hosts: host.docker.internal:host-gateway`가 추가되어 있어 바로 동작합니다.
 
 실행:
 

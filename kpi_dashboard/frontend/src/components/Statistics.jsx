@@ -200,7 +200,15 @@ const Statistics = () => {
   const handleTestConnection = async () => {
     setDbTestResult({ status: 'testing', message: '' })
     try {
-      const res = await apiClient.post('/api/db/ping', { db: dbConfig })
+      // 백엔드 라우터: /api/master/test-connection 사용
+      const res = await apiClient.post('/api/master/test-connection', {
+        host: dbConfig.host,
+        port: Number(dbConfig.port) || 5432,
+        user: dbConfig.user,
+        password: dbConfig.password,
+        dbname: dbConfig.dbname,
+        table: dbConfig.table || undefined,
+      })
       if (res?.data?.ok) {
         setDbTestResult({ status: 'ok', message: 'Connection successful' })
         toast.success('DB connection OK')
@@ -209,7 +217,8 @@ const Statistics = () => {
         toast.error('DB connection failed')
       }
     } catch (e) {
-      const msg = e?.response?.data?.detail || e?.message || 'Connection failed'
+      const detail = e?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : (detail?.error_message || e?.message || 'Connection failed')
       setDbTestResult({ status: 'fail', message: String(msg) })
       toast.error(`DB connection failed: ${msg}`)
     }

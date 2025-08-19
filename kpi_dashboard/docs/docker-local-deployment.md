@@ -44,6 +44,26 @@ tar -a -c -f kpi_images_bundle.zip kpi_images_bundle.tar
 
 > 프로젝트 폴더(예: `kpi_dashboard/` 전체, `.env` 포함)와 루트의 `docker-compose.yml`도 함께 복사하세요.
 
+### .env 샘플 (루트)
+대상 PC에서도 동일한 환경으로 실행하려면 루트에 `.env`를 준비하세요.
+
+```env
+# --- Frontend ---
+BACKEND_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8000
+
+# --- Backend (Mongo) ---
+MONGO_URL=mongodb://mongo:27017/kpi
+MONGO_DB_NAME=kpi
+
+# --- PostgreSQL(선택) ---
+DB_HOST=host.docker.internal
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=pass
+DB_NAME=netperf
+```
+
 ---
 
 ## 2) 파일 전송

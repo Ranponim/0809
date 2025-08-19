@@ -1,8 +1,11 @@
 import axios from 'axios'
 import { toast } from 'sonner'
 
-// 공용 API 클라이언트: 환경변수 우선, 없으면 로컬 백엔드로 폴백
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// 공용 API 클라이언트: 런타임 구성(window.__RUNTIME_CONFIG__) → Vite env → 기본값 순으로 사용
+// DOCKER RUN 시 -e BACKEND_BASE_URL="http://host:port" 또는 -e VITE_API_BASE_URL 로 주입하면 런타임에 즉시 반영됩니다.
+const runtimeCfg = typeof window !== 'undefined' ? (window.__RUNTIME_CONFIG__ || {}) : {}
+const runtimeBase = runtimeCfg.BACKEND_BASE_URL || runtimeCfg.VITE_API_BASE_URL
+const baseURL = (runtimeBase && String(runtimeBase).trim()) || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const apiClient = axios.create({
   baseURL,

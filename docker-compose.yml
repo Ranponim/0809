@@ -24,6 +24,8 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-pass}
       DB_NAME: ${DB_NAME:-netperf}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
 
@@ -37,6 +39,9 @@ services:
     container_name: kpi-frontend
     depends_on:
       - backend
+    environment:
+      # 런타임에 백엔드 베이스 URL 주입 (빌드와 무관)
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://localhost:8000}
     ports:
       - "5173:80"
 
