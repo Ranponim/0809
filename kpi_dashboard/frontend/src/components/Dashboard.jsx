@@ -158,9 +158,10 @@ const Dashboard = () => {
   }
 
   const formatChartData = (data) => {
-    if (!data || data.length === 0) return []
+    const rows = Array.isArray(data) ? data : Object.values(data || {}).flat()
+    if (!rows || rows.length === 0) return []
     
-    const groupedByTime = data.reduce((acc, item) => {
+    const groupedByTime = rows.reduce((acc, item) => {
       const time = new Date(item.timestamp).toLocaleDateString()
       if (!acc[time]) acc[time] = { time }
       acc[time][item.entity_id] = item.value

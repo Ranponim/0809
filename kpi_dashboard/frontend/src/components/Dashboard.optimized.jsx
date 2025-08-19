@@ -235,10 +235,12 @@ const Dashboard = () => {
   }, [])
 
   // 차트 데이터 포맷팅 함수를 useCallback으로 최적화
+  // 백엔드에서 객체(Map) 또는 배열로 올 수 있어 방어적으로 배열을 보장
   const formatChartData = useCallback((data) => {
-    if (!data || data.length === 0) return []
-    
-    const groupedByTime = data.reduce((acc, item) => {
+    const rows = Array.isArray(data) ? data : Object.values(data || {}).flat()
+    if (!rows || rows.length === 0) return []
+
+    const groupedByTime = rows.reduce((acc, item) => {
       const time = new Date(item.timestamp).toLocaleDateString()
       if (!acc[time]) acc[time] = { time }
       acc[time][item.entity_id] = item.value
@@ -248,6 +250,24 @@ const Dashboard = () => {
     return Object.values(groupedByTime)
   }, [])
 
+  /**
+   * /api/kpi/query 응답 스펙
+   * {
+   *   success: boolean,
+   *   data: { [kpiType: string]: Array<{
+   *     timestamp: string,
+   *     entity_id: string,
+   *     value: number,
+   *     kpi_type?: string,
+   *     peg_name?: string,
+   *     ne?: string,
+   *     cell_id?: string,
+   *     date?: string,
+   *     hour?: number
+   *   }> },
+   *   metadata: object
+   * }
+   */
   // 데이터 fetching 함수를 useCallback으로 최적화
   const fetchKPIData = useCallback(async () => {
     try {
@@ -262,29 +282,23 @@ const Dashboard = () => {
       const endDate = new Date().toISOString().split('T')[0]
       const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      // 새로운 API 형식으로 요청
-      const requests = settings.selectedPegs.map(kt => apiClient.post('/api/kpi/query', {
+      // 백엔드 응답 형식에 맞춰 단일 요청으로 여러 KPI 동시 조회
+      const response = await apiClient.post('/api/kpi/query', {
         start_date: startDate,
         end_date: endDate,
-        kpi_type: kt,
+        kpi_types: settings.selectedPegs,
         ne: settings.defaultNe,
         cellid: settings.defaultCellId,
-        ids: 2 // Mock 데이터용
-      }))
-
-      const responses = await Promise.all(requests)
-      const dataByKpi = {}
-      
-      responses.forEach((res, idx) => { 
-        dataByKpi[settings.selectedPegs[idx]] = res?.data?.data || [] 
       })
-      
+
+      const dataByKpi = response?.data?.data || {}
+
       setKpiData(dataByKpi)
       setLastRefresh(new Date())
       
       console.log('[Dashboard] 데이터 fetching 완료', {
         kpiCount: Object.keys(dataByKpi).length,
-        totalRows: Object.values(dataByKpi).reduce((sum, arr) => sum + arr.length, 0)
+        totalRows: Object.values(dataByKpi).reduce((sum, arr) => sum + (arr?.length || 0), 0)
       })
       
     } catch (error) {

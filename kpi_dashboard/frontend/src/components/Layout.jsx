@@ -18,8 +18,8 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
     { id: 'results', label: '분석 결과', icon: Database, preload: preloadResultsList },
     { id: 'summary', label: 'Summary Report', icon: FileText, preload: preloadSummaryReport },
     { id: 'statistics', label: 'Statistics', icon: TrendingUp, preload: preloadStatistics },
-    { id: 'preference', label: 'Preference', icon: Settings, preload: preloadPreferenceManager },
-    { id: 'llm-analysis', label: 'LLM 분석', icon: Brain, preload: preloadLLMAnalysisManager }
+    { id: 'llm-analysis', label: 'LLM 분석', icon: Brain, preload: preloadLLMAnalysisManager },
+    { id: 'preference', label: 'Preference', icon: Settings, preload: preloadPreferenceManager }
   ]
 
   // 컴포넌트 마운트 시 네트워크 상태 기반 프리로딩 시작
@@ -42,13 +42,13 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">3GPP KPI Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">PVT  KPI Dashboard</h1>
         </div>
       </header>
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-sm min-h-screen">
+        <aside className="w-64 bg-white shadow-sm min-h-screen flex flex-col">
           <nav className="p-4">
             <div className="space-y-2">
               {menuItems.map((item) => {
@@ -68,6 +68,10 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
               })}
             </div>
           </nav>
+          {/* Footer */}
+          <div className="mt-auto p-4 text-xs text-gray-400">
+            Powered by PVT AI Crew
+          </div>
         </aside>
 
         {/* Main Content */}
