@@ -9,7 +9,7 @@ Statistics 비교 분석 API를 위한 Pydantic 모델 정의
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 import logging
 
 # 로거 설정
@@ -27,16 +27,17 @@ class DateRange(BaseModel):
             raise ValueError('종료 날짜는 시작 날짜보다 이후여야 합니다')
         return v
     
-    class Config:
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             datetime: lambda v: v.isoformat()
-        }
-        schema_extra = {
+        },
+        json_schema_extra={
             "example": {
                 "start_date": "2025-08-01T00:00:00",
                 "end_date": "2025-08-07T23:59:59"
             }
         }
+    )
 
 class StatisticsCompareRequest(BaseModel):
     """Statistics 비교 분석 API 요청 모델"""
@@ -74,8 +75,8 @@ class StatisticsCompareRequest(BaseModel):
         description="소수점 자릿수 (0-10, 기본값: 4)"
     )
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "period1": {
                     "start_date": "2025-08-01T00:00:00",
@@ -92,6 +93,7 @@ class StatisticsCompareRequest(BaseModel):
                 "decimal_places": 4
             }
         }
+    )
 
 class PegStatistics(BaseModel):
     """개별 PEG의 통계 정보"""
@@ -108,8 +110,8 @@ class PegStatistics(BaseModel):
     percentile_25: Optional[float] = Field(None, description="25% 분위수")
     percentile_75: Optional[float] = Field(None, description="75% 분위수")
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "count": 168,
                 "mean": 99.5,
@@ -121,6 +123,7 @@ class PegStatistics(BaseModel):
                 "percentile_75": 99.8
             }
         }
+    )
 
 class PegComparisonResult(BaseModel):
     """개별 PEG의 비교 분석 결과"""
@@ -152,8 +155,8 @@ class PegComparisonResult(BaseModel):
         description="개선 정도 ('significant', 'moderate', 'minor', 'none')"
     )
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "peg_name": "availability",
                 "period1_stats": {
@@ -178,6 +181,7 @@ class PegComparisonResult(BaseModel):
                 "improvement_magnitude": "minor"
             }
         }
+    )
 
 class StatisticsCompareResponse(BaseModel):
     """Statistics 비교 분석 API 응답 모델"""
@@ -197,8 +201,8 @@ class StatisticsCompareResponse(BaseModel):
     # 메타데이터
     metadata: Dict[str, Any] = Field(..., description="분석 메타데이터")
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "request_summary": {
                     "period1": "2025-08-01 to 2025-08-07",
@@ -234,6 +238,7 @@ class StatisticsCompareResponse(BaseModel):
                 }
             }
         }
+    )
 
 class StatisticsCompareError(BaseModel):
     """Statistics 비교 분석 API 에러 응답 모델"""
@@ -243,8 +248,8 @@ class StatisticsCompareError(BaseModel):
     details: Optional[Dict[str, Any]] = Field(None, description="상세 에러 정보")
     suggestions: Optional[List[str]] = Field(None, description="해결 제안사항")
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error_code": "INSUFFICIENT_DATA",
                 "error_message": "지정된 기간에 분석할 데이터가 부족합니다",
@@ -260,6 +265,7 @@ class StatisticsCompareError(BaseModel):
                 ]
             }
         }
+    )
 
 # 분석 결과 개선 상태 열거형
 IMPROVEMENT_STATUS = {

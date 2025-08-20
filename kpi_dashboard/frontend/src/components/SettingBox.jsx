@@ -6,7 +6,7 @@
  * 
  * 주요 기능:
  * - 접이식 카드 UI
- * - 다양한 입력 타입 지원 (텍스트, 숫자, 선택, 체크박스, 다중선택, 드롭다운)
+ * - 다양한 입력 타입 지원 (텍스트, 숫자, 선택, 체크박스, 다중선택)
  * - 실시간 유효성 검증
  * - 저장 상태 시각적 피드백
  * - 에러 처리 및 표시
@@ -18,7 +18,7 @@
  *   description="대시보드의 기본 동작을 설정합니다"
  *   settingKey="dashboardSettings"
  *   fields={[
- *     { key: 'selectedPegs', type: 'dropdown', label: 'PEG 선택', options: pegOptions, searchPlaceholder: 'PEG 검색...' },
+ *     { key: 'selectedPegs', type: 'multiselect', label: 'PEG 선택', options: pegOptions },
  *     { key: 'autoRefreshInterval', type: 'number', label: '새로고침 간격', min: 5, max: 300 }
  *   ]}
  * />
@@ -35,8 +35,6 @@ import { Switch } from '@/components/ui/switch.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { Checkbox } from '@/components/ui/checkbox.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.jsx'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible.jsx'
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx'
@@ -74,11 +72,6 @@ const FIELD_TYPE_DEFAULTS = {
   multiselect: {
     placeholder: '하나 이상 선택하세요',
     options: []
-  },
-  dropdown: {
-    placeholder: '항목 선택하기',
-    options: [],
-    searchPlaceholder: '검색...'
   },
   checkbox: {
     label: '활성화'
@@ -247,133 +240,6 @@ const SwitchField = ({ field, value, onChange, error, disabled }) => (
   </div>
 )
 
-const DropdownField = ({ field, value, onChange, error, disabled }) => {
-  const [open, setOpen] = useState(false)
-  const selectedValues = Array.isArray(value) ? value : []
-  
-  // 로그: 드롭다운 필드 초기화 및 상태 확인
-  console.log(`[DropdownField] ${field.label} - 초기화`, {
-    selectedCount: selectedValues.length,
-    totalOptions: field.options?.length || 0,
-    selectedValues: selectedValues.slice(0, 3) // 처음 3개만 로그로 출력
-  })
-
-  const handleSelect = (optionValue) => {
-    let newValues
-    if (selectedValues.includes(optionValue)) {
-      // 이미 선택된 경우 제거
-      newValues = selectedValues.filter(v => v !== optionValue)
-      console.log(`[DropdownField] ${field.label} - 항목 제거: ${optionValue}`)
-    } else {
-      // 새로 선택하는 경우 추가
-      newValues = [...selectedValues, optionValue]
-      console.log(`[DropdownField] ${field.label} - 항목 추가: ${optionValue}`)
-    }
-    
-    console.log(`[DropdownField] ${field.label} - 변경 후 선택된 항목 수: ${newValues.length}`)
-    onChange(newValues)
-  }
-
-  const getDisplayText = () => {
-    if (selectedValues.length === 0) {
-      return field.placeholder || FIELD_TYPE_DEFAULTS.dropdown.placeholder
-    }
-    if (selectedValues.length === 1) {
-      const option = field.options?.find(opt => opt.value === selectedValues[0])
-      return option?.label || selectedValues[0]
-    }
-    return `${selectedValues.length}개 선택됨`
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">
-        {field.label}
-        {field.required && <span className="text-destructive ml-1">*</span>}
-      </Label>
-      
-      {/* 드롭다운 메인 컨트롤 */}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className={`w-full justify-between ${error ? 'border-destructive' : ''}`}
-            disabled={disabled}
-          >
-            <span className="truncate">{getDisplayText()}</span>
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[400px] p-0" align="start">
-          <Command>
-            <CommandInput 
-              placeholder={field.searchPlaceholder || FIELD_TYPE_DEFAULTS.dropdown.searchPlaceholder} 
-              className="h-9" 
-            />
-            <CommandList>
-              <CommandEmpty>항목을 찾을 수 없습니다.</CommandEmpty>
-              <CommandGroup>
-                {field.options?.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.value}
-                    onSelect={() => handleSelect(option.value)}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center space-x-2 w-full">
-                      <Checkbox
-                        checked={selectedValues.includes(option.value)}
-                        onCheckedChange={() => {}} // onCheckedChange는 onSelect에서 처리
-                        className="pointer-events-none"
-                      />
-                      <span className="flex-1">{option.label}</span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-
-      {/* 선택된 항목들 표시 */}
-      {selectedValues.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selectedValues.map(val => {
-            const option = field.options?.find(opt => opt.value === val)
-            return option ? (
-              <Badge 
-                key={val} 
-                variant="secondary" 
-                className="text-xs flex items-center gap-1"
-              >
-                {option.label}
-                <X 
-                  className="h-3 w-3 cursor-pointer hover:text-destructive" 
-                  onClick={() => handleSelect(option.value)}
-                />
-              </Badge>
-            ) : null
-          })}
-        </div>
-      )}
-
-      {/* 설명 및 에러 메시지 */}
-      {field.description && (
-        <p className="text-xs text-muted-foreground">{field.description}</p>
-      )}
-      {error && (
-        <p className="text-xs text-destructive flex items-center gap-1">
-          <AlertCircle className="h-3 w-3" />
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
 // ================================
 // 메인 SettingBox 컴포넌트
 // ================================
@@ -508,9 +374,6 @@ const SettingBox = ({
       
       case 'multiselect':
         return <MultiselectField key={field.key} {...commonProps} />
-      
-      case 'dropdown':
-        return <DropdownField key={field.key} {...commonProps} />
       
       case 'switch':
       case 'checkbox':

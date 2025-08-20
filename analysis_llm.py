@@ -1208,8 +1208,8 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             raise ValueError("'n_minus_1'와 'n' 시간 범위를 모두 제공해야 합니다.")
 
         output_dir = request.get('output_dir', os.path.abspath('./analysis_output'))
-        # 기본 백엔드 업로드 URL: 요청값 > 환경변수 > 로컬 기본값
-        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://localhost:8000/api/analysis-result'
+        # 기본 백엔드 업로드 URL: 요청값 > 환경변수 > 로컬 기본값 (복수형 컬렉션 엔드포인트로 수정)
+        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://localhost:8000/api/analysis/results'
 
         db = request.get('db', {})
         table = request.get('table', 'summary')
@@ -1365,47 +1365,85 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         report_path = generate_multitab_html_report(llm_analysis, charts_base64, output_dir, processed_df)
         logging.info("리포트 경로: %s", report_path)
 
-        # 백엔드 POST payload 구성 - 원본 PostgreSQL 스키마 정보 포함
-        # 원본 스키마: id(int), datetime(ts), value(double), version(text), 
-        # family_name(text), cellid(text), peg_name(text), host(text), ne(text)
-        result_payload = {
-            "status": "success",
-            "n_minus_1": n1_text,
-            "n": n_text,
-            "analysis": llm_analysis,
-            "stats": processed_df.to_dict(orient='records'),
+        # 백엔드 POST payload 구성 (AnalysisResultCreate 스키마에 맞춤)
+        # - stats: {period, kpi_name, avg} 배열로 변환
+        # - 추가 메타는 analysis 또는 request_params로 수용
+
+        def _to_stats(df: pd.DataFrame, period_label: str) -> list[dict]:
+            items: list[dict] = []
+            if df is None or df.empty:
+                return items
+            # 기대 컬럼: peg_name, avg_value
+            try:
+                for row in df.itertuples(index=False):
+                    items.append({
+                        "period": period_label,
+                        "kpi_name": str(getattr(row, "peg_name")),
+                        "avg": float(getattr(row, "avg_value"))
+                    })
+            except Exception:
+                # 컬럼 명이 다를 경우 보호적 접근
+                if "peg_name" in df.columns and "avg_value" in df.columns:
+                    for peg, val in zip(df["peg_name"], df["avg_value"]):
+                        items.append({"period": period_label, "kpi_name": str(peg), "avg": float(val)})
+            return items
+
+        stats_records: list[dict] = []
+        try:
+            stats_records.extend(_to_stats(n1_df, "N-1"))
+            stats_records.extend(_to_stats(n_df, "N"))
+        except Exception as e:
+            logging.warning("stats 변환 실패, 빈 배열로 대체: %s", e)
+            stats_records = []
+
+        # 요청 파라미터(입력 컨텍스트) 수집
+        request_params = {
+            "db": db,
+            "table": table,
+            "columns": columns,
+            "time_ranges": {
+                "n_minus_1": {"start": n1_start.isoformat(), "end": n1_end.isoformat()},
+                "n": {"start": n_start.isoformat(), "end": n_end.isoformat()}
+            },
+            "filters": {
+                "ne": ne_filters,
+                "cellid": cellid_filters
+            },
+            "preference": request.get("preference"),
+            "selected_pegs": request.get("selected_pegs"),
+            "peg_definitions": request.get("peg_definitions")
+        }
+
+        # 대표 ne/cell ID (없으면 ALL)
+        ne_id_repr = ne_filters[0] if ne_filters else "ALL"
+        cell_id_repr = cellid_filters[0] if cellid_filters else "ALL"
+
+        # 분석 섹션에 LLM 결과 + 차트/가정/원본 메타 포함
+        analysis_section = {
+            **(llm_analysis if isinstance(llm_analysis, dict) else {"summary": str(llm_analysis)}),
             "chart_overall_base64": charts_base64.get("overall"),
-            "report_path": report_path,
-            "assumption_same_environment": True,
-            # 원본 스키마 정보 추가 - Frontend validation 오류 해결
+            "assumptions": {"same_environment": True},
             "source_metadata": {
                 "db_config": db,
                 "table": table,
                 "columns": columns,
-                "time_ranges": {
-                    "n_minus_1": {"start": n1_start.isoformat(), "end": n1_end.isoformat()},
-                    "n": {"start": n_start.isoformat(), "end": n_end.isoformat()}
-                },
-                "filters": {
-                    "ne_filters": ne_filters,
-                    "cellid_filters": cellid_filters
-                },
-                # 대표 ne_id, cell_id - 필터링된 첫 번째 값 또는 "ALL"
-                "ne_id": ne_filters[0] if ne_filters else "ALL",
-                "cell_id": cellid_filters[0] if cellid_filters else "ALL",
-                # 원본 스키마 정보 명시
-                "schema_info": {
-                    "id": "auto_increment_integer",
-                    "datetime": "timestamp",
-                    "value": "double_precision",
-                    "version": "text",
-                    "family_name": "text", 
-                    "cellid": "text",
-                    "peg_name": "text",
-                    "host": "text",
-                    "ne": "text"
-                }
+                "ne_id": ne_id_repr,
+                "cell_id": cell_id_repr
             }
+        }
+
+        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId, analysisType)
+        result_payload = {
+            "analysisType": "llm_analysis",
+            "analysisDate": n_end.isoformat(),
+            "neId": ne_id_repr,
+            "cellId": cell_id_repr,
+            "status": "success",
+            "report_path": report_path,
+            "results": [],
+            "stats": stats_records,
+            "analysis": analysis_section,
+            "request_params": request_params
         }
         logging.info("payload 준비 완료: stats_rows=%d", len(result_payload.get("stats", [])))
 

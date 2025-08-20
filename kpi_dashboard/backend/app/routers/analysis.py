@@ -86,8 +86,9 @@ async def create_analysis_result(
     try:
         collection = get_analysis_collection()
         
-        # 데이터 준비
-        result_dict = result.model_dump(by_alias=True, exclude_unset=True)
+        # 데이터 준비: DB에는 snake_case 필드명으로 저장 (v2 표준 키)
+        # by_alias=False로 덤프하여 camelCase alias가 아닌 원 필드명으로 저장한다
+        result_dict = result.model_dump(by_alias=False, exclude_unset=True)
         
         # metadata 업데이트
         if "metadata" in result_dict:
@@ -192,13 +193,19 @@ async def list_analysis_results(
         has_next = (skip + size) < total_count
         
         # 데이터 조회 (요약 정보만)
+        # 기존 camelCase 저장 레거시 문서와 호환을 위해 양쪽 키를 모두 조회
         projection = {
             "_id": 1,
             "analysis_date": 1,
+            "analysisDate": 1,
             "ne_id": 1,
+            "neId": 1,
             "cell_id": 1,
+            "cellId": 1,
             "status": 1,
-            "results": 1  # results 배열의 길이를 계산하기 위해 포함
+            "results": 1,
+            "analysis_type": 1,
+            "analysisType": 1,
         }
         
         cursor = collection.find(filter_dict, projection)
@@ -211,16 +218,22 @@ async def list_analysis_results(
         for doc in documents:
             # results_count 계산
             results_count = len(doc.get("results", []))
-            
+
+            # 레거시 호환: snake_case 우선, 없으면 camelCase 폴백
+            analysis_date_val = doc.get("analysis_date") or doc.get("analysisDate")
+            ne_id_val = doc.get("ne_id") or doc.get("neId")
+            cell_id_val = doc.get("cell_id") or doc.get("cellId")
+            analysis_type_val = doc.get("analysis_type") or doc.get("analysisType")
+
             # 직접 dict로 구성 (FastAPI가 JSON 직렬화 시 필드명 사용)
             item_dict = {
                 "id": str(doc["_id"]),  # ✅ _id → id로 변환
-                "analysisDate": doc["analysis_date"].isoformat() if doc.get("analysis_date") else None,
-                "neId": doc.get("ne_id"),
-                "cellId": doc.get("cell_id"),
-                "status": doc["status"],
+                "analysisDate": analysis_date_val.isoformat() if analysis_date_val else None,
+                "neId": ne_id_val,
+                "cellId": cell_id_val,
+                "status": doc.get("status"),
                 "results_count": results_count,
-                "analysis_type": doc.get("analysis_type")
+                "analysis_type": analysis_type_val
             }
             
             items.append(item_dict)
