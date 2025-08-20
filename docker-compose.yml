@@ -59,6 +59,14 @@ services:
     environment:
       # 런타임에 백엔드 베이스 URL 주입 (빌드와 무관)
       BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://localhost:8000}
+      # Database 기본 연결 정보 주입 (Preference > Database 탭 기본값으로 사용)
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-pass}
+      DB_NAME: ${DB_NAME:-netperf}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5173:80"
 

@@ -14,8 +14,23 @@ import { toast } from 'sonner'
 import apiClient from '@/lib/apiClient.js'
 
 // ================================
-// 초기 상태 정의
+// 초기 상태 정의 (런타임 환경변수 주입)
 // ================================
+
+// 브라우저 런타임에 엔트리포인트가 생성한 window.__RUNTIME_CONFIG__에서 DB 접속 기본값을 읽습니다.
+// 서버 빌드/정적 배포에서도 안전하도록 방어적 접근을 사용합니다.
+const runtimeConfig = typeof window !== 'undefined' && window.__RUNTIME_CONFIG__ ? window.__RUNTIME_CONFIG__ : {}
+const runtimeDbDefaults = {
+  host: runtimeConfig.DB_HOST || '',
+  port: (() => {
+    const p = parseInt(runtimeConfig.DB_PORT, 10)
+    return Number.isFinite(p) ? p : 5432
+  })(),
+  user: runtimeConfig.DB_USER || 'postgres',
+  password: runtimeConfig.DB_PASSWORD || '',
+  dbname: runtimeConfig.DB_NAME || 'postgres',
+  table: 'summary'
+}
 
 const defaultSettings = {
   dashboardSettings: {
@@ -39,12 +54,13 @@ const defaultSettings = {
     autoAnalysis: false
   },
   databaseSettings: {
-    host: '',
-    port: 5432,
-    user: 'postgres',
-    password: '',
-    dbname: 'postgres',
-    table: 'summary'
+    // 런타임 설정이 제공되면 이를 기본값으로 사용합니다.
+    host: runtimeDbDefaults.host,
+    port: runtimeDbDefaults.port,
+    user: runtimeDbDefaults.user,
+    password: runtimeDbDefaults.password,
+    dbname: runtimeDbDefaults.dbname,
+    table: runtimeDbDefaults.table
   },
   notificationSettings: {
     enableToasts: true,
