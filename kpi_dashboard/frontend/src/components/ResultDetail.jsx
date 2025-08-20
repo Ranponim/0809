@@ -516,26 +516,96 @@ const ResultDetail = ({
     )
   }
 
-  // === 권장사항 렌더링 ===
-  const renderRecommendations = (results) => {
-    const allRecommendations = results.flatMap(result => result.recommendations || [])
-    
+  // === LLM 분석 리포트 렌더링 (analysis_llm.py HTML 구성과 동일 섹션) ===
+  const renderLLMReport = (results) => {
+    const first = results?.[0] || {}
+    // 백엔드 응답 구조 정규화: { success, message, data: { ...문서... } }
+    const doc = first?.data?.data || first?.data || first
+    const analysis = doc?.analysis || {}
+
+    // 요약: executive_summary 우선, 그 외 호환 키 폴백
+    const summaryText = analysis.executive_summary || analysis.overall_summary || analysis.comprehensive_summary || '요약 정보가 없습니다.'
+
+    // 진단 결과: diagnostic_findings(list[dict]) 우선, 없으면 key_findings(list[str]) 폴백
+    const diagnosticFindings = Array.isArray(analysis.diagnostic_findings) && analysis.diagnostic_findings.length
+      ? analysis.diagnostic_findings
+      : (Array.isArray(analysis.key_findings) ? analysis.key_findings.map(t => ({ primary_hypothesis: String(t) })) : [])
+
+    // 권장 조치: recommended_actions(list[dict] 또는 list[str]) 처리
+    const recommendedActionsRaw = Array.isArray(analysis.recommended_actions) ? analysis.recommended_actions : []
+    const recommendedActions = recommendedActionsRaw.map((a) => {
+      if (a && typeof a === 'object') return a
+      return { priority: '', action: String(a || ''), details: '' }
+    })
+
     return (
       <div className="space-y-4">
-        {allRecommendations.map((recommendation, index) => (
-          <Card key={index}>
-            <CardContent className="pt-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">{recommendation}</p>
-                </div>
+        {/* 종합 분석 요약 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>종합 분석 요약</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground whitespace-pre-line">
+              {summaryText}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 핵심 관찰 사항 (diagnostic_findings) */}
+        {diagnosticFindings.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>핵심 관찰 사항</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {diagnosticFindings.map((d, idx) => (
+                  <div key={idx} className="space-y-1">
+                    {d.primary_hypothesis && (
+                      <div className="text-sm"><span className="font-semibold">가설 {idx + 1}:</span> {d.primary_hypothesis}</div>
+                    )}
+                    {d.supporting_evidence && (
+                      <div className="text-xs text-muted-foreground">증거: {d.supporting_evidence}</div>
+                    )}
+                    {d.confounding_factors_assessment && (
+                      <div className="text-xs text-muted-foreground">교란 변수 평가: {d.confounding_factors_assessment}</div>
+                    )}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
-        ))}
+        )}
+
+        {/* 권장 조치 (recommended_actions) */}
+        {recommendedActions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>권장 조치</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {recommendedActions.map((a, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {a.priority && <Badge variant="outline">{a.priority}</Badge>}
+                        <div className="text-sm font-medium">{a.action || '-'}</div>
+                      </div>
+                      {a.details && (
+                        <div className="text-xs text-muted-foreground mt-1 whitespace-pre-line">{a.details}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     )
   }
@@ -627,7 +697,7 @@ const ResultDetail = ({
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">개요</TabsTrigger>
           <TabsTrigger value="kpi">KPI 결과</TabsTrigger>
-          <TabsTrigger value="recommendations">권장사항</TabsTrigger>
+          <TabsTrigger value="recommendations">LLM 분석 리포트</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-6">
@@ -649,10 +719,7 @@ const ResultDetail = ({
         </TabsContent>
 
         <TabsContent value="recommendations" className="space-y-4 mt-6">
-          <div>
-            <h3 className="text-lg font-semibold mb-4">AI 권장사항</h3>
-            {renderRecommendations(processedResults)}
-          </div>
+          {renderLLMReport(processedResults)}
         </TabsContent>
       </Tabs>
     )
