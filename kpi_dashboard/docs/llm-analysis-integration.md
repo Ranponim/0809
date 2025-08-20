@@ -132,7 +132,11 @@ Frontend: 기존 React 의존성 유지(추가 없음)
 
 Backend 컨테이너 환경 변수 예:
 ```bash
-MONGO_URL=mongodb://mongo:27017/analysis_db
+# MongoDB (권장 표준)
+MONGO_URL=mongodb://mongo:27017
+MONGO_DB_NAME=kpi
+
+# MCP(옵션)
 MCP_ANALYZER_URL=http://mcp-host:8001/analyze   # 실제 MCP 서버 엔드포인트
 MCP_API_KEY=xxx                                  # 필요시
 ```

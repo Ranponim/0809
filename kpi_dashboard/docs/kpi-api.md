@@ -4,6 +4,7 @@
 
 ## 엔드포인트
 - POST `/api/kpi/query`
+- POST `/api/kpi/statistics/batch` (여러 KPI 동시 조회)
 
 ## 요청 (Request)
 ```json
@@ -61,6 +62,17 @@
 - 데이터 전처리(차트 포맷)는 방어적으로 동작하도록 구현되어 있습니다.
   - 객체 혹은 배열 입력 모두 허용: `const rows = Array.isArray(data) ? data : Object.values(data || {}).flat()`
   - 시간 단위 그룹화 후 `[{ time, <entityId1>: value, <entityId2>: value, ... }]` 형태로 변환
+
+### 배치 API 빠른 예시
+```json
+{
+  "start_date": "2025-08-06",
+  "end_date": "2025-08-07",
+  "kpi_types": ["availability", "rrc", "erab"],
+  "entity_ids": "LHK078ML1,LHK078MR1",
+  "interval_minutes": 60
+}
+```
 
 ## 예시 코드 (프론트 요청)
 ```ts

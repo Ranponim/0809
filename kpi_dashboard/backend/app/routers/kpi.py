@@ -247,6 +247,71 @@ async def kpi_query(payload: dict = Body(...)):
             detail=f"KPI 쿼리 처리 중 오류가 발생했습니다: {str(e)}"
         )
 
+@router.post("/timeseries", summary="KPI 시계열 쿼리", tags=["KPI Query"])
+async def kpi_timeseries(payload: dict = Body(...)):
+    """
+    PEG/NE/CellID/시간을 포함한 시계열 데이터 쿼리 엔드포인트.
+    - 기본: 지금으로부터 1시간 전 ~ 현재
+    - 최대: 14일 이전까지 허용
+    - NE만 있고 CellID가 없으면 동일 NE 내 Cell 평균으로 집계하여 반환
+    
+    Request Body 예시:
+    {
+      "kpi_types": ["availability", "rrc"],
+      "ne": ["NVGNB#101086"],
+      "cellid": [],
+      "start": "2025-08-14T00:00:00",
+      "end": "2025-08-14T01:00:00"
+    }
+    """
+    try:
+        kpi_types = _to_list(payload.get("kpi_types") or payload.get("kpi_type"))
+        ne_filters = _to_list(payload.get("ne"))
+        cellid_filters = _to_list(payload.get("cellid") or payload.get("cell"))
+
+        # 시간 파라미터 처리 (기본 1시간)
+        end_raw = payload.get("end")
+        start_raw = payload.get("start")
+        now = datetime.utcnow()
+        end_dt = datetime.fromisoformat(end_raw) if end_raw else now
+        start_dt = datetime.fromisoformat(start_raw) if start_raw else (end_dt - timedelta(hours=1))
+
+        # 최대 14일 제한
+        if end_dt - start_dt > timedelta(days=14):
+            start_dt = end_dt - timedelta(days=14)
+
+        # 포맷팅 (postgres 함수는 날짜 문자열 사용)
+        start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        from ..utils.postgresql_db import query_kpi_time_series
+
+        data_by_kpi = query_kpi_time_series(
+            start_date=start_date,
+            end_date=end_date,
+            kpi_types=kpi_types,
+            ne_filters=ne_filters,
+            cellid_filters=cellid_filters,
+            aggregate_cells_if_missing=True,
+        )
+
+        return {
+            "success": True,
+            "data": data_by_kpi,
+            "metadata": {
+                "kpi_types": kpi_types,
+                "ne_filters": ne_filters,
+                "cellid_filters": cellid_filters,
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat(),
+                "aggregated": len(cellid_filters) == 0,
+            }
+        }
+    except Exception as e:
+        logger.error("/api/kpi/timeseries 오류: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"KPI 시계열 쿼리 오류: {e}")
+
+
 @router.get("/info", summary="KPI API 정보", tags=["KPI Query"])
 async def kpi_info():
     """
@@ -258,7 +323,8 @@ async def kpi_info():
         "description": "3GPP KPI 데이터 쿼리 API",
         "endpoints": {
             "query": "/api/kpi/query",
-            "info": "/api/kpi/info"
+            "info": "/api/kpi/info",
+            "timeseries": "/api/kpi/timeseries"
         },
         "supported_kpi_types": [
             "availability",

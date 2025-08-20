@@ -264,9 +264,10 @@ const SettingBox = ({
   const [showValidation, setShowValidation] = useState(false)
   
   // usePreference 훅 사용
-  const {
+  const { 
     settings,
     updateSettings,
+    updateSectionLocal,
     saving,
     error: globalError,
     validationErrors,
@@ -310,9 +311,14 @@ const SettingBox = ({
     }
 
     // 전체 설정에서 해당 섹션만 업데이트
-    updateSettings({
-      [settingKey]: updatedSectionSettings
-    })
+    // showSaveButton이 켜져 있으면 자동 저장을 하지 않고 로컬 상태만 갱신
+    if (showSaveButton) {
+      updateSectionLocal(settingKey, updatedSectionSettings)
+    } else {
+      updateSettings({
+        [settingKey]: updatedSectionSettings
+      })
+    }
 
     // 외부 핸들러 호출 (선택사항)
     onFieldChange?.(fieldKey, newValue, updatedSectionSettings)

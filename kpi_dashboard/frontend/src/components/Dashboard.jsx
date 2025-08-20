@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { RefreshCw, Settings, Clock } from 'lucide-react'
 import apiClient from '@/lib/apiClient.js'
-import { useDashboardSettings } from '@/hooks/usePreference.js'
+import { useDashboardSettings, usePreference } from '@/hooks/usePreference.js'
 
 const Dashboard = () => {
   const [kpiData, setKpiData] = useState({})
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [refreshCountdown, setRefreshCountdown] = useState(0)
+  const [zoomed, setZoomed] = useState({ open: false, title: '', data: [] })
   const refreshIntervalRef = useRef(null)
   const countdownIntervalRef = useRef(null)
 
@@ -23,25 +25,20 @@ const Dashboard = () => {
     error: settingsError
   } = useDashboardSettings()
 
-  const defaultKpiKeys = ['availability','rrc','erab','sar','mobility_intra','cqi']
-  
-  // 현재 설정에서 값 추출 (기본값 포함)
-  const selectedPegs = dashboardSettings.selectedPegs?.length > 0 ? dashboardSettings.selectedPegs : defaultKpiKeys
-  const defaultNe = dashboardSettings.defaultNe || ''
-  const defaultCellId = dashboardSettings.defaultCellId || ''
+  // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용
+  const selectedPegs = Array.isArray(dashboardSettings.selectedPegs) ? dashboardSettings.selectedPegs : []
+  // Preference > Statistics의 데이터 선택 반영
+  const { settings: pref } = usePreference()
+  const statisticsSel = pref?.statisticsSettings || {}
+  const selectedNEs = Array.isArray(statisticsSel.selectedNEs) ? statisticsSel.selectedNEs : []
+  const selectedCellIds = Array.isArray(statisticsSel.selectedCellIds) ? statisticsSel.selectedCellIds : []
   const autoRefreshInterval = dashboardSettings.autoRefreshInterval || 30
   const chartStyle = dashboardSettings.chartStyle || 'line'
+  const chartLayout = dashboardSettings.chartLayout || 'byPeg'
   const showLegend = dashboardSettings.showLegend !== false
   const showGrid = dashboardSettings.showGrid !== false
 
-  const titleFor = (key) => ({
-    availability: 'Availability (%)',
-    rrc: 'RRC Success Rate (%)',
-    erab: 'ERAB Success Rate (%)',
-    sar: 'SAR',
-    mobility_intra: 'Mobility Intra (%)',
-    cqi: 'CQI',
-  }[key] || key)
+  const titleFor = (key) => key
 
   const colorFor = (index) => {
     const preset = ['#8884d8','#82ca9d','#ffc658','#ff7300','#8dd1e1','#d084d0']
@@ -75,16 +72,16 @@ const Dashboard = () => {
         defaultCellId,
       })
 
-      const endDate = new Date().toISOString().split('T')[0]
-      const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      // 기간: 기본 1시간 (설정 저장 가능하도록 dashboardSettings에 저장/사용)
+      const end = new Date()
+      const start = new Date(end.getTime() - (dashboardSettings.defaultHours || 1) * 60 * 60 * 1000)
 
-      // 단일 API 요청으로 변경
-      const response = await apiClient.post('/api/kpi/query', {
-        start_date: startDate,
-        end_date: endDate,
-        kpi_types: selectedPegs, // kpi_type -> kpi_types
-        ne: defaultNe,
-        cellid: defaultCellId,
+      const response = await apiClient.post('/api/kpi/timeseries', {
+        kpi_types: selectedPegs,
+        ne: selectedNEs,
+        cellid: selectedCellIds,
+        start: start.toISOString(),
+        end: end.toISOString()
       })
 
       const dataByKpi = response?.data?.data || {}
@@ -149,7 +146,7 @@ const Dashboard = () => {
   // 설정 변경 시 데이터 다시 로드
   useEffect(() => {
     fetchKPIData()
-  }, [selectedPegs, defaultNe, defaultCellId])
+  }, [selectedPegs, statisticsSel.selectedNEs, statisticsSel.selectedCellIds, dashboardSettings.defaultHours])
 
   // 수동 새로고침
   const handleManualRefresh = () => {
@@ -243,6 +240,37 @@ const Dashboard = () => {
             </LineChart>
           </ResponsiveContainer>
         )
+    }
+  }
+
+  const buildChartDataByLayout = (kpiKey) => {
+    const flatRows = Array.isArray(kpiData[kpiKey]) ? kpiData[kpiKey] : []
+    if (flatRows.length === 0) return []
+
+    if (chartLayout === 'byPeg') {
+      // 시간축 + entity_id 별 series
+      const groupedByTime = {}
+      flatRows.forEach(row => {
+        const t = new Date(row.timestamp).toLocaleString()
+        if (!groupedByTime[t]) groupedByTime[t] = { time: t }
+        groupedByTime[t][row.entity_id] = row.value
+      })
+      return Object.values(groupedByTime)
+    } else {
+      // byEntity: entity 기준으로 PEG 시리즈 구성 -> UI에서 카드 단위 핸들링 필요
+      const byEntity = {}
+      flatRows.forEach(row => {
+        const t = new Date(row.timestamp).toLocaleString()
+        const entity = row.entity_id
+        byEntity[entity] = byEntity[entity] || {}
+        byEntity[entity][t] = byEntity[entity][t] || { time: t }
+        byEntity[entity][t][row.peg_name] = row.value
+      })
+      const result = {}
+      Object.keys(byEntity).forEach(entity => {
+        result[entity] = Object.values(byEntity[entity]).sort((a,b)=> new Date(a.time)-new Date(b.time))
+      })
+      return result
     }
   }
 
@@ -367,39 +395,88 @@ const Dashboard = () => {
       {/* KPI 차트들 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {selectedPegs.map((key, idx) => {
-          const chartData = formatChartData(kpiData[key] || [])
-          const entities = chartData.length > 0 ? Object.keys(chartData[0]).filter(k => k !== 'time') : []
-          
-          return (
-            <Card key={key}>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  {titleFor(key)}
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {entities.length}개 엔터티
-                    </Badge>
-                    <Badge variant="secondary" className="text-xs">
-                      {chartData.length}개 데이터포인트
-                    </Badge>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  {chartData.length > 0 ? (
-                    renderChart(chartData, key, idx)
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">
-                      데이터가 없습니다
+          const built = buildChartDataByLayout(key)
+          if (chartLayout === 'byPeg') {
+            const chartData = Array.isArray(built) ? built : []
+            const entities = chartData.length > 0 ? Object.keys(chartData[0]).filter(k => k !== 'time') : []
+            return (
+              <Card key={`${key}-${idx}`}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {titleFor(key)}
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {entities.length}개 시리즈
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {chartData.length}개 데이터포인트
+                      </Badge>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 cursor-zoom-in" onClick={() => setZoomed({ open: true, title: titleFor(key), data: chartData })}>
+                    {chartData.length > 0 ? (
+                      renderChart(chartData, key, idx)
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground">
+                        데이터가 없습니다
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          } else {
+            // byEntity: entity 카드 반복, 각 카드에서 PEG 시리즈 표시
+            const byEntity = built || {}
+            return Object.keys(byEntity).map((entityId, eIdx) => {
+              const chartData = byEntity[entityId]
+              const series = chartData.length > 0 ? Object.keys(chartData[0]).filter(k => k !== 'time') : []
+              return (
+                <Card key={`${key}-${entityId}-${eIdx}`}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      {entityId}
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {series.length}개 시리즈
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {chartData.length}개 데이터포인트
+                        </Badge>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64 cursor-zoom-in" onClick={() => setZoomed({ open: true, title: entityId, data: chartData })}>
+                      {chartData.length > 0 ? (
+                        renderChart(chartData, `${key}-${entityId}`, idx + eIdx)
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-muted-foreground">
+                          데이터가 없습니다
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })
+          }
         })}
       </div>
+
+      {/* 확대 다이얼로그 */}
+      <Dialog open={zoomed.open} onOpenChange={(open) => setZoomed(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{zoomed.title}</DialogTitle>
+          </DialogHeader>
+          <div className="h-[480px]">
+            {Array.isArray(zoomed.data) && zoomed.data.length > 0 && renderChart(zoomed.data, 'zoom', 0)}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 빈 상태 */}
       {selectedPegs.length === 0 && (

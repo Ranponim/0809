@@ -123,7 +123,11 @@ const DerivedPegManager = ({
       }
 
       // PEG 참조 검증 (기본 PEG + Derived PEG 포함)
-      const pegReferences = formula.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || []
+      // 1) ${RawPEGName} 형태는 특수문자 허용 → 경고/에러 대상 제외
+      // 2) 그 외 토큰은 안전 토큰(영문/숫자/_)으로 간주하여 검증
+      const rawRefs = formula.match(/\$\{[^}]+\}/g) || []
+      // 원본 참조(${...})는 먼저 제거하여 안전 토큰만 검증
+      const pegReferences = (formula.replace(/\$\{[^}]+\}/g, ' ').match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [])
       
       // 사용 가능한 모든 PEG 목록 생성 (기본 PEG + 활성화된 Derived PEG)
       const allAvailablePegs = [
@@ -151,7 +155,10 @@ const DerivedPegManager = ({
       }
 
       // 연산자 검증
-      const invalidOps = formula.match(/[^a-zA-Z0-9_+\-*/()^%.,\s]/g)
+      // 허용 문자 확장: ${...} 참조, 공백 및 기본 연산자/함수만 제한
+      const invalidOps = formula
+        .replace(/\$\{[^}]+\}/g, '') // ${...} 제거 후 검사
+        .match(/[^a-zA-Z0-9_+\-*/()^%.,\s]/g)
       if (invalidOps) {
         errors.push(`지원하지 않는 문자: ${invalidOps.join(', ')}`)
       }

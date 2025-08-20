@@ -65,6 +65,11 @@ const EXPORT_SECTIONS = [
     description: '기본 날짜 범위, 비교 옵션, 소수점 자릿수 등'
   },
   {
+    key: 'derivedPegSettings',
+    label: 'Derived PEG 설정',
+    description: '사용자 정의 수식, 활성화 상태, 계산 정밀도 등'
+  },
+  {
     key: 'notificationSettings',
     label: '알림 설정',
     description: '토스트, 사운드, 알림 타입 설정'
@@ -160,7 +165,7 @@ const ImportExportBox = ({
           `preference-settings-${timestamp}.json`)
 
       // Export 실행
-      const success = await exportSettings(fileName)
+      const success = await exportSettings(fileName, settingsToExport)
       
       if (success) {
         toast.success(`설정이 "${fileName}" 파일로 내보내졌습니다`)

@@ -127,4 +127,4 @@ cd kpi_dashboard/backend
 - 포트 충돌: 백엔드(8000)/프론트(5173) 사용 포트가 점유된 경우 포트 변경 실행
 - 프론트 설치 실패: npm 사용 시 --legacy-peer-deps로 재시도
 - 로그 확인: 백엔드(INFO)와 프론트 콘솔 로그로 요청/응답 및 건수 확인
-- 백엔드 기동 실패: `.env`의 DB 설정 누락 여부 확인. 최소 `ANALYSIS_DB_URL` 또는 `ANALYSIS_PG_*` 중 하나가 필요합니다.
+- 백엔드 기동 실패: `.env`의 DB 설정 누락 여부 확인. 최소 `MONGO_URL`, `MONGO_DB_NAME`이 필요합니다. (KPI 조회용 Postgres는 선택 사항)

@@ -165,10 +165,22 @@ export function evaluateDerivedPegFormula(formula, pegValues = {}, precision = 4
     // 수식에서 PEG 이름을 실제 값으로 치환
     let evaluableFormula = formula
 
-    // PEG 이름을 값으로 치환 (긴 이름부터 처리하여 부분 매칭 방지)
-    const pegNames = Object.keys(pegValues).sort((a, b) => b.length - a.length)
-    
-    for (const pegName of pegNames) {
+    // 1) ${rawName} 형태의 참조를 우선 치환 (특수문자 포함 원본 peg_name 지원)
+    const rawPegNames = Object.keys(pegValues).sort((a, b) => b.length - a.length)
+    for (const rawName of rawPegNames) {
+      const value = pegValues[rawName]
+      if (typeof value === 'number' && !isNaN(value)) {
+        const escaped = rawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const rawRefRegex = new RegExp(`\\$\\{${escaped}\\}`, 'g')
+        evaluableFormula = evaluableFormula.replace(rawRefRegex, value.toString())
+      }
+    }
+
+    // 2) 안전 토큰(영문/숫자/_ 조합)으로도 치환 지원 (기존 방식 유지)
+    const safePegNames = Object.keys(pegValues)
+      .filter(k => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))
+      .sort((a, b) => b.length - a.length)
+    for (const pegName of safePegNames) {
       const value = pegValues[pegName]
       if (typeof value === 'number' && !isNaN(value)) {
         const regex = new RegExp(`\\b${pegName}\\b`, 'g')
@@ -214,12 +226,14 @@ export function calculateAllDerivedPegs(derivedFormulas = [], basePegValues = {}
 
     // 순서대로 계산
     for (const formula of orderedFormulas) {
-      const pegName = formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+      const safeName = formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
       const calculatedValue = evaluateDerivedPegFormula(formula.formula, allValues, precision)
       
       if (calculatedValue !== null) {
-        derivedValues[pegName] = calculatedValue
-        allValues[pegName] = calculatedValue
+        // 안전 토큰명과 원본 이름 모두에 매핑하여 후속 수식에서 참조 가능하도록 함
+        derivedValues[safeName] = calculatedValue
+        allValues[safeName] = calculatedValue
+        allValues[formula.name] = calculatedValue
       }
     }
 

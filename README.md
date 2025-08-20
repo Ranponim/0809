@@ -76,7 +76,7 @@ python -m pip install -r requirements.txt
 
 ## 환경 변수
 - `DEFAULT_TZ_OFFSET`: 기본 시간대 오프셋(예: `+09:00`). 잘못되면 UTC로 폴백
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: DB 접속 정보의 폴백 값
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: KPI 조회용 PostgreSQL 프록시 접속 정보(옵션)
 
 LLM 엔드포인트/모델은 코드 내부 `query_llm()`에 하드코딩되어 있습니다. 필요 시 해당 함수의 `endpoints`/`payload["model"]`를 수정하세요.
 
@@ -104,16 +104,21 @@ VITE_API_BASE_URL=http://localhost:8000
 
 # --- Backend (MongoDB) ---
 # compose의 mongo 서비스로 접근
-MONGO_URL=mongodb://mongo:27017/kpi
+MONGO_URL=mongodb://mongo:27017
 MONGO_DB_NAME=kpi
 
-# --- PostgreSQL (선택: DB 연결 테스트/외부 PG 사용 시) ---
+# --- PostgreSQL (선택: KPI 조회용 프록시/외부 PG 사용 시) ---
 # WSL2에서 호스트 DB에 접속 시 host.docker.internal 사용
 DB_HOST=host.docker.internal
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=pass
 DB_NAME=netperf
+
+# --- MCP 분석기(옵션) ---
+# 설정 시 백엔드가 실제 MCP HTTP 호출, 미설정/실패 시 Mock 폴백
+MCP_ANALYZER_URL=
+MCP_API_KEY=
 ```
 
 WSL2 사용 시 주의:

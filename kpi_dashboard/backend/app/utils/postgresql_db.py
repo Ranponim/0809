@@ -110,3 +110,105 @@ def query_kpi_data(
         logger.error(f"PostgreSQL KPI 데이터 조회 중 오류 발생: {e}", exc_info=True)
         # 오류 발생 시 빈 데이터를 반환하여 API가 중단되지 않도록 함
         return data_by_kpi
+
+
+def query_kpi_time_series(
+    start_date: str,
+    end_date: str,
+    kpi_types: List[str],
+    ne_filters: List[str] | None = None,
+    cellid_filters: List[str] | None = None,
+    aggregate_cells_if_missing: bool = True,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    시간 범위 내 KPI 시계열 조회.
+    - cellid_filters가 비어있고 aggregate_cells_if_missing=True인 경우, 동일 NE 내 Cell들을 평균 집계하여 반환합니다.
+    - 그렇지 않으면 개별 Cell 시계열을 반환합니다.
+    """
+    logger.info(
+        "KPI TimeSeries 조회 시작: %s ~ %s, kpis=%d, ne=%d, cell=%d, aggregate=%s",
+        start_date,
+        end_date,
+        len(kpi_types or []),
+        len(ne_filters or []),
+        len(cellid_filters or []),
+        aggregate_cells_if_missing,
+    )
+
+    data_by_kpi: Dict[str, List[Dict[str, Any]]] = {k: [] for k in (kpi_types or [])}
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                params = [start_date, end_date, kpi_types]
+
+                where_clauses = [
+                    "datetime BETWEEN %s AND %s",
+                    "peg_name = ANY(%s)",
+                ]
+
+                if ne_filters:
+                    where_clauses.append("ne = ANY(%s)")
+                    params.append(ne_filters)
+
+                aggregate_mode = aggregate_cells_if_missing and not cellid_filters
+
+                if not aggregate_mode and cellid_filters:
+                    where_clauses.append("cellid = ANY(%s)")
+                    params.append(cellid_filters)
+
+                where_sql = " AND ".join(where_clauses)
+
+                if aggregate_mode:
+                    # NE 단위 집계 (Cell 전체 평균)
+                    sql = f"""
+                        SELECT
+                            datetime as timestamp,
+                            peg_name,
+                            AVG(value) as value,
+                            ne,
+                            NULL::int as cell_id,
+                            ne as entity_id
+                        FROM {get_db_connection_details().get('table', 'summary')}
+                        WHERE {where_sql}
+                        GROUP BY timestamp, peg_name, ne
+                        ORDER BY timestamp ASC
+                    """
+                else:
+                    # 개별 Cell 시계열
+                    sql = f"""
+                        SELECT
+                            datetime as timestamp,
+                            peg_name,
+                            value,
+                            ne,
+                            cellid as cell_id,
+                            ne || '#' || cellid as entity_id
+                        FROM {get_db_connection_details().get('table', 'summary')}
+                        WHERE {where_sql}
+                        ORDER BY datetime ASC
+                    """
+
+                # 안전하게 summary 테이블 고정 (환경 변수 미사용 시)
+                sql = sql.replace(get_db_connection_details().get('table', 'summary'), 'summary')
+
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+
+                for row in rows:
+                    row_dict = dict(row)
+                    if isinstance(row_dict.get('timestamp'), datetime):
+                        row_dict['timestamp'] = row_dict['timestamp'].isoformat()
+                    k = row_dict.get('peg_name')
+                    if k in data_by_kpi:
+                        data_by_kpi[k].append(row_dict)
+
+        logger.info(
+            "KPI TimeSeries 조회 완료: %d rows",
+            sum(len(v) for v in data_by_kpi.values()),
+        )
+        return data_by_kpi
+
+    except Exception as e:
+        logger.error("KPI TimeSeries 조회 오류: %s", e, exc_info=True)
+        return data_by_kpi

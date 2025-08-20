@@ -5,7 +5,6 @@ import {
   SuspenseStatistics as Statistics,
   SuspensePreferenceManager as PreferenceManager,
   SuspenseResultsList as ResultsList,
-  SuspenseSummaryReport as SummaryReport,
   SuspenseLLMAnalysisManager as LLMAnalysisManager
 } from './components/LazyComponents.jsx'
 import Preference from './components/Preference.jsx'
@@ -22,8 +21,6 @@ function App() {
         return <Dashboard />
       case 'results':
         return <ResultsList />
-      case 'summary':
-        return <SummaryReport />
       case 'statistics':
         return <Statistics />
       case 'preference':

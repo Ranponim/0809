@@ -142,72 +142,9 @@ async def execute_llm_analysis(
                 logger.exception(f"MCP 호출 실패. Mock으로 폴백: {e}")
                 analysis_result = None
 
-        # MCP는 별도 환경. 실제 호출이 없거나 실패한 경우 Mock 결과 생성
+        # 더 이상 MOCK 생성 금지: 실제 결과가 없다면 오류 처리
         if analysis_result is None:
-            analysis_result = {
-                "status": "success",
-                "message": "MCP 연동이 필요합니다. 현재는 Mock 데이터입니다.",
-                "analysis_date": datetime.utcnow().isoformat(),
-                "results": [
-                    {
-                        "status": "completed",
-                        "message": "Mock LLM 분석 결과입니다.",
-                        "analysis_date": datetime.utcnow().isoformat(),
-                        "mock_data": True,
-                        "executive_summary": "셀 성능이 전반적으로 양호합니다.",
-                        "average_score": 97.7,
-                        "score_formula": "가중 평균 = Σ(PEG값 × 가중치) / Σ(가중치)",
-                        "analysis_info": {
-                            "host": db_config.get("host") or "postgresql.example.com",
-                            "version": "5G NR v1.2.3",
-                            "ne": "MOCK_NE_001",
-                            "cellid": "MOCK_CELL_001"
-                        },
-                        "kpi_results": [
-                        {"peg_name": "DL PDSCH Throughput", "weight": 10, "n_minus_1": 95.5, "n": 98.2, "unit": "Mbps", "peg": 1},
-                        {"peg_name": "UL PUSCH Throughput", "weight": 10, "n_minus_1": 87.3, "n": 89.1, "unit": "Mbps", "peg": 2},
-                        {"peg_name": "RRC Setup Success Rate", "weight": 9.5, "n_minus_1": 98.1, "n": 98.8, "unit": "%", "peg": 3},
-                        {"peg_name": "E2E Latency (UE-Core)", "weight": 9.5, "n_minus_1": 12.3, "n": 11.8, "unit": "ms", "peg": 4},
-                        {"peg_name": "Intra-Freq Handover Success Rate", "weight": 9, "n_minus_1": 96.7, "n": 97.2, "unit": "%", "peg": 5},
-                        {"peg_name": "PDCP Packet Loss Rate", "weight": 9, "n_minus_1": 0.15, "n": 0.12, "unit": "%", "peg": 6},
-                        {"peg_name": "DL SINR", "weight": 8.5, "n_minus_1": 18.5, "n": 19.2, "unit": "dB", "peg": 7},
-                        {"peg_name": "PDSCH BLER", "weight": 8.5, "n_minus_1": 2.3, "n": 1.8, "unit": "%", "peg": 8},
-                        {"peg_name": "PRB Utilization Rate", "weight": 8, "n_minus_1": 75.5, "n": 78.2, "unit": "%", "peg": 9},
-                        {"peg_name": "UE Connection Density", "weight": 8, "n_minus_1": 89, "n": 92, "unit": "UEs/cell", "peg": 10},
-                        {"peg_name": "MAC DL Throughput", "weight": 8, "n_minus_1": 92.3, "n": 95.1, "unit": "Mbps", "peg": 11},
-                        {"peg_name": "HARQ Retransmission Rate", "weight": 7, "n_minus_1": 3.5, "n": 2.8, "unit": "%", "peg": 12},
-                        {"peg_name": "CSI-RSRP", "weight": 7.5, "n_minus_1": -85.2, "n": -82.1, "unit": "dBm", "peg": 13},
-                        {"peg_name": "Beam Failure Recovery Time", "weight": 7.5, "n_minus_1": 45.3, "n": 42.1, "unit": "ms", "peg": 14},
-                        {"peg_name": "VoNR Call Drop Rate", "weight": 7.5, "n_minus_1": 0.25, "n": 0.18, "unit": "%", "peg": 15},
-                        {"peg_name": "QoS Flow Success Rate", "weight": 7, "n_minus_1": 97.8, "n": 98.3, "unit": "%", "peg": 16},
-                        {"peg_name": "PDU Session Setup Time", "weight": 7, "n_minus_1": 85.5, "n": 78.2, "unit": "ms", "peg": 17},
-                        {"peg_name": "UL Interference Noise", "weight": 7.5, "n_minus_1": -108.5, "n": -110.2, "unit": "dB", "peg": 18},
-                        {"peg_name": "Radio Link Failure (RLF) Rate", "weight": 7.5, "n_minus_1": 0.35, "n": 0.28, "unit": "%", "peg": 19},
-                        {"peg_name": "Energy Efficiency (Watt/Gbps)", "weight": 6.5, "n_minus_1": 125.3, "n": 118.7, "unit": "Watt/Gbps", "peg": 20}
-                        ]
-                    }
-                ],
-                "mock_data": True,
-                "source_metadata": {
-                    "ne_id": "MOCK_NE_001",
-                    "cell_id": "MOCK_CELL_001",
-                    "schema_info": {
-                        "id": "auto_increment_integer",
-                        "datetime": "timestamp",
-                        "value": "double_precision",
-                        "version": "text",
-                        "family_name": "text",
-                        "cellid": "text",
-                        "peg_name": "text",
-                        "host": "text",
-                        "ne": "text"
-                    },
-                    "db_config": db_config,
-                    "time_ranges": {"n_minus_1": n_minus_1, "n": n}
-                }
-            }
-
-        logger.info(f"임시 Mock 결과 생성: {analysis_id}")
+            raise RuntimeError("LLM 분석 결과를 가져오지 못했습니다. MCP_ANALYZER_URL 설정 또는 실제 분석 로직이 필요합니다.")
 
         # MongoDB 상태 업데이트 - 원본 스키마 정보 포함
         db = get_database()

@@ -226,16 +226,7 @@ const LLMAnalysisManager = () => {
             <div>DB: <span className="font-mono">{dbConfig.dbname || '-'}</span></div>
             <div>Table: <span className="font-mono">{dbConfig.table || '-'}</span></div>
           </div>
-          <div className="mt-4">
-            <Button onClick={handleTestConnection} disabled={isConnecting}>
-              {isConnecting ? 'Testing...' : 'Test Connection (Preference 설정 사용)'}
-            </Button>
-            {connectionStatus && (
-              <Badge className="ml-2" variant={connectionStatus.type === 'success' ? 'default' : 'destructive'}>
-                {connectionStatus.message}
-              </Badge>
-            )}
-          </div>
+          {/* LLM 영역의 Test Connection UI 제거 (Preference의 Database 탭에서만 테스트) */}
         </CardContent>
       </Card>
 

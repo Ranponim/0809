@@ -39,7 +39,7 @@ kpi_dashboard/
 
 ## 3. 백엔드 설정 및 실행 (FastAPI)
 
-백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과 저장은 SQLAlchemy DSN 기반 영구 저장소를 사용하며, 운영 환경은 PostgreSQL를 권장합니다(로컬 개발은 SQLite 가능). 통계 조회는 프런트에서 입력한 별도 Query DB(PostgreSQL)에 프록시로 접속합니다. 프록시 실패 시 자동으로 mock 데이터로 폴백하여 프런트 사용성을 보장합니다.
+백엔드는 KPI 데이터, 리포트, 환경설정 및 마스터 데이터를 제공하는 RESTful API입니다. 분석 결과/환경설정/마스터 데이터의 영구 저장소는 MongoDB 입니다(`MONGO_URL`, `MONGO_DB_NAME`). 통계/비교 조회는 프런트에서 입력하거나 Preference에서 주입되는 Query DB(PostgreSQL)에 프록시로 접속합니다. 프록시 실패 시 자동으로 mock 데이터로 폴백하여 프론트 사용성을 보장합니다.
 
 ### 3.1. 종속성 설치
 
@@ -52,26 +52,23 @@ pip install -r requirements.txt
 
 ### 3.2. 환경 변수 설정 (.env)
 
-분석 결과 영구 저장을 위해 데이터베이스 연결 정보를 설정해야 합니다. `kpi_dashboard/backend/.env` 파일을 생성하고 아래 중 하나를 설정하세요.
+`kpi_dashboard/backend/.env` 파일을 생성하고 아래와 같이 설정하세요.
 
 ```bash
-# 방법 A: 완전한 DSN 작성 (권장)
-ANALYSIS_DB_URL=postgresql+psycopg2://<USER>:<PASSWORD>@<HOST>:5432/<DBNAME>
+# MongoDB (필수)
+MONGO_URL=mongodb://mongo:27017
+MONGO_DB_NAME=kpi
 
-# 방법 B: 개별 항목 설정
-ANALYSIS_PG_HOST=<HOST>
-ANALYSIS_PG_PORT=5432
-ANALYSIS_PG_USER=<USER>
-ANALYSIS_PG_PASSWORD=<PASSWORD>
-ANALYSIS_PG_DBNAME=<DBNAME>
-```
+# KPI 조회용 PostgreSQL 프록시(옵션)
+DB_HOST=postgres
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=pass
+DB_NAME=netperf
 
-설정이 없으면 서버가 기동되지 않습니다. 로컬 개발 시 Docker를 활용할 수 있습니다.
-
-```bash
-docker run --name kpi-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p 5432:5432 -d postgres:16
-# 예시 DSN
-ANALYSIS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+# MCP 분석기(옵션)
+MCP_ANALYZER_URL=http://mcp-host:8001/analyze
+MCP_API_KEY=optional
 ```
 
 ### 3.3. 백엔드 서버 실행
@@ -138,7 +135,7 @@ pnpm run build
 
 ### 5.1. 대시보드 (Dashboard)
 
-Preference의 `config.defaultKPIs`를 읽어 KPI 카드 구성을 결정합니다. 각 KPI는 `/api/kpi/query`로 개별 조회하며, Preference의 `config.defaultNEs`/`config.defaultCellIDs`가 있으면 `ne`/`cellid` 필터로 전달합니다. KPI별 peg 매핑이 필요할 경우 `config.kpiMappings`의 `peg_names`/`peg_like`를 사용하세요(백엔드가 동일 키를 지원).
+Preference의 `config.defaultKPIs`를 읽어 KPI 카드 구성을 결정합니다. 각 KPI는 `/api/kpi/query` 또는 배치 API(`/api/kpi/statistics/batch`)로 조회하며, Preference의 `config.defaultNEs`/`config.defaultCellIDs`가 있으면 `ne`/`cellid` 필터로 전달합니다. KPI별 peg 매핑이 필요할 경우 `config.kpiMappings`의 `peg_names`/`peg_like`를 사용하세요(백엔드가 동일 키를 지원).
 
 ### 5.2. 종합 분석 리포트 (Summary Report)
 

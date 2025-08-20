@@ -5,7 +5,6 @@ const Dashboard = lazy(() => import('./Dashboard.optimized.jsx'));
 const Statistics = lazy(() => import('./Statistics.jsx'));
 const PreferenceManager = lazy(() => import('./PreferenceManager.jsx'));
 const ResultsList = lazy(() => import('./ResultsList.jsx'));
-const SummaryReport = lazy(() => import('./SummaryReport.jsx'));
 const LLMAnalysisManager = lazy(() => import('./LLMAnalysisManager.jsx'));
 
 // 차트 관련 컴포넌트들 (recharts 사용)
@@ -19,7 +18,6 @@ export const preloadDashboard = () => import('./Dashboard.optimized.jsx');
 export const preloadStatistics = () => import('./Statistics.jsx');
 export const preloadPreferenceManager = () => import('./PreferenceManager.jsx');
 export const preloadResultsList = () => import('./ResultsList.jsx');
-export const preloadSummaryReport = () => import('./SummaryReport.jsx');
 export const preloadLLMAnalysisManager = () => import('./LLMAnalysisManager.jsx');
 
 // 차트 관련 프리로딩
@@ -104,11 +102,6 @@ export const SuspenseResultsList = ({ ...props }) => (
   </Suspense>
 );
 
-export const SuspenseSummaryReport = ({ ...props }) => (
-  <Suspense fallback={<LoadingSpinner name="요약 리포트" />}>
-    <SummaryReport {...props} />
-  </Suspense>
-);
 
 export const SuspenseLLMAnalysisManager = ({ ...props }) => (
   <Suspense fallback={<LoadingSpinner name="LLM 분석" />}>
@@ -142,4 +135,4 @@ export const SuspenseResultDetail = ({ ...props }) => (
 );
 
 // 기본 컴포넌트들 (하위 호환성)
-export { Dashboard, Statistics, PreferenceManager, ResultsList, SummaryReport };
+export { Dashboard, Statistics, PreferenceManager, ResultsList };

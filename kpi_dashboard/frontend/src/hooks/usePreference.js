@@ -206,10 +206,10 @@ export const usePreference = () => {
   // Import/Export 기능
   // ================================
 
-  const exportSettings = useCallback((filename = null) => {
+  const exportSettings = useCallback((filename = null, partial = null) => {
     try {
       const dataToExport = {
-        settings: context.settings,
+        settings: partial && Object.keys(partial).length > 0 ? { ...context.settings, ...partial } : context.settings,
         metadata: {
           exportedAt: new Date().toISOString(),
           version: '1.0.0',
@@ -261,8 +261,15 @@ export const usePreference = () => {
             throw new Error('유효하지 않은 설정 파일 형식입니다.')
           }
           
+          // derivedPegSettings가 누락되지 않도록 기본값 병합
+          const mergedSettings = {
+            ...context.settings,
+            ...importedData.settings,
+            derivedPegSettings: importedData.settings.derivedPegSettings || context.settings.derivedPegSettings || { formulas: [], settings: {} }
+          }
+
           // 설정 유효성 검증
-          const validationErrors = validateSettings(importedData.settings)
+          const validationErrors = validateSettings(mergedSettings)
           
           if (Object.keys(validationErrors).length > 0) {
             const errorMessage = Object.values(validationErrors).join(', ')
@@ -270,7 +277,7 @@ export const usePreference = () => {
           }
           
           // 설정 업데이트
-          context.updateSettings(importedData.settings)
+          context.updateSettings(mergedSettings)
           
           context.logInfo('설정 가져오기 완료', importedData.settings)
           

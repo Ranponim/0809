@@ -16,7 +16,6 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, preload: preloadDashboard },
     { id: 'results', label: '분석 결과', icon: Database, preload: preloadResultsList },
-    { id: 'summary', label: 'Summary Report', icon: FileText, preload: preloadSummaryReport },
     { id: 'statistics', label: 'Statistics', icon: TrendingUp, preload: preloadStatistics },
     { id: 'llm-analysis', label: 'LLM 분석', icon: Brain, preload: preloadLLMAnalysisManager },
     { id: 'preference', label: 'Preference', icon: Settings, preload: preloadPreferenceManager }

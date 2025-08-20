@@ -48,8 +48,8 @@
 ### 사전 준비
 ```bash
 # 1. Docker 서비스 시작
-cd kpi_dashboard
-docker-compose up -d
+cd ../../  # 리포지토리 루트 (예: D:\Coding\0809)
+docker compose up -d
 
 # 2. 프론트엔드 의존성 설치
 cd frontend
@@ -182,7 +182,7 @@ GitHub Actions UI에서 다음 옵션으로 수동 실행 가능:
 ### 테스트 실패 시 확인사항
 1. **Docker 서비스 상태**
    ```bash
-   docker-compose ps
+   docker compose ps
    curl http://localhost:8000/api/master/info
    curl http://localhost:5173
    ```
@@ -190,7 +190,7 @@ GitHub Actions UI에서 다음 옵션으로 수동 실행 가능:
 2. **로그 확인**
    ```bash
    # Backend 로그
-   docker-compose logs backend
+   docker compose logs backend
    
    # 테스트 상세 로그
    npx playwright test --debug

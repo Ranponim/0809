@@ -19,7 +19,7 @@ import apiClient from '@/lib/apiClient.js'
 
 const defaultSettings = {
   dashboardSettings: {
-    selectedPegs: ['availability', 'rrc', 'erab'],
+    selectedPegs: [],
     defaultNe: '',
     defaultCellId: '',
     autoRefreshInterval: 30, // 초 단위
@@ -191,13 +191,7 @@ export const PreferenceProvider = ({ children }) => {
       logInfo('Mock 데이터 사용 (API 문제로 인한 임시 조치)')
       
       const mockSettings = {
-        ...defaultSettings,
-        dashboardSettings: {
-          ...defaultSettings.dashboardSettings,
-          selectedPegs: ['availability', 'rrc', 'erab', 'sar'],
-          defaultNe: 'NE_001',
-          defaultCellId: 'Cell_001'
-        }
+        ...defaultSettings
       }
 
       await new Promise(resolve => setTimeout(resolve, 500)) // 로딩 시뮬레이션
@@ -280,6 +274,20 @@ export const PreferenceProvider = ({ children }) => {
     }, 500)
   }, [saveSettings, logInfo])
 
+  /**
+   * 특정 섹션만 로컬 상태로 업데이트(자동 저장 없음)
+   * - 수동 저장 UI(저장 버튼)와 같이 사용할 때 씁니다
+   */
+  const updateSectionLocal = useCallback((sectionKey, sectionSettings) => {
+    logInfo(`로컬 섹션 업데이트(자동 저장 없음): ${sectionKey}`, sectionSettings)
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      payload: {
+        [sectionKey]: sectionSettings
+      }
+    })
+  }, [logInfo])
+
   // ================================
   // 공개 API 함수들
   // ================================
@@ -361,6 +369,7 @@ export const PreferenceProvider = ({ children }) => {
     
     // 액션 함수들
     updateSettings,
+    updateSectionLocal,
     saveImmediately,
     resetSettings,
     clearError,

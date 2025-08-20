@@ -51,6 +51,14 @@ const Statistics = () => {
   const [neSuggest, setNeSuggest] = useState([])
   const [cellSuggest, setCellSuggest] = useState([])
 
+  // HOST → NE → Cellid 계층 선택 상태 (Preference에서 읽기 전용 사용)
+  const [hosts, setHosts] = useState([])
+  const [selectedHosts, setSelectedHosts] = useState([])
+  const [nes, setNes] = useState([])
+  const [selectedNEs, setSelectedNEs] = useState([])
+  const [cellIds, setCellIds] = useState([])
+  const [selectedCellIds, setSelectedCellIds] = useState([])
+
   const defaultKpiOptions = [
     { value: 'availability', label: 'Availability' },
     { value: 'rrc', label: 'RRC Success Rate' },
@@ -85,27 +93,130 @@ const Statistics = () => {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        console.info('[Statistics] Fetching master PEGs/Cells')
-        const [pegsResponse, cellsResponse] = await Promise.all([
-          apiClient.get('/api/master/pegs'),
-          apiClient.get('/api/master/cells')
+        console.info('[Statistics] Fetching DB PEGs & NE/Cells')
+        const payload = {
+          host: String(dbConfig.host || '').trim(),
+          port: Number(dbConfig.port) || 5432,
+          user: String(dbConfig.user || '').trim(),
+          password: String(dbConfig.password || '').trim(),
+          dbname: String(dbConfig.dbname || '').trim(),
+          table: String(dbConfig.table || 'summary').trim(),
+          limit: 500
+        }
+        const [pegsResponse, neCellsResponse] = await Promise.all([
+          apiClient.post('/api/master/pegs', payload),
+          apiClient.post('/api/master/ne-cells', payload)
         ])
-        setPegs(pegsResponse.data.pegs || [])
-        setCells(cellsResponse.data.cells || [])
-        console.info('[Statistics] Master loaded:', pegsResponse.data.pegs?.length || 0, cellsResponse.data.cells?.length || 0)
+        const pegsArr = (pegsResponse.data?.pegs || []).map(p => ({ value: p.id || p.name, label: p.name || p.id }))
+        setPegs(pegsArr)
+        setCells(neCellsResponse.data?.sampleCells || {})
+        console.info('[Statistics] Master loaded (DB):', pegsArr.length)
       } catch (error) {
-        console.error('Error fetching master data:', error)
+        console.error('Error fetching DB master data:', error)
       }
     }
 
     fetchMasterData()
-  }, [])
+  }, [dbConfig.host, dbConfig.port, dbConfig.user, dbConfig.password, dbConfig.dbname, dbConfig.table])
+
+  // HOST 목록 및 선택값은 Preference Statistics 탭에서 관리됨
+  useEffect(() => {
+    const s = settings?.statisticsSettings || {}
+    setSelectedHosts(Array.isArray(s.selectedHosts) ? s.selectedHosts : [])
+    setSelectedNEs(Array.isArray(s.selectedNEs) ? s.selectedNEs : [])
+    setSelectedCellIds(Array.isArray(s.selectedCellIds) ? s.selectedCellIds : [])
+  }, [settings?.statisticsSettings])
+
+  // 선택된 HOST 기준으로 NE 조회
+  useEffect(() => {
+    const fetchNes = async () => {
+      try {
+        if (selectedHosts.length === 0) { setNes([]); setSelectedNEs([]); return }
+        const payload = {
+          host: String(dbConfig.host || '').trim(),
+          port: Number(dbConfig.port) || 5432,
+          user: String(dbConfig.user || '').trim(),
+          password: String(dbConfig.password || '').trim(),
+          dbname: String(dbConfig.dbname || '').trim(),
+          table: String(dbConfig.table || 'summary').trim(),
+          hosts: selectedHosts
+        }
+        console.info('[Statistics] NE 목록 조회(host 필터) 요청:', selectedHosts)
+        const res = await apiClient.post('/api/master/nes-by-host', payload)
+        const nesList = Array.isArray(res?.data?.nes) ? res.data.nes : []
+        setNes(nesList)
+        // 호스트 변경 시 셀/선택 초기화
+        setSelectedNEs([])
+        setCellIds([])
+        setSelectedCellIds([])
+
+        // 기본 NE가 설정되어 있고 목록에 존재하면 자동 선택
+        const defaultNeList = String(defaultNe || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+        if (defaultNeList.length > 0) {
+          const matched = defaultNeList.filter(ne => nesList.includes(ne))
+          if (matched.length > 0) {
+            console.info('[Statistics] 기본 NE 자동 선택:', matched)
+            setSelectedNEs(matched)
+          }
+        }
+      } catch (e) {
+        console.error('[Statistics] NE 목록 조회 실패', e)
+      }
+    }
+    fetchNes()
+  }, [selectedHosts])
+
+  // 선택된 HOST/NE 기준으로 CellID 조회
+  useEffect(() => {
+    const fetchCells = async () => {
+      try {
+        if (selectedHosts.length === 0 || selectedNEs.length === 0) { setCellIds([]); setSelectedCellIds([]); return }
+        const payload = {
+          host: String(dbConfig.host || '').trim(),
+          port: Number(dbConfig.port) || 5432,
+          user: String(dbConfig.user || '').trim(),
+          password: String(dbConfig.password || '').trim(),
+          dbname: String(dbConfig.dbname || '').trim(),
+          table: String(dbConfig.table || 'summary').trim(),
+          hosts: selectedHosts,
+          nes: selectedNEs
+        }
+        console.info('[Statistics] CellID 목록 조회(host/ne 필터) 요청:', { hosts: selectedHosts, nes: selectedNEs })
+        const res = await apiClient.post('/api/master/cells-by-host-ne', payload)
+        const cids = Array.isArray(res?.data?.cellids) ? res.data.cellids : []
+        setCellIds(cids)
+        setSelectedCellIds([])
+
+        // 기본 CellID가 설정되어 있고 목록에 존재하면 자동 선택
+        const defaultCellList = String(defaultCellId || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+        if (defaultCellList.length > 0) {
+          const matched = defaultCellList.filter(cid => cids.includes(cid))
+          if (matched.length > 0) {
+            console.info('[Statistics] 기본 CellID 자동 선택:', matched)
+            setSelectedCellIds(matched)
+          }
+        }
+      } catch (e) {
+        console.error('[Statistics] CellID 목록 조회 실패', e)
+      }
+    }
+    fetchCells()
+  }, [selectedNEs])
 
   const handleSearch = async () => {
     try {
       setLoading(true)
       console.info('[Statistics] 검색 시작:', {
         filters,
+        selectedHosts,
+        selectedNEs,
+        selectedCellIds,
         decimalPlaces,
         autoCalculateStats
       })
@@ -118,8 +229,9 @@ const Statistics = () => {
           start_date: filters.startDate,
           end_date: filters.endDate,
           kpi_type: kt,
-          ne: filters.ne,
-          cellid: filters.cellid,
+          // 선택된 NE/CellID를 그대로 배열로 전달 (백엔드가 배열/문자열 모두 허용)
+          ne: selectedNEs,
+          cellid: selectedCellIds,
           ids: 2 // Mock 데이터용
         })
       )
@@ -159,13 +271,9 @@ const Statistics = () => {
   const fetchNeSuggest = async (q='') => {
     try {
       const res = await apiClient.post('/api/master/ne-list', {
-        db: dbConfig,
+        host: dbConfig.host, port: dbConfig.port, user: dbConfig.user, password: dbConfig.password, dbname: dbConfig.dbname,
         table: dbConfig.table || 'summary',
-        columns: { ne: 'ne', time: 'datetime' },
-        q,
-        start_date: filters.startDate,
-        end_date: filters.endDate,
-        limit: 50,
+        columns: { ne: 'ne', time: 'datetime' }, q, start_date: filters.startDate, end_date: filters.endDate, limit: 50
       })
       setNeSuggest(res?.data?.items || [])
     } catch {}
@@ -174,13 +282,9 @@ const Statistics = () => {
   const fetchCellSuggest = async (q='') => {
     try {
       const res = await apiClient.post('/api/master/cellid-list', {
-        db: dbConfig,
+        host: dbConfig.host, port: dbConfig.port, user: dbConfig.user, password: dbConfig.password, dbname: dbConfig.dbname,
         table: dbConfig.table || 'summary',
-        columns: { cellid: 'cellid', time: 'datetime' },
-        q,
-        start_date: filters.startDate,
-        end_date: filters.endDate,
-        limit: 50,
+        columns: { cellid: 'cellid', time: 'datetime' }, q, start_date: filters.startDate, end_date: filters.endDate, limit: 50
       })
       setCellSuggest(res?.data?.items || [])
     } catch {}
@@ -306,7 +410,7 @@ const Statistics = () => {
           <Badge variant="secondary">비교 옵션</Badge>
         )}
       </div>
-      {/* Database 설정 UI 제거: Preference > Database에서 관리합니다. */}
+      {/* 데이터 선택 UI는 Preference > Statistics 탭으로 이동됨 */}
       
       <Tabs defaultValue="basic" className="w-full">
         <TabsList className="grid w-full grid-cols-2">

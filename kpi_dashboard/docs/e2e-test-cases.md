@@ -188,7 +188,7 @@
 ### **테스트 환경 설정**
 ```bash
 # 1. 시스템 시작
-docker-compose up -d
+docker compose up -d
 
 # 2. 프론트엔드 시작
 cd frontend && npm run dev

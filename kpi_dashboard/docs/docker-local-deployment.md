@@ -95,9 +95,9 @@ docker images | findstr mongo
 
 ## 4) 실행 방법 A: docker compose로 실행(권장)
 
-프로젝트 루트(예: `D:\Coding\0809\kpi_dashboard`)로 이동 후, 빌드 없이 로드된 이미지를 사용해 바로 실행합니다.
+프로젝트 루트(예: `D:\Coding\0809`)로 이동 후, 빌드 없이 로드된 이미지를 사용해 바로 실행합니다.
 ```powershell
-cd D:\Coding\0809\kpi_dashboard
+cd D:\Coding\0809
 docker compose up -d --no-build
 ```
 

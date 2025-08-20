@@ -18,7 +18,7 @@
 **목적**: 가장 핵심적인 사용자 워크플로우 검증
 
 **사전 조건**:
-- 시스템이 정상적으로 실행 중 (docker-compose up -d)
+- 시스템이 정상적으로 실행 중 (docker compose up -d)
 - MongoDB에 테스트 데이터 존재
 - 브라우저에서 http://localhost:5173 접근 가능
 
@@ -319,8 +319,8 @@
 ### **테스트 환경 설정**
 ```bash
 # 1. 시스템 시작
-cd kpi_dashboard
-docker-compose up -d
+cd ../../  # 리포지토리 루트
+docker compose up -d
 
 # 2. 프론트엔드 시작
 cd frontend
