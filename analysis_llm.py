@@ -1532,7 +1532,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId, analysisType)
         result_payload = {
             "analysisType": "llm_analysis",
-            "analysisDate": n_end.isoformat(),
+            "analysisDate": datetime.datetime.now(tz=_get_default_tzinfo()).isoformat(),
             "neId": ne_id_repr,
             "cellId": cell_id_repr,
             "status": "success",
