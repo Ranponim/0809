@@ -1529,9 +1529,10 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             }
         }
 
-        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId, analysisType)
+        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId)
         result_payload = {
-            "analysisType": "llm_analysis",
+            # 서버 Pydantic 모델은 by_alias=False로 저장하므로 snake_case 보장
+            "analysis_type": "llm_analysis",
             "analysisDate": datetime.datetime.now(tz=_get_default_tzinfo()).isoformat(),
             "neId": ne_id_repr,
             "cellId": cell_id_repr,
