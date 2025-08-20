@@ -1166,14 +1166,111 @@ def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optio
             "method": "POST",
             "payload": parsed_preview,
         }, ensure_ascii=False, indent=2))
-        resp = requests.post(url, data=json_text.encode('utf-8'), headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=timeout)
+
+        # POST 시도 (리다이렉트/충돌 처리 포함)
+        resp = requests.post(
+            url,
+            data=json_text.encode('utf-8'),
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            timeout=timeout
+        )
+
+        # 307/308: 보통 트레일링 슬래시 리다이렉트. requests는 기본적으로 따라가므로 상태코드가 200/201이면 그냥 통과
+        if 200 <= resp.status_code < 300:
+            logging.info("백엔드 POST 성공: status=%s", resp.status_code)
+            try:
+                return resp.json()
+            except Exception:
+                logging.warning("백엔드 응답 본문 JSON 파싱 실패, text 반환")
+                return {"status_code": resp.status_code, "text": resp.text}
+
+        # 409: 중복 → 기존 문서 조회 후 PUT으로 갱신(업서트 동작)
+        if resp.status_code == 409:
+            logging.warning("백엔드 POST 충돌(409). 업서트 플로우로 전환합니다.")
+
+            # 기본 경로 정규화
+            base = url if url.endswith('/') else url + '/'
+
+            # 조회 파라미터 구성 (정확 일치: 같은 날짜를 from/to로 지정)
+            analysis_date = safe_payload.get("analysisDate") or safe_payload.get("analysis_date")
+            ne_id = safe_payload.get("neId") or safe_payload.get("ne_id")
+            cell_id = safe_payload.get("cellId") or safe_payload.get("cell_id")
+
+            params = {"page": 1, "size": 5}
+            if ne_id:
+                params["ne_id"] = ne_id
+            if cell_id:
+                params["cell_id"] = cell_id
+            if analysis_date:
+                params["date_from"] = analysis_date
+                params["date_to"] = analysis_date
+
+            list_url = base  # '/api/analysis/results/' 목록 엔드포인트
+            logging.info(
+                "업서트 조회: GET %s params=%s",
+                list_url, params
+            )
+            list_resp = requests.get(list_url, params=params, timeout=timeout)
+            if list_resp.status_code != 200:
+                logging.error("업서트 조회 실패: status=%s body=%s", list_resp.status_code, list_resp.text[:500])
+                return None
+            try:
+                list_data = list_resp.json()
+            except Exception:
+                logging.error("업서트 조회 JSON 파싱 실패")
+                return None
+
+            items = (list_data or {}).get("items") or []
+            target_id = None
+            for item in items:
+                try:
+                    i_date = item.get("analysisDate")
+                    i_ne = item.get("neId")
+                    i_cell = item.get("cellId")
+                    if (not analysis_date or i_date == analysis_date) and \
+                       (not ne_id or i_ne == ne_id) and \
+                       (not cell_id or i_cell == cell_id):
+                        target_id = item.get("id") or item.get("_id")
+                        break
+                except Exception:
+                    continue
+
+            if not target_id:
+                logging.error("업서트 대상 문서를 찾지 못했습니다. 중단합니다.")
+                return None
+
+            # 업데이트 바디 구성(업데이트 가능한 필드만)
+            update_body = {}
+            for key in [
+                "analysisDate", "neId", "cellId",
+                "results", "stats", "status", "report_path", "reportPath",
+                "analysis"
+            ]:
+                if key in safe_payload:
+                    update_body[key] = safe_payload[key]
+
+            put_url = f"{base}{target_id}"
+            logging.info("업서트 갱신: PUT %s", put_url)
+            put_resp = requests.put(
+                put_url,
+                data=json.dumps(update_body, ensure_ascii=False).encode('utf-8'),
+                headers={'Content-Type': 'application/json; charset=utf-8'},
+                timeout=timeout
+            )
+            if 200 <= put_resp.status_code < 300:
+                logging.info("업서트 갱신 성공: status=%s", put_resp.status_code)
+                try:
+                    return put_resp.json()
+                except Exception:
+                    return {"status_code": put_resp.status_code, "text": put_resp.text}
+            else:
+                logging.error("업서트 갱신 실패: status=%s body=%s", put_resp.status_code, put_resp.text[:500])
+                return None
+
+        # 그 외 상태코드는 예외로 처리
+        logging.error("백엔드 POST 실패: status=%s body=%s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
-        logging.info("백엔드 POST 성공: status=%s", resp.status_code)
-        try:
-            return resp.json()
-        except Exception:
-            logging.warning("백엔드 응답 본문 JSON 파싱 실패, text 반환")
-            return {"status_code": resp.status_code, "text": resp.text}
+        return None
     except Exception as e:
         logging.exception("백엔드 POST 실패: %s", e)
         return None
@@ -1209,7 +1306,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
 
         output_dir = request.get('output_dir', os.path.abspath('./analysis_output'))
         # 기본 백엔드 업로드 URL: 요청값 > 환경변수 > 로컬 기본값 (복수형 컬렉션 엔드포인트로 수정)
-        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://localhost:8000/api/analysis/results'
+        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://165.213.69.30:8000/api/analysis/results/'
 
         db = request.get('db', {})
         table = request.get('table', 'summary')
