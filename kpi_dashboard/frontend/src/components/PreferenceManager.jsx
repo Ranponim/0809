@@ -90,10 +90,11 @@ const PreferenceManager = () => {
     {
       key: 'selectedPegs',
       label: 'Dashboard에 표시할 PEG 목록',
-      type: 'multiselect',
+      type: 'dropdown',
       required: false,
       options: getCurrentPegOptions(),
-      placeholder: 'Database PEG에서 선택하세요'
+      placeholder: 'Database PEG에서 선택하세요',
+      searchPlaceholder: 'PEG 검색...'
     },
     {
       key: 'defaultHours',

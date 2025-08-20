@@ -39,8 +39,9 @@ export const useAnalysisResults = ({
   
   // 필터 상태
   const [filters, setFilters] = useState({
-    neId: '',
-    cellId: '',
+    // 운영 환경에서는 기본값으로 'ALL' 지정하여 누락 방지
+    neId: process.env.NODE_ENV === 'production' ? 'ALL' : '',
+    cellId: process.env.NODE_ENV === 'production' ? 'ALL' : '',
     startDate: null,
     endDate: null,
     status: '',
@@ -69,7 +70,7 @@ export const useAnalysisResults = ({
       
       logInfo('분석 결과 조회 시작', { limit, skip, filters })
       
-      // API 요청 파라미터 구성
+      // API 요청 파라미터 구성 (백엔드의 snake_case 쿼리 파라미터에 맞춤)
       const params = {
         limit,
         skip
@@ -77,16 +78,16 @@ export const useAnalysisResults = ({
       
       // 필터 조건 추가
       if (filters.neId?.trim()) {
-        params.neId = filters.neId.trim()
+        params.ne_id = filters.neId.trim()
       }
       if (filters.cellId?.trim()) {
-        params.cellId = filters.cellId.trim()
+        params.cell_id = filters.cellId.trim()
       }
       if (filters.startDate) {
-        params.startDate = filters.startDate
+        params.date_from = filters.startDate
       }
       if (filters.endDate) {
-        params.endDate = filters.endDate
+        params.date_to = filters.endDate
       }
       if (filters.status?.trim()) {
         params.status = filters.status.trim()
@@ -101,7 +102,12 @@ export const useAnalysisResults = ({
         totalRequested: limit
       })
       
-      const newResults = response.data?.items || []  // ✅ items 배열에서 데이터 추출
+      // LLM 전용(analysis_type === 'llm_analysis')만 클라이언트 측에서 필터링
+      const rawItems = response.data?.items || []
+      const newResults = rawItems.filter(item => {
+        const t = item?.analysis_type || item?.analysisType
+        return t === 'llm_analysis'
+      })
       
       // 결과 업데이트
       if (append) {
