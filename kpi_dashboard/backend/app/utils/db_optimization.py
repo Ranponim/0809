@@ -57,7 +57,12 @@ async def create_analysis_indexes(db: AsyncIOMotorDatabase):
         ], name="idx_kpi_performance"),
         
         # 7. 페이지네이션 최적화 인덱스
-        IndexModel([("created_at", DESCENDING)], name="idx_created_at_desc")
+        IndexModel([("created_at", DESCENDING)], name="idx_created_at_desc"),
+        
+        # 8. TTL 인덱스 (6개월 후 자동 삭제)
+        IndexModel([("analysis_date", ASCENDING)], 
+                  name="idx_analysis_date_ttl",
+                  expireAfterSeconds=15552000)  # 6개월 = 180일 * 24시간 * 60분 * 60초
     ]
     
     try:

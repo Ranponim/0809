@@ -1,131 +1,133 @@
 {
 	"meta": {
-		"generatedAt": "2025-08-21T14:15:03.988Z",
-		"tasksAnalyzed": 0,
-		"thresholdScore": 7,
+		"generatedAt": "2025-08-21T18:00:11.577Z",
+		"tasksAnalyzed": 15,
+		"totalTasks": 15,
+		"analysisCount": 15,
+		"thresholdScore": 5,
 		"projectName": "Taskmaster",
 		"usedResearch": true
 	},
 	"complexityAnalysis": [
 		{
-			"taskId": 39,
-			"taskTitle": "Backend: LLM 분석 결과 API 및 DB 스키마 구현",
+			"taskId": 1,
+			"taskTitle": "Initialize React Frontend & State Management",
 			"complexityScore": 4,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Backend: LLM 분석 결과 API 및 DB 스키마 구현' into 4 detailed subtasks. The subtasks should cover: 1. Defining the MongoDB schema and Pydantic models for 'analysis_results'. 2. Implementing the POST and GET (list) endpoints in FastAPI. 3. Implementing the GET (detail by ID) and DELETE endpoints. 4. Writing unit and integration tests for all CRUD operations.",
-			"reasoning": "This is a standard backend CRUD implementation. The complexity is moderate because it involves setting up a database schema and four distinct API endpoints, but the logic for each follows well-established REST patterns."
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, detail the specific file paths and code snippets for defining the `IUserSettings` interface, the `UserSettingsContext` object, and the `UserSettingsProvider` component, including how `useState` is used within the provider and how it wraps the application.",
+			"reasoning": "This is a foundational task using standard React practices. The existing 5 subtasks provide a good, manageable breakdown for setting up the project, routing, and Context API for state management. The complexity is moderate due to integrating multiple core React concepts."
 		},
 		{
-			"taskId": 40,
-			"taskTitle": "Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발",
+			"taskId": 2,
+			"taskTitle": "Initialize FastAPI Backend & PostgreSQL Connection",
 			"complexityScore": 5,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Break down the task 'Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발' into 4 actionable subtasks. These should include: 1. Creating the `useAnalysisResults.js` custom hook for data fetching logic. 2. Building the static `ResultsList.jsx` table component with Tailwind CSS. 3. Integrating the hook with the component to handle and display data, including loading and error states. 4. Writing unit tests for the component using mock data.",
-			"reasoning": "This task combines UI development, asynchronous data fetching, state management (loading/error), and logic encapsulation into a custom hook. The interaction between these parts makes it moderately complex."
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide detailed instructions for configuring `asyncpg` with SQLAlchemy, including a sample `DATABASE_URL` format and a basic `main.py` structure demonstrating the `Engine` and `SessionLocal` setup. Also, show the initial `UserSettings` SQLAlchemy ORM model definition.",
+			"reasoning": "This is a foundational backend task involving API setup and database integration. The use of FastAPI, SQLAlchemy, and PostgreSQL are standard, but connecting them correctly requires attention to detail. The 5 subtasks are well-defined and cover the necessary steps for initial setup."
 		},
 		{
-			"taskId": 41,
-			"taskTitle": "Frontend: LLM 분석 결과 필터링 기능 구현",
+			"taskId": 3,
+			"taskTitle": "Implement User Settings Data Model (Frontend & Backend)",
 			"complexityScore": 6,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Frontend: LLM 분석 결과 필터링 기능 구현' into 4 specific subtasks. These should cover: 1. Creating the `ResultFilter.jsx` UI component with date pickers and text inputs. 2. Managing the local state of the filter inputs. 3. Modifying the `useAnalysisResults.js` hook to accept filter state as arguments and construct API query parameters. 4. Integrating the filter component to trigger API re-fetching when filter values change.",
-			"reasoning": "This task adds significant state management complexity. It requires modifying a shared custom hook, handling multiple user inputs, and ensuring the UI updates reactively, which is more complex than a simple data display."
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide a detailed example of a nested `userSettings` JSON structure from a PRD, and then show how this translates into specific TypeScript interfaces, Pydantic models, and SQLAlchemy ORM models, highlighting the use of `JSONB` for nested data in PostgreSQL and ensuring cross-model consistency.",
+			"reasoning": "This task is crucial for data consistency across the entire stack (frontend, API, database). It requires careful mapping of a potentially complex JSON structure to three different model types, which can be prone to subtle inconsistencies if not handled meticulously. The existing 5 subtasks are a good breakdown, with the final subtask focusing on critical consistency checks."
 		},
 		{
-			"taskId": 42,
-			"taskTitle": "Backend: Preference 시스템 API 및 DB 스키마 구현",
+			"taskId": 4,
+			"taskTitle": "Develop LocalStorage-based Settings Save/Load",
+			"complexityScore": 4,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide detailed code examples for the `useSettingsStorage` React Hook, demonstrating how it uses `localStorage.setItem` and `localStorage.getItem`, and how it handles `QuotaExceededError` with a user-friendly fallback mechanism.",
+			"reasoning": "This task involves client-side persistence using LocalStorage, which is relatively straightforward. The main complexities arise from proper JSON serialization/deserialization, integration with React state, and robust error handling for browser storage limitations. The 5 subtasks adequately cover these aspects."
+		},
+		{
+			"taskId": 5,
+			"taskTitle": "Implement Settings Save Status UI & Basic Error Feedback",
 			"complexityScore": 3,
-			"recommendedSubtasks": 3,
-			"expansionPrompt": "Break down the task 'Backend: Preference 시스템 API 및 DB 스키마 구현' into 3 subtasks. The subtasks should cover: 1. Defining the MongoDB schema and Pydantic model for 'user_preferences'. 2. Implementing the GET and PUT API endpoints in FastAPI for retrieving and updating settings. 3. Writing API tests to validate the get and update operations.",
-			"reasoning": "This is a straightforward backend task involving a simple data model and two standard REST API endpoints (GET and PUT). The complexity is low as it doesn't involve complex business logic or relationships."
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide specific examples of UI component designs (e.g., using a common UI library) for 'Saving...', 'Saved!', and 'Error saving' states, and illustrate how these components would be integrated into a settings form to display real-time feedback based on LocalStorage operation outcomes.",
+			"reasoning": "This task is primarily focused on UI/UX and providing clear user feedback. While it requires integration with existing save logic, the technical implementation of status indicators and basic error messages is not overly complex. The 5 subtasks are a suitable breakdown for design and implementation."
 		},
 		{
-			"taskId": 43,
-			"taskTitle": "Frontend: Preference 관리 UI 컴포넌트 개발",
-			"complexityScore": 6,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Frontend: Preference 관리 UI 컴포넌트 개발' into 4 detailed subtasks. The breakdown should include: 1. Setting up a global state store (Zustand or Context) for preferences. 2. Creating a `usePreference.js` custom hook with debounced update logic for API calls. 3. Building the `PreferenceManager.jsx` and `SettingBox.jsx` UI components. 4. Integrating the UI components to read from and write to the global state.",
-			"reasoning": "The task requires implementing a robust feature with global state management, asynchronous API calls, and performance considerations like debouncing. Coordinating these elements effectively presents a moderate level of complexity."
-		},
-		{
-			"taskId": 44,
-			"taskTitle": "Backend/Frontend: Preference JSON Import/Export 기능 구현",
+			"taskId": 6,
+			"taskTitle": "Implement `/api/settings/save` Endpoint",
 			"complexityScore": 6,
 			"recommendedSubtasks": 5,
-			"expansionPrompt": "Break down the full-stack task 'Preference JSON Import/Export 기능 구현' into 5 subtasks. Clearly separate backend and frontend work: 1. Backend: Implement the `/api/preference/export` GET endpoint. 2. Backend: Implement the `/api/preference/import` POST endpoint with JSON validation. 3. Frontend: Implement the export button and file download logic. 4. Frontend: Implement the import UI with file upload and API call logic. 5. Frontend: Handle the import response to update global state and provide user feedback.",
-			"reasoning": "This is a full-stack feature involving both backend API development and frontend UI/logic. Frontend file handling (upload/download) and backend validation of the imported JSON add layers of complexity beyond standard CRUD."
+			"expansionPrompt": "Given the existing 5 subtasks, provide a detailed Python code example for the `/api/settings/save` endpoint, including the Pydantic request model, the SQLAlchemy ORM interaction for UPSERT logic (checking for existing `userId` and updating `lastModified`/`version`), and comprehensive error handling with appropriate HTTP status codes.",
+			"reasoning": "This is a core backend API task involving data persistence. The UPSERT logic, management of `lastModified` and `version` fields, and robust error handling contribute to its moderate-to-high complexity. The 5 subtasks cover the essential development and testing aspects."
 		},
 		{
-			"taskId": 45,
-			"taskTitle": "Frontend: Dashboard 레이아웃 및 Preference 연동 구현",
-			"complexityScore": 4,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Frontend: Dashboard 레이아웃 및 Preference 연동 구현' into 4 subtasks. The subtasks should cover: 1. Setting up the main `Dashboard.jsx` component structure. 2. Implementing the split-pane layout using a library like `react-split-pane`. 3. Fetching user preferences on component mount using the `usePreference` hook. 4. Passing the fetched preference data as initial values to child selector components.",
-			"reasoning": "The task focuses on UI composition and data integration rather than complex logic. While it involves integrating with a global state hook, the core work of implementing the layout and passing props is a standard and moderately simple frontend task."
-		},
-		{
-			"taskId": 46,
-			"taskTitle": "Backend: Statistics 비교 분석 API 구현",
-			"complexityScore": 7,
-			"recommendedSubtasks": 5,
-			"expansionPrompt": "Break down the task 'Backend: Statistics 비교 분석 API 구현' into 5 detailed subtasks. These should cover: 1. Defining the API request/response Pydantic models. 2. Implementing the MongoDB aggregation query to fetch data for two date ranges. 3. Implementing the core analysis logic using Pandas to calculate mean, delta, and RSD. 4. Creating the FastAPI endpoint that integrates the query and calculation logic. 5. Writing unit tests for the calculation logic with various data scenarios.",
-			"reasoning": "This task involves significant business logic beyond simple data retrieval. It requires data aggregation, manipulation with a library like Pandas, and performing specific statistical calculations. The complexity lies in the correctness of the algorithm and handling edge cases."
-		},
-		{
-			"taskId": 47,
-			"taskTitle": "Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현",
-			"complexityScore": 4,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현' into 4 subtasks. The breakdown should include: 1. Building the `BasicComparison.jsx` UI with two date range selectors and a button. 2. Managing the state of the selected date ranges. 3. Implementing the function to call the `/api/statistics/compare` API on button click. 4. Handling the API response by updating the component's state, including loading and error states.",
-			"reasoning": "This is a typical frontend task of building a form to trigger an API call. The complexity is moderate, involving UI construction, local state management for the form inputs, and handling an asynchronous API request."
-		},
-		{
-			"taskId": 48,
-			"taskTitle": "Frontend: Statistics 비교 결과 시각화 구현",
+			"taskId": 7,
+			"taskTitle": "Implement `/api/settings/load` Endpoint",
 			"complexityScore": 5,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Break down the task 'Frontend: Statistics 비교 결과 시각화 구현' into 4 subtasks. These should cover: 1. Setting up a charting library like Recharts or Chart.js. 2. Creating a reusable `ComparisonChart.jsx` component. 3. Writing the logic to transform the API response data into the structure required by the chart library. 4. Configuring the chart's visual elements like axes, tooltips, legends, and colors.",
-			"reasoning": "While using a library simplifies charting, there is moderate complexity in data transformation and configuration. Ensuring the chart is responsive, accessible, and correctly displays various data shapes requires careful implementation."
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide a detailed Python code example for the `/api/settings/load` endpoint, including how `userId` is received, the SQLAlchemy query to retrieve settings, and how to return a default/empty response if no settings are found, ensuring the 50ms performance target is considered in the implementation strategy.",
+			"reasoning": "This is a standard backend API retrieval task. While the core logic is straightforward, the performance requirement (50ms) adds a layer of consideration for database queries and response serialization. The 5 subtasks are appropriate for developing and testing this endpoint."
 		},
 		{
-			"taskId": 49,
-			"taskTitle": "Frontend: Statistics 분석 결과 저장 및 Dashboard 연동",
+			"taskId": 8,
+			"taskTitle": "Develop Hybrid Settings Sync & Conflict Resolution",
+			"complexityScore": 9,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Given the existing 5 subtasks, expand on the 'Develop Conflict Resolution Engine' and 'Implement Background Sync Mechanism' subtasks. For conflict resolution, detail the exact algorithm for 'last write wins' including how timestamps are compared. For background sync, describe the debounce/throttle strategy, the state machine for managing sync status (e.g., idle, syncing, error), and how it handles network interruptions.",
+			"reasoning": "This is a highly complex task involving distributed state management, sophisticated conflict resolution, and robust background synchronization. Handling edge cases like offline changes, concurrent updates, and network issues makes it a significant engineering challenge. Expanding to 7 subtasks allows for more granular breakdown of the core sync and conflict resolution logic, which are critical components."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Implement `/api/settings/validate` Endpoint",
 			"complexityScore": 7,
 			"recommendedSubtasks": 5,
-			"expansionPrompt": "Expand the task 'Frontend: Statistics 분석 결과 저장 및 Dashboard 연동' into 5 subtasks. These should cover: 1. Adding checkboxes to the statistics results table UI. 2. Managing the state of the selected items. 3. Implementing the 'Save to Dashboard' button and its API call to update preferences. 4. Ensuring the global preference state is correctly updated upon a successful API response. 5. Verifying that the Dashboard component automatically reflects the new preferences.",
-			"reasoning": "The complexity is high due to the tight integration between multiple application features (Statistics, Preferences, Dashboard). It requires careful state management to ensure that a change in one part of the app is correctly persisted and reflected in another."
+			"expansionPrompt": "Given the existing 5 subtasks, provide detailed examples of validation rules for PEG and Statistics configurations, including how to check for inter-dependencies (e.g., if PEG is enabled, ensure a specific Statistics field is present). Also, illustrate how to check for external dependencies like a PostgreSQL connection being configured, and how to structure the `errors` and `suggestions` in the API response.",
+			"reasoning": "This task involves implementing complex business logic for server-side validation, including cross-configuration dependencies and external prerequisite checks. It goes beyond simple schema validation, requiring custom logic to identify inconsistencies and provide actionable feedback. The 5 subtasks are well-suited for this level of detail."
 		},
 		{
-			"taskId": 50,
-			"taskTitle": "Full Stack: 전체 시스템 통합 테스트 및 E2E 테스트 케이스 작성",
-			"complexityScore": 8,
+			"taskId": 10,
+			"taskTitle": "Develop Order-Independent Configuration Logic (Frontend)",
+			"complexityScore": 7,
 			"recommendedSubtasks": 5,
-			"expansionPrompt": "Break down the task 'Full Stack: 전체 시스템 통합 테스트 및 E2E 테스트 케이스 작성' into 5 actionable subtasks. The breakdown should include: 1. Defining 3-5 critical user journey test cases. 2. Setting up and configuring an E2E testing framework like Cypress or Playwright. 3. Scripting the primary user flow test (e.g., preference -> statistics -> dashboard). 4. Scripting tests for secondary features (e.g., LLM result filtering). 5. Integrating the E2E test suite into a CI pipeline.",
-			"reasoning": "This task has high complexity because it spans the entire application and requires specialized tools. Writing reliable E2E tests that mimic user behavior and handle asynchronous operations is challenging. Setting up the testing infrastructure adds another layer of work."
+			"expansionPrompt": "Given the existing 5 subtasks, detail the implementation of the `SettingsContext` and its provider, showing how it manages PEG/Statistics state and integrates with a debounced call to the `/api/settings/validate` endpoint. Provide examples of how the frontend would interpret validation errors and suggestions to dynamically update UI elements (e.g., input field borders, inline messages).",
+			"reasoning": "This task requires sophisticated frontend state management to handle real-time validation feedback from the backend and provide 'smart guidance.' It involves dynamic UI updates and careful orchestration of API calls based on user input, making it a high-complexity frontend task. The 5 subtasks provide a logical flow for implementation."
 		},
 		{
-			"taskId": 51,
-			"taskTitle": "Optimization: API 응답 시간 및 프론트엔드 렌더링 성능 최적화",
-			"complexityScore": 8,
-			"recommendedSubtasks": 5,
-			"expansionPrompt": "Expand the task 'Optimization: API 응답 시간 및 프론트엔드 렌더링 성능 최적화' into 5 subtasks. These should cover: 1. Establishing performance baselines using Lighthouse, Web Vitals, and API load testing. 2. Profiling the backend to identify and add indexes to slow MongoDB queries. 3. Profiling the frontend with React Profiler to identify and memoize components causing re-renders. 4. Implementing structural optimizations like code splitting and bundle analysis. 5. Re-measuring performance to validate and document improvements.",
-			"reasoning": "Optimization is a high-complexity task because it is investigative. It requires specialized tools to diagnose bottlenecks and a deep understanding of both backend and frontend performance patterns. The solutions are often not obvious and require experimentation."
-		},
-		{
-			"taskId": 52,
-			"taskTitle": "Frontend: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현",
+			"taskId": 11,
+			"taskTitle": "Implement Intuitive Configuration Guidance UI",
 			"complexityScore": 6,
 			"recommendedSubtasks": 5,
-			"expansionPrompt": "Break down the task 'Frontend: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현' into 5 subtasks. These should cover: 1. Implementing the single-item detail view within a modal component. 2. Adding multi-select functionality (e.g., checkboxes) to the results list. 3. Managing the state of selected items for comparison. 4. Creating a new component or view for side-by-side comparison. 5. Fetching and rendering the data for both the detail and comparison views.",
-			"reasoning": "The task involves creating multiple new UI states and components (a modal for detail, a new view for comparison). Managing the state for multi-selection and designing an effective comparison layout adds moderate complexity."
+			"expansionPrompt": "Given the existing 5 subtasks, provide specific examples of how different types of validation errors (e.g., missing required field, invalid value, missing external dependency) would be mapped to distinct UI patterns (e.g., inline error, tooltip, banner) and their corresponding user-friendly messages. Illustrate with mockups or pseudo-code how these messages would be displayed contextually.",
+			"reasoning": "This task is heavily focused on UI/UX, translating complex backend validation results into clear, actionable, and contextual guidance for the user. It requires careful design and implementation of reusable UI components and their integration into the configuration flow. The 5 subtasks are appropriate for covering design, implementation, and testing."
 		},
 		{
-			"taskId": 53,
-			"taskTitle": "Documentation: 컴포넌트 및 API 문서화",
-			"complexityScore": 4,
-			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task 'Documentation: 컴포넌트 및 API 문서화' into 4 subtasks. These should cover: 1. Setting up and configuring Storybook for the frontend project. 2. Creating stories for at least 5 key reusable UI components with controls for props. 3. Reviewing and augmenting the auto-generated FastAPI documentation (Swagger UI) with detailed descriptions and examples. 4. Performing a peer review of all documentation for clarity and accuracy.",
-			"reasoning": "While not technically difficult, creating good documentation requires significant effort and attention to detail. Setting up tools like Storybook involves configuration, and writing clear, useful documentation for both components and APIs is a moderately complex task."
+			"taskId": 12,
+			"taskTitle": "Implement `/api/settings/reset` Endpoint",
+			"complexityScore": 7,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide a detailed Python code example for the `/api/settings/reset` endpoint, including how `userId` is extracted from an authentication dependency, the SQLAlchemy logic for deleting/archiving records, and comprehensive error handling with appropriate HTTP status codes (e.g., 401, 403, 500).",
+			"reasoning": "This is a critical backend API task due to its destructive nature. It requires robust security (authentication and authorization) and careful handling of database operations with transactional integrity to prevent accidental data loss. The 5 subtasks cover the essential security, logic, and testing aspects."
+		},
+		{
+			"taskId": 13,
+			"taskTitle": "Develop Full Settings Reset UI with Safety Confirmation",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide detailed React component code for the 'Reset All Settings' button and the mandatory confirmation dialog. Show how the dialog's 'Confirm' button is disabled until 'RESET' is typed, and how the API call to `/api/settings/reset` is triggered and its response handled with UI feedback.",
+			"reasoning": "This task is crucial for user safety due to the irreversible nature of a settings reset. The implementation of a mandatory confirmation dialog with explicit user input adds a layer of complexity to the UI/UX and event handling. The 5 subtasks provide a good breakdown for designing, implementing, and testing this critical flow."
+		},
+		{
+			"taskId": 14,
+			"taskTitle": "Enhance Backup/Restore UI & Implement Client-Side Versioning",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide code examples for the client-side versioning logic, demonstrating how to store the last 5 versions of settings in LocalStorage (including timestamps), and how the 'Revert' UI would interact with this version history to apply a previous state.",
+			"reasoning": "This task combines UI for file operations (backup/restore) with client-side data management (versioning). It requires careful handling of browser APIs, data validation, and managing a history of settings versions, which adds moderate complexity. The 5 subtasks are a suitable breakdown for these functionalities."
+		},
+		{
+			"taskId": 15,
+			"taskTitle": "Configure E2E Testing & CI/CD Integration",
+			"complexityScore": 8,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Given the existing 5 subtasks, provide a sample Playwright test script for the 'persistent settings' flow (login, configure, re-login verification). Additionally, outline the necessary modifications to a sample Dockerfile and a GitHub Actions workflow to integrate Playwright E2E tests into a CI/CD pipeline, ensuring headless execution and reporting.",
+			"reasoning": "This is a high-complexity infrastructure task. Setting up robust E2E tests with Playwright for complex user flows and integrating them seamlessly into a CI/CD pipeline, especially with containerization, requires significant expertise in testing, DevOps, and pipeline configuration. The 5 subtasks cover the essential setup, test development, and integration steps."
 		}
 	]
 }
