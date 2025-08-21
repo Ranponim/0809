@@ -129,6 +129,167 @@ class PreferenceImportException(BaseAPIException):
         )
 
 
+# ===== Host 필터링 관련 새로운 예외 클래스들 =====
+
+class TargetValidationException(BaseAPIException):
+    """
+    타겟 검증 실패 시 발생하는 예외
+    
+    NE, Cell, Host 필터의 형식이나 존재 여부 검증에서 문제가 발생했을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "Target validation failed", 
+        invalid_targets: Optional[Dict[str, list]] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.invalid_targets = invalid_targets or {}
+        combined_details = {
+            "invalid_targets": self.invalid_targets,
+            **(details or {})
+        }
+        super().__init__(
+            message=message, 
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            details=combined_details
+        )
+
+
+class HostValidationException(TargetValidationException):
+    """
+    Host 검증 실패 시 발생하는 예외
+    
+    Host ID의 형식 검증, IP 주소 유효성, 호스트명 검증, DNS 조회 등에서 
+    문제가 발생했을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "Host validation failed",
+        invalid_hosts: Optional[list] = None,
+        validation_errors: Optional[Dict[str, str]] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.invalid_hosts = invalid_hosts or []
+        self.validation_errors = validation_errors or {}
+        
+        combined_details = {
+            "invalid_hosts": self.invalid_hosts,
+            "validation_errors": self.validation_errors,
+            **(details or {})
+        }
+        
+        super().__init__(
+            message=message, 
+            invalid_targets={"hosts": self.invalid_hosts}, 
+            details=combined_details
+        )
+
+
+class RelationshipValidationException(TargetValidationException):
+    """
+    타겟 간 관계 검증 실패 시 발생하는 예외
+    
+    NE-Cell-Host 간의 연관성 검증에서 문제가 발생했을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "Relationship validation failed",
+        missing_relationships: Optional[Dict[str, list]] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.missing_relationships = missing_relationships or {}
+        combined_details = {
+            "missing_relationships": self.missing_relationships,
+            **(details or {})
+        }
+        super().__init__(message=message, details=combined_details)
+
+
+class FilterCombinationException(BaseAPIException):
+    """
+    필터 조합 오류 시 발생하는 예외
+    
+    호환되지 않는 필터 조합이나 논리적으로 불가능한 
+    필터 조합이 발견되었을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "Filter combination error",
+        conflicting_filters: Optional[Dict[str, Any]] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.conflicting_filters = conflicting_filters or {}
+        combined_details = {
+            "conflicting_filters": self.conflicting_filters,
+            **(details or {})
+        }
+        super().__init__(
+            message=message, 
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            details=combined_details
+        )
+
+
+class MongoDBIndexException(BaseAPIException):
+    """
+    MongoDB 인덱스 관련 오류 시 발생하는 예외
+    
+    인덱스 생성, 삭제, 최적화 과정에서 문제가 발생했을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "MongoDB index operation failed",
+        index_name: Optional[str] = None,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.index_name = index_name
+        self.operation = operation
+        combined_details = {
+            "index_name": self.index_name,
+            "operation": self.operation,
+            **(details or {})
+        }
+        super().__init__(
+            message=message, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            details=combined_details
+        )
+
+
+class LLMAnalysisException(BaseAPIException):
+    """
+    LLM 분석 관련 오류 시 발생하는 예외
+    
+    Host 정보를 포함한 LLM 분석 과정에서 문제가 발생했을 때 사용됩니다.
+    """
+    
+    def __init__(
+        self, 
+        message: str = "LLM analysis failed",
+        analysis_stage: Optional[str] = None,
+        target_info: Optional[Dict[str, Any]] = None,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.analysis_stage = analysis_stage
+        self.target_info = target_info or {}
+        combined_details = {
+            "analysis_stage": self.analysis_stage,
+            "target_info": self.target_info,
+            **(details or {})
+        }
+        super().__init__(
+            message=message, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            details=combined_details
+        )
+
+
 # 예외 핸들러 함수들
 async def base_api_exception_handler(request: Request, exc: BaseAPIException) -> JSONResponse:
     """
@@ -300,4 +461,177 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
                 "type": "InternalServerError"
             }
         }
+    )
+
+
+# ===== Host 필터링 관련 새로운 예외 핸들러들 =====
+
+async def target_validation_exception_handler(request: Request, exc: TargetValidationException) -> JSONResponse:
+    """타겟 검증 실패 예외 핸들러"""
+    logger.warning(f"Target validation error: {exc.message} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": exc.message,
+                "type": "TargetValidationError",
+                "invalid_targets": exc.invalid_targets,
+                "details": exc.details
+            }
+        }
+    )
+
+
+async def host_validation_exception_handler(request: Request, exc: HostValidationException) -> JSONResponse:
+    """Host 검증 실패 예외 핸들러"""
+    logger.warning(f"Host validation error: {exc.message} | Invalid hosts: {exc.invalid_hosts} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": exc.message,
+                "type": "HostValidationError",
+                "invalid_hosts": exc.invalid_hosts,
+                "validation_errors": exc.validation_errors,
+                "details": exc.details
+            }
+        }
+    )
+
+
+async def relationship_validation_exception_handler(request: Request, exc: RelationshipValidationException) -> JSONResponse:
+    """관계 검증 실패 예외 핸들러"""
+    logger.warning(f"Relationship validation error: {exc.message} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": exc.message,
+                "type": "RelationshipValidationError",
+                "missing_relationships": exc.missing_relationships,
+                "details": exc.details
+            }
+        }
+    )
+
+
+async def filter_combination_exception_handler(request: Request, exc: FilterCombinationException) -> JSONResponse:
+    """필터 조합 오류 예외 핸들러"""
+    logger.warning(f"Filter combination error: {exc.message} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": exc.message,
+                "type": "FilterCombinationError",
+                "conflicting_filters": exc.conflicting_filters,
+                "details": exc.details
+            }
+        }
+    )
+
+
+async def mongodb_index_exception_handler(request: Request, exc: MongoDBIndexException) -> JSONResponse:
+    """MongoDB 인덱스 오류 예외 핸들러"""
+    logger.error(f"MongoDB index error: {exc.message} | Index: {exc.index_name} | Operation: {exc.operation} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": "Database index operation failed. Please contact administrator.",
+                "type": "DatabaseIndexError",
+                "details": {
+                    "index_name": exc.index_name,
+                    "operation": exc.operation
+                }
+            }
+        }
+    )
+
+
+async def llm_analysis_exception_handler(request: Request, exc: LLMAnalysisException) -> JSONResponse:
+    """LLM 분석 오류 예외 핸들러"""
+    logger.error(f"LLM analysis error: {exc.message} | Stage: {exc.analysis_stage} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": {
+                "message": exc.message,
+                "type": "LLMAnalysisError",
+                "analysis_stage": exc.analysis_stage,
+                "target_info": exc.target_info,
+                "details": exc.details
+            }
+        }
+    )
+
+
+# 편의 함수들
+
+def raise_host_validation_error(
+    invalid_hosts: list, 
+    validation_errors: Dict[str, str],
+    custom_message: Optional[str] = None
+) -> None:
+    """
+    Host 검증 오류를 발생시키는 편의 함수
+    
+    Args:
+        invalid_hosts: 유효하지 않은 호스트 목록
+        validation_errors: 각 호스트별 오류 메시지
+        custom_message: 커스텀 오류 메시지
+    """
+    message = custom_message or f"Host validation failed for {len(invalid_hosts)} hosts"
+    raise HostValidationException(
+        message=message,
+        invalid_hosts=invalid_hosts,
+        validation_errors=validation_errors
+    )
+
+
+def raise_relationship_validation_error(
+    missing_combinations: list,
+    custom_message: Optional[str] = None
+) -> None:
+    """
+    관계 검증 오류를 발생시키는 편의 함수
+    
+    Args:
+        missing_combinations: 누락된 NE-Cell-Host 조합 목록
+        custom_message: 커스텀 오류 메시지
+    """
+    message = custom_message or f"Relationship validation failed for {len(missing_combinations)} combinations"
+    raise RelationshipValidationException(
+        message=message,
+        missing_relationships={"ne_cell_host_combinations": missing_combinations}
+    )
+
+
+def raise_filter_combination_error(
+    conflicting_filters: Dict[str, Any],
+    custom_message: Optional[str] = None
+) -> None:
+    """
+    필터 조합 오류를 발생시키는 편의 함수
+    
+    Args:
+        conflicting_filters: 충돌하는 필터 정보
+        custom_message: 커스텀 오류 메시지
+    """
+    message = custom_message or "Incompatible filter combination detected"
+    raise FilterCombinationException(
+        message=message,
+        conflicting_filters=conflicting_filters
     )
