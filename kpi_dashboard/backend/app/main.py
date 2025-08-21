@@ -167,15 +167,20 @@ request_tracing = RequestTracingMiddleware(
 app.middleware("http")(request_tracing)
 
 # 메트릭 수집 미들웨어 추가
-metrics_middleware = MetricsCollectionMiddleware(
-    app,
+app.add_middleware(
+    MetricsCollectionMiddleware,
     collect_request_body=False,
     collect_response_body=False
 )
-app.middleware("http")(metrics_middleware)
 
 # 성능 모니터링 미들웨어 추가
-app.middleware("http")(performance_middleware)
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class PerformanceMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        return await performance_middleware(request, call_next)
+
+app.add_middleware(PerformanceMiddleware)
 
 # 예외 핸들러 등록
 app.add_exception_handler(BaseAPIException, base_api_exception_handler)

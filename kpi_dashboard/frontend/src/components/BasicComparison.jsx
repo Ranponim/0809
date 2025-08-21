@@ -340,9 +340,9 @@ const BasicComparison = () => {
     try {
       console.log('💾 Dashboard에 저장할 PEG:', Array.from(selectedResults))
       
-      // 현재 Dashboard 설정 가져오기
+      // 현재 Dashboard 설정 가져오기 - 안전한 접근
       const currentDashboardSettings = preferences?.dashboard || {}
-      const currentSelectedPegs = currentDashboardSettings.selectedPegs || []
+      const currentSelectedPegs = currentDashboardSettings?.selectedPegs || []
       
       // 새로 선택된 PEG 중 중복되지 않은 것들만 추가
       const newPegs = Array.from(selectedResults).filter(peg => !currentSelectedPegs.includes(peg))

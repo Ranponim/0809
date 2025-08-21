@@ -2,1029 +2,370 @@
   "master": {
     "tasks": [
       {
-        "id": 1,
-        "title": "Initialize React Frontend & State Management",
-        "description": "Set up the React 18+ project, integrate Context API for global state management, and define the initial application structure.",
-        "details": "Use Vite or Create React App for project initialization. Configure Context API for `userSettings` state management. Ensure basic routing is in place if not already. Implement a root Context Provider for application-wide state.",
-        "testStrategy": "Verify project compiles and runs without errors. Create a simple test component to confirm Context API state can be accessed and updated using React Testing Library.",
+        "id": 31,
+        "title": "현 저장 기능 코드 분석 및 원인 파악",
+        "description": "대시보드, 데이터베이스, Statistics 설정 저장 기능의 현재 코드를 분석합니다. 특히 정상 동작하는 Statistics 저장 로직과 실패하는 다른 두 기능의 차이점을 파악하여 문제의 근본 원인을 진단합니다.",
+        "details": "kpi_dashboard/frontend/src/components/Dashboard.jsx, Preference.jsx, Statistics.jsx 파일의 저장 로직을 분석합니다. 브라우저 개발자 도구의 네트워크 탭을 사용하여 API 호출 실패 로그를 확인하고 프론트엔드-백엔드 통신을 분석합니다.",
+        "testStrategy": "분석 결과를 문서로 정리하여 대시보드/DB 저장 실패의 명확한 원인(예: API 엔드포인트 오류, 데이터 구조 불일치)을 제시할 수 있어야 합니다.",
         "priority": "high",
         "dependencies": [],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Initialize React Project",
-            "description": "Set up a new React 18+ project using either Vite or Create React App, ensuring a clean initial setup.",
-            "dependencies": [],
-            "details": "Use `npm create vite@latest` (recommended for speed) or `npx create-react-app` to scaffold the project. Ensure React 18+ is installed. Remove any unnecessary boilerplate code.",
-            "status": "done",
-            "testStrategy": "Verify the project compiles and runs successfully by executing `npm run dev` (Vite) or `npm start` (CRA) and accessing it in a web browser."
-          },
-          {
-            "id": 2,
-            "title": "Implement Basic Client-Side Routing",
-            "description": "Set up a foundational routing structure for the React application to enable navigation between different views.",
-            "dependencies": [
-              "1.1"
-            ],
-            "details": "Install `react-router-dom`. Define a basic routing structure in `App.jsx` or `App.tsx` with at least a home page and a placeholder settings page component. Use `BrowserRouter` and `Routes` components.\n<info added on 2025-08-21T18:12:03.058Z>\nExisting implementation found: `react-router-dom` v7.6.1 is already installed. Routing is handled in `App.jsx` via a state-based `activeMenu` approach, rather than `BrowserRouter`/`Routes`. Configured routes include: dashboard (default), results, statistics, preference (new), preference-old, preference-test, and llm-analysis. Sidebar navigation is also implemented via `Layout.jsx`.\n</info added on 2025-08-21T18:12:03.058Z>",
-            "status": "done",
-            "testStrategy": "Manually navigate between the defined routes in the browser to ensure they load correctly without errors. Verify the URL changes appropriately."
-          },
-          {
-            "id": 3,
-            "title": "Define userSettings Context and State Logic",
-            "description": "Create the React Context for `userSettings`, define its initial state structure, and implement the state management logic (e.g., using `useReducer` or `useState`).",
-            "dependencies": [
-              "1.1"
-            ],
-            "details": "Create a dedicated file (e.g., `src/contexts/UserSettingsContext.jsx` or `.tsx`). Define the `UserSettingsContext` using `React.createContext`. Implement a `UserSettingsProvider` component that manages the `userSettings` state (e.g., using `useReducer` for complex state or `useState` for simpler state) and provides it to children components. Define initial state based on expected `userSettings` structure.\n<info added on 2025-08-21T18:15:23.595Z>\nThe `userSettings` structure will be expanded to include `preferences` (with `dashboard`, `charts`, `filters`), `pegConfigurations` (array), and `statisticsConfigurations` (array), while maintaining backward compatibility with existing settings like `dashboardSettings` and `statisticsSettings`. The state management will be enhanced with `lastModified`, `version`, `syncStatus`, and `localStorageAvailable` fields, managed via `useReducer` with actions like `SET_SYNC_STATUS`, `SET_LOCAL_STORAGE_STATUS`, and `UPDATE_METADATA`. The `UserSettingsProvider` will expose functions for managing PEG and Statistics configurations, including `updatePegConfiguration`, `updateStatisticsConfiguration`, `removePegConfiguration`, `removeStatisticsConfiguration`, and `validateOrderIndependentSettings`. A `UserSettingsTest.jsx` component will be created to test these new features, accessible via a new '/user-settings-test' route in `App.jsx`.\n</info added on 2025-08-21T18:15:23.595Z>",
-            "status": "done",
-            "testStrategy": "Write a simple unit test for the `userSettings` reducer (if `useReducer` is used) to ensure state transitions are correct. For `useState`, ensure the initial state is correctly set."
-          },
-          {
-            "id": 4,
-            "title": "Integrate Root Context Provider",
-            "description": "Wrap the entire React application with the `userSettings` Context Provider to make the state globally accessible to all components.",
-            "dependencies": [
-              "1.1",
-              "1.3"
-            ],
-            "details": "Modify the application's entry point file (`src/main.jsx` for Vite or `src/index.js` for Create React App) to wrap the root `<App />` component with the `UserSettingsProvider` component created in the previous subtask.",
-            "status": "done",
-            "testStrategy": "No specific test strategy for this subtask; its successful integration will be verified by the next subtask's tests."
-          },
-          {
-            "id": 5,
-            "title": "Create Test Component and Verify Context API",
-            "description": "Develop a simple React component to consume and display `userSettings` from the Context, and allow for basic updates to verify Context API functionality.",
-            "dependencies": [
-              "1.1",
-              "1.3",
-              "1.4"
-            ],
-            "details": "Create a `TestSettingsDisplay.jsx` component that uses `useContext(UserSettingsContext)` to access and display a specific `userSettings` property (e.g., a preference). Include a button or input field to trigger an update to this setting via a function provided by the context. Integrate this component into the main application or a dedicated test route.",
-            "status": "done",
-            "testStrategy": "Use React Testing Library to render `TestSettingsDisplay`. Assert that the initial `userSettings` state is correctly displayed. Simulate a user interaction (e.g., button click) to update the state, and then assert that the component's UI reflects the updated state, confirming Context API functionality."
-          }
-        ]
-      },
-      {
-        "id": 2,
-        "title": "Initialize FastAPI Backend & PostgreSQL Connection",
-        "description": "Set up the FastAPI project, configure database connection to PostgreSQL, and establish the basic API structure.",
-        "details": "Use `uvicorn` for the server and `SQLAlchemy` with `asyncpg` for PostgreSQL ORM/driver. Define initial database schema for the `userSettings` table, including fields like `id`, `userId`, `preferences`, `pegConfigurations`, `statisticsConfigurations`, `lastModified`, and `version`.",
-        "testStrategy": "Write unit tests using `pytest` for database connection and basic CRUD operations on a dummy table. Create a simple test endpoint to verify database interaction.",
-        "priority": "high",
-        "dependencies": [],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Initialize FastAPI Project & Install Core Dependencies",
-            "description": "Create the basic FastAPI project structure and install necessary Python packages including `fastapi`, `uvicorn`, `SQLAlchemy`, `asyncpg`, and `pydantic`.",
-            "dependencies": [],
-            "details": "Use `pip install fastapi uvicorn sqlalchemy asyncpg pydantic` (or equivalent with pipenv/poetry). Create a main application file (e.g., `main.py`) and initialize a `FastAPI` application instance.\n<info added on 2025-08-21T18:18:21.748Z>\nDependencies `fastapi`, `uvicorn`, `pydantic`, `sqlalchemy[asyncio]`, and `asyncpg` are confirmed installed. `alembic` has also been added for database migrations. The FastAPI project structure is fully established, and the main application file is initialized.\n</info added on 2025-08-21T18:18:21.748Z>",
-            "status": "pending",
-            "testStrategy": "Verify `uvicorn main:app --reload` runs without errors and a simple root endpoint (e.g., `/`) returns a basic 'Hello World' message, confirming the server is operational."
-          },
-          {
-            "id": 2,
-            "title": "Configure SQLAlchemy PostgreSQL Connection",
-            "description": "Set up the database connection string and initialize the SQLAlchemy engine and session maker for asynchronous operations with PostgreSQL using `asyncpg`.",
-            "dependencies": [
-              "2.1"
-            ],
-            "details": "Define environment variables for PostgreSQL connection details (e.g., `DATABASE_URL`). Use `create_async_engine` to create an `AsyncEngine` and `async_sessionmaker` to create an `AsyncSessionLocal` for managing database sessions. Implement a dependency injection function for database sessions in FastAPI.",
-            "status": "pending",
-            "testStrategy": "Write a unit test using `pytest` to ensure the `AsyncEngine` can be created successfully and a basic connection can be established (e.g., by executing a simple `SELECT 1` query against the database)."
-          },
-          {
-            "id": 3,
-            "title": "Define `userSettings` Database Model",
-            "description": "Create the SQLAlchemy ORM model for the `userSettings` table, mapping all specified fields (`id`, `userId`, `preferences`, `pegConfigurations`, `statisticsConfigurations`, `lastModified`, `version`) to appropriate SQLAlchemy column types.",
-            "dependencies": [
-              "2.2"
-            ],
-            "details": "Define a `Base` using `declarative_base()` and create a `UserSettings` class inheriting from `Base`. Map `id` as `Integer` (primary key), `userId` as `String`, `preferences`, `pegConfigurations`, `statisticsConfigurations` as `JSONB` (or `JSON`), `lastModified` as `DateTime`, and `version` as `Integer`.",
-            "status": "pending",
-            "testStrategy": "Write a unit test to instantiate the `UserSettings` model and verify its attributes match the expected Python types and that the column definitions are correctly set up (e.g., `__tablename__`, primary key, column types)."
-          },
-          {
-            "id": 4,
-            "title": "Implement Database Schema Initialization",
-            "description": "Set up a mechanism to create the `userSettings` table in the PostgreSQL database based on the defined SQLAlchemy model, ensuring it's created if it doesn't already exist.",
-            "dependencies": [
-              "2.3"
-            ],
-            "details": "For initial setup, use `SQLAlchemy.MetaData.create_all` with the async engine. This can be triggered on application startup or via a dedicated script. Ensure the table creation is idempotent.",
-            "status": "pending",
-            "testStrategy": "Run a script or application startup that attempts to create the table. Verify the `userSettings` table exists in the PostgreSQL database by connecting with a database client or by executing a SQL query like `SELECT * FROM information_schema.tables WHERE table_name = 'userSettings';`."
-          },
-          {
-            "id": 5,
-            "title": "Create Test Endpoint for Database Verification",
-            "description": "Develop a simple FastAPI endpoint (e.g., `/api/test-db`) that performs a basic database operation (e.g., inserting and retrieving a dummy `userSettings` record) to verify the connection and ORM are working correctly.",
-            "dependencies": [
-              "2.4"
-            ],
-            "details": "The endpoint should use the `AsyncSessionLocal` dependency to obtain a database session. It should attempt to create a dummy `UserSettings` entry, persist it, and then query it back. Return a success message or the retrieved data.",
-            "status": "pending",
-            "testStrategy": "Write an integration test using `pytest` and FastAPI's `TestClient` (or `httpx`) to call the `/api/test-db` endpoint. Assert that the endpoint returns a 200 OK status and the expected data, confirming successful database interaction and ORM functionality."
-          }
-        ]
-      },
-      {
-        "id": 3,
-        "title": "Implement User Settings Data Model (Frontend & Backend)",
-        "description": "Define the `userSettings` data model in both frontend (TypeScript interfaces) and backend (Pydantic models/SQLAlchemy models) to ensure consistency.",
-        "details": "Based on the PRD's `userSettings` JSON structure, create corresponding TypeScript interfaces for the frontend and Pydantic models for FastAPI, along with SQLAlchemy models for database interaction. Ensure all specified fields are correctly typed/defined.",
-        "testStrategy": "Write unit tests for data model serialization/deserialization on both frontend (Jest) and backend (pytest). Verify schema validation for incoming API requests.",
-        "priority": "high",
-        "dependencies": [
-          1,
-          2
-        ],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Analyze PRD and Define Canonical JSON Schema",
-            "description": "Review the Product Requirements Document (PRD) to extract and document the precise `userSettings` JSON structure, including all fields, their types, and constraints.",
-            "dependencies": [],
-            "details": "This subtask involves thoroughly reading the PRD's section on `userSettings` to create a definitive blueprint for the data model. This blueprint will guide the implementation of models across all layers.\n<info added on 2025-08-21T18:22:54.162Z>\nUser reports that the backend for user settings is already fully implemented using FastAPI and MongoDB, including APIs for saving, loading, backup, and restore, and comprehensive Pydantic models. The user suggests skipping Task 3 as a result. However, this contradicts the current subtask's focus on 'SQLAlchemy ORM Models' and the broader project context (e.g., Tasks 6, 7, 9, 12) which explicitly specifies PostgreSQL for user settings persistence. Clarification is needed on whether to proceed with PostgreSQL/SQLAlchemy as planned or if the existing MongoDB implementation is now the definitive solution for user settings. If PostgreSQL is still the target, then the existing MongoDB implementation does not fulfill the requirements for this subtask or its dependent tasks.\n</info added on 2025-08-21T18:22:54.162Z>",
-            "status": "pending",
-            "testStrategy": "N/A (Documentation/Analysis task)"
-          },
-          {
-            "id": 2,
-            "title": "Implement SQLAlchemy ORM Models",
-            "description": "Create the Python SQLAlchemy ORM models that define the database schema for `userSettings` in PostgreSQL.",
-            "dependencies": [
-              "3.1"
-            ],
-            "details": "Map the canonical JSON schema fields to SQLAlchemy columns, specifying data types, primary keys, unique constraints, and relationships. Include fields like `userId`, `lastModified`, and `version` as per project requirements.",
-            "status": "pending",
-            "testStrategy": "Write basic unit tests for model definition and column types using `pytest`, ensuring correct mapping to database types."
-          },
-          {
-            "id": 3,
-            "title": "Implement Pydantic Models for FastAPI",
-            "description": "Develop Pydantic models for the backend to handle request validation, response serialization, and data integrity for `userSettings`.",
-            "dependencies": [
-              "3.1",
-              "3.2"
-            ],
-            "details": "Define Pydantic models that align with the canonical JSON schema and can be used to validate incoming API payloads and serialize data for outgoing responses. Ensure type hints, default values, and validation rules are correctly applied.",
-            "status": "pending",
-            "testStrategy": "Write unit tests using `pytest` to verify Pydantic model validation (e.g., valid/invalid data, missing fields) and serialization/deserialization behavior."
-          },
-          {
-            "id": 4,
-            "title": "Implement TypeScript Interfaces for Frontend",
-            "description": "Create TypeScript interfaces that accurately represent the `userSettings` data model for the frontend application.",
-            "dependencies": [
-              "3.1",
-              "3.3"
-            ],
-            "details": "Define TypeScript interfaces that mirror the structure and types of the Pydantic models, ensuring strong type checking and consistency across the frontend application's data handling.",
-            "status": "pending",
-            "testStrategy": "Write unit tests using `Jest` to ensure TypeScript interfaces correctly define the expected data structure and types, potentially testing against sample JSON data."
-          },
-          {
-            "id": 5,
-            "title": "Implement Cross-Layer Data Model Consistency Tests",
-            "description": "Develop comprehensive unit tests to ensure consistency and correct behavior of the `userSettings` data model across all implemented layers (SQLAlchemy, Pydantic, TypeScript).",
-            "dependencies": [
-              "3.2",
-              "3.3",
-              "3.4"
-            ],
-            "details": "This involves writing tests that verify data can be correctly serialized from Pydantic to JSON, deserialized from JSON to Pydantic, and that SQLAlchemy models can represent this data. For frontend, ensure TypeScript interfaces correctly map to expected API responses.",
-            "status": "pending",
-            "testStrategy": "Use `pytest` for backend model serialization/deserialization and schema validation. Use `Jest` for frontend interface validation against expected data structures."
-          }
-        ]
-      },
-      {
-        "id": 4,
-        "title": "Develop LocalStorage-based Settings Save/Load",
-        "description": "Implement logic to save and load user settings to/from LocalStorage upon user actions and page load/refresh.",
-        "details": "Use `localStorage.setItem()` and `localStorage.getItem()`. Implement a custom React Hook or Context Provider to manage LocalStorage interactions, ensuring data is stringified/parsed correctly. Implement basic error handling for `QuotaExceededError` and other LocalStorage issues.",
-        "testStrategy": "Write integration tests using React Testing Library to simulate page refresh and verify settings persistence. Use Jest mocks for `localStorage` to control test scenarios.",
-        "priority": "high",
-        "dependencies": [
-          1
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Define LocalStorage Settings Schema and Utility Functions",
-            "description": "Based on the `userSettings` data model (from Task 3), define the specific schema for how settings will be stored in LocalStorage. Create utility functions for serializing (stringifying) and deserializing (parsing) this data, ensuring type safety.",
-            "dependencies": [],
-            "details": "Create TypeScript interfaces for the LocalStorage specific settings structure. Implement `serializeSettings(settings)` and `parseSettings(jsonString)` functions using `JSON.stringify` and `JSON.parse`, including `try-catch` for parsing errors.\n<info added on 2025-08-21T18:25:40.975Z>\nImplemented TypeScript interfaces for `UserSettings`, `DashboardPreferences`, `ChartPreferences`, `FilterPreferences`, `PegConfiguration`, `StatisticsConfiguration`, and `LocalStorageSettings` (including metadata). Enhanced `serializeSettings` with checksum and size checks, and `deserializeSettings` (formerly `parseSettings`) with version validation and integrity checks. Added `saveSettingsToLocalStorage` (with `QuotaExceededError` handling), `loadSettingsFromLocalStorage` (with safe loading and error handling), `clearSettingsFromLocalStorage`, `checkLocalStorageAvailability`, and `getLocalStorageUsage` utilities. Advanced features include 5MB limit checks, data integrity checksums, version compatibility validation, detailed error classification/logging, and type safety.\n</info added on 2025-08-21T18:25:40.975Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for serialization/deserialization utility functions, ensuring correct handling of valid and invalid JSON strings, and edge cases (e.g., null, undefined values)."
-          },
-          {
-            "id": 2,
-            "title": "Develop Custom React Hook/Context for LocalStorage Management",
-            "description": "Create a reusable custom React Hook (e.g., `useLocalStorageSettings`) or a Context Provider that encapsulates the core logic for interacting with `localStorage`. This component will manage the state of settings and provide methods for updating them.",
-            "dependencies": [
-              "4.1"
-            ],
-            "details": "Implement `useLocalStorageSettings` hook. It should internally use `localStorage.setItem` and `localStorage.getItem`. It should expose a state variable for settings and a setter function. The hook should handle initial loading from LocalStorage.\n<info added on 2025-08-21T18:28:27.726Z>\nThe implementation must also include full TypeScript type safety, asynchronous load/save functions, detailed and granular error handling (e.g., `QUOTA_EXCEEDED`, `PARSE_ERROR`) with user-friendly messages and automatic recovery attempts (e.g., removing corrupted data). It should offer real-time usage monitoring (updated every 30 seconds), a debug logging option, and a callback system (onError, onLoad, onSave). Furthermore, it needs to integrate with and upgrade the existing `PreferenceContext`, providing logic for converting between old and new settings structures and maintaining backward compatibility. Advanced features such as an auto-load option, availability check (`checkAvailability`), and `isLoading`, `isSaving` status tracking are also required.\n</info added on 2025-08-21T18:28:27.726Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for the custom hook using React Testing Library's `renderHook` to verify state management, initial load, and updates. Mock `localStorage` to control test scenarios."
-          },
-          {
-            "id": 3,
-            "title": "Implement Settings Save Logic on User Actions",
-            "description": "Integrate the custom React Hook/Context Provider to save user settings to LocalStorage whenever a setting is changed by the user.",
-            "dependencies": [
-              "4.2"
-            ],
-            "details": "Within the components where settings are modified, use the setter function provided by `useLocalStorageSettings` (or the Context API) to update the settings state, which will trigger the save to LocalStorage. Ensure debouncing or throttling if frequent updates are expected.",
-            "status": "done",
-            "testStrategy": "Integration tests using React Testing Library to simulate user interactions (e.g., changing a toggle, inputting text) and verify that `localStorage.setItem` is called with the correct data."
-          },
-          {
-            "id": 4,
-            "title": "Implement Settings Load Logic on Page Load/Refresh",
-            "description": "Implement the logic to load user settings from LocalStorage when the application initializes or the page is refreshed.",
-            "dependencies": [
-              "4.2"
-            ],
-            "details": "The custom React Hook/Context Provider developed in 4.2 should handle the initial load from LocalStorage when it is first mounted/initialized. This involves calling `localStorage.getItem` and parsing the stored string.",
-            "status": "done",
-            "testStrategy": "Integration tests using React Testing Library to simulate a component mounting (representing page load) and verify that settings are correctly retrieved from `localStorage` and applied to the component's state. Use Jest mocks for `localStorage.getItem`."
-          },
-          {
-            "id": 5,
-            "title": "Implement Basic LocalStorage Error Handling",
-            "description": "Add error handling mechanisms for common LocalStorage issues, specifically `QuotaExceededError`, but also general read/write errors.",
-            "dependencies": [
-              "4.2"
-            ],
-            "details": "Wrap `localStorage.setItem` and `localStorage.getItem` calls within `try-catch` blocks. For `QuotaExceededError`, provide a user-friendly notification (e.g., a toast message) and potentially fall back to a default state or prevent further saves. Log other errors for debugging.",
-            "status": "done",
-            "testStrategy": "Unit tests for the custom hook/context that mock `localStorage` to throw `QuotaExceededError` or other exceptions during `setItem`/`getItem` calls, verifying that the error handling logic is triggered and appropriate actions (e.g., logging, user notification) are taken."
-          }
-        ]
-      },
-      {
-        "id": 5,
-        "title": "Implement Settings Save Status UI & Basic Error Feedback",
-        "description": "Create UI elements to clearly indicate the status of setting saves (e.g., 'Saving...', 'Saved!', 'Error saving').",
-        "details": "Integrate status indicators (e.g., toast notifications, status bar, or inline messages) into the dashboard UI. Implement basic error handling for LocalStorage operations, displaying user-friendly messages for failures.",
-        "testStrategy": "Manually test UI feedback for successful saves and simulated errors. Write unit tests for UI component rendering based on different saving states (idle, saving, saved, error).",
-        "priority": "medium",
-        "dependencies": [
-          4
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Design and Define UI States for Settings Save Status",
-            "description": "Determine the visual representation and interaction patterns for settings save status (Idle, Saving, Saved, Error). This includes choosing the type of indicator (e.g., toast, inline message, status bar) and defining the specific messages and styling for each state.",
-            "dependencies": [],
-            "details": "Research common UI patterns for save status feedback. Create mockups or detailed specifications for 'Saving...', 'Saved!', and 'Error saving' states, considering placement within the dashboard UI. Ensure consistency with existing UI/UX guidelines.\n<info added on 2025-08-21T18:36:52.000Z>\n구현 내용:\n1. **상태 타입 정의**: SAVE_STATUS (IDLE, SAVING, SAVED, ERROR)\n2. **UI 패턴 결정**:\n   - Toast 알림 (sonner 기반)\n   - 인라인 상태 표시 (SaveStatusIndicator)\n   - 고정 위치 표시 옵션\n   - 아이콘 + 텍스트 조합\n\n3. **시각적 표현**:\n   - SAVING: 회전하는 Loader2 아이콘 + 파란색\n   - SAVED: CheckCircle 아이콘 + 초록색 + 자동 숨김\n   - ERROR: AlertCircle 아이콘 + 빨간색 + 액션 버튼\n\n4. **사용자 경험**:\n   - 자동 숨김 (3초)\n   - 애니메이션 효과\n   - 접근성 고려\n   - 다양한 variant (default, compact, icon-only)\n\n기존 sonner toast 시스템과 완벽하게 통합되어 일관된 UI/UX를 제공합니다.\n</info added on 2025-08-21T18:36:52.000Z>",
-            "status": "done",
-            "testStrategy": ""
-          },
-          {
-            "id": 2,
-            "title": "Implement Core UI Components for Status Display",
-            "description": "Develop reusable front-end UI components capable of displaying the defined save status messages and indicators. These components should be generic enough to accept a status prop and render accordingly.",
-            "dependencies": [
-              "5.1"
-            ],
-            "details": "Create a dedicated React/Vue/Angular component (e.g., `SaveStatusIndicator` or `ToastNotification`) that can be triggered to show different states. Ensure the components are styled appropriately and are accessible.",
-            "status": "done",
-            "testStrategy": ""
-          },
-          {
-            "id": 3,
-            "title": "Integrate UI Status with Successful Settings Save Flow",
-            "description": "Connect the implemented UI components to the settings saving mechanism. When a user initiates a save operation, the UI should immediately transition to a 'Saving...' state, and upon successful completion, transition to a 'Saved!' state, typically fading out after a short delay.",
-            "dependencies": [
-              "5.2"
-            ],
-            "details": "Modify the existing settings save function (which currently interacts with LocalStorage) to dispatch status updates to the UI components. Implement logic to show 'Saving...' during the `localStorage.setItem` call and 'Saved!' on success, with a configurable display duration for 'Saved!'.",
-            "status": "done",
-            "testStrategy": ""
-          },
-          {
-            "id": 4,
-            "title": "Implement Basic Error Handling for LocalStorage Operations",
-            "description": "Add `try-catch` blocks or similar error handling mechanisms around LocalStorage operations (e.g., `localStorage.setItem`) to gracefully capture failures. When an error occurs, the UI should display a user-friendly 'Error saving' message.",
-            "dependencies": [
-              "5.2"
-            ],
-            "details": "Identify potential LocalStorage errors (e.g., `QuotaExceededError`, `SecurityError`, `InvalidStateError`). Implement error capture within the settings save function and pass the error state to the UI components. Display a clear, actionable error message to the user, potentially with details for debugging.",
-            "status": "done",
-            "testStrategy": ""
-          },
-          {
-            "id": 5,
-            "title": "Write Unit Tests for UI Status Component Rendering",
-            "description": "Develop unit tests for the UI components responsible for displaying save status. These tests should verify that the components render correctly for each defined state: idle, saving, saved, and error.",
-            "dependencies": [
-              "5.2",
-              "5.3",
-              "5.4"
-            ],
-            "details": "Use a testing framework (e.g., Jest, React Testing Library) to simulate different status inputs (props) to the UI components and assert that the correct text, styling, and elements are rendered. Test edge cases like rapid state changes and ensure error messages are displayed correctly.",
-            "status": "done",
-            "testStrategy": ""
-          }
-        ]
-      },
-      {
-        "id": 6,
-        "title": "Implement `/api/settings/save` Endpoint",
-        "description": "Create a FastAPI endpoint to receive and persist user settings to the PostgreSQL database.",
-        "details": "The endpoint should accept the `userSettings` data model, validate it using Pydantic, and save it to PostgreSQL. Implement logic to handle updates (if settings for `userId` exist) or inserts. Ensure `lastModified` and `version` fields are correctly updated on each save.",
-        "testStrategy": "Write API integration tests using `pytest` to verify data persistence, correct response codes (200 OK, 400 Bad Request), and proper handling of existing vs. new user settings.",
-        "priority": "high",
-        "dependencies": [],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Define UserSettings Pydantic Model and Database Schema",
-            "description": "Create the Pydantic `UserSettings` data model for request validation and define the corresponding PostgreSQL table schema. This includes fields like `userId`, `settingsData` (JSONB), `lastModified` (timestamp), and `version` (integer).",
-            "dependencies": [],
-            "details": "Define `UserSettings` Pydantic model with appropriate types and validation rules. Design the `user_settings` table in PostgreSQL, ensuring columns for `user_id`, `settings_data` (JSONB), `last_modified` (timestamp with timezone), and `version` (integer). Consider primary keys and unique constraints (e.g., `user_id` as unique).",
-            "status": "pending",
-            "testStrategy": "N/A (Schema definition is not directly testable via API tests, but its correctness will be verified by subsequent tasks)."
-          },
-          {
-            "id": 2,
-            "title": "Implement Settings Database Operations (Upsert Logic)",
-            "description": "Develop the functions within the database access layer responsible for interacting with the PostgreSQL `user_settings` table. This includes functions to check for existing settings, insert new records, and update existing ones, incorporating `lastModified` and `version` logic.",
-            "dependencies": [
-              "6.1"
-            ],
-            "details": "Create a function `get_user_settings(user_id)` to retrieve existing settings. Create a function `insert_user_settings(user_id, settings_data)` for new entries. Create a function `update_user_settings(user_id, settings_data, current_version)` for existing entries, handling version increment and `lastModified` update. Implement the core upsert logic within this layer, ensuring atomic operations where possible.",
-            "status": "pending",
-            "testStrategy": "Write unit tests for the database functions to ensure correct data manipulation, versioning, and timestamp updates."
-          },
-          {
-            "id": 3,
-            "title": "Develop /api/settings/save FastAPI Endpoint Structure",
-            "description": "Set up the basic FastAPI endpoint at `/api/settings/save`. Define the request method (POST/PUT) and ensure it correctly receives and validates the `UserSettings` Pydantic model from the request body.",
-            "dependencies": [
-              "6.1"
-            ],
-            "details": "Define the FastAPI route for `/api/settings/save`. Specify the HTTP method (e.g., `POST`). Use Pydantic model as the request body type hint for automatic validation. Implement basic error handling for Pydantic validation failures (FastAPI handles this by default, but ensure it's configured correctly).",
-            "status": "pending",
-            "testStrategy": "Write unit tests for the endpoint to verify it accepts valid `UserSettings` data and returns 422 (Unprocessable Entity) for invalid data, leveraging FastAPI's built-in validation."
-          },
-          {
-            "id": 4,
-            "title": "Implement Save Endpoint Business Logic (Upsert and Versioning)",
-            "description": "Integrate the database access layer functions into the `/api/settings/save` endpoint. Implement the full business logic for saving settings, including checking for existing settings, performing an insert or update, and correctly managing the `lastModified` timestamp and `version` number.",
-            "dependencies": [
-              "6.2",
-              "6.3"
-            ],
-            "details": "Inside the endpoint, retrieve the `userId` (e.g., from authentication context or request body if applicable). Call the database layer to check if settings exist for the `userId`. If settings exist, increment the `version` and update `lastModified` before calling the update function. If settings do not exist, set initial `version` to 1 and `lastModified` to current timestamp before calling the insert function. Return appropriate HTTP responses (e.g., 200 OK on success, 400 Bad Request for business logic errors).",
-            "status": "pending",
-            "testStrategy": "Focus on integration tests for the endpoint's business logic, ensuring correct upsert behavior, versioning, and timestamp updates."
-          },
-          {
-            "id": 5,
-            "title": "Write API Integration Tests for /api/settings/save",
-            "description": "Create a comprehensive suite of API integration tests using `pytest` to verify the end-to-end functionality of the `/api/settings/save` endpoint.",
-            "dependencies": [
-              "6.4"
-            ],
-            "details": "Test cases for saving new user settings (insert). Test cases for updating existing user settings, verifying `lastModified` and `version` increments. Test cases for invalid input data (e.g., missing required fields, incorrect types) expecting 400/422 responses. Verify correct HTTP status codes (200 OK, 400 Bad Request, 422 Unprocessable Entity). Verify data persistence in the PostgreSQL database after each operation.",
-            "status": "pending",
-            "testStrategy": "Use `pytest` with `httpx` or FastAPI's `TestClient` to simulate API requests. Assert on response status codes, body content, and directly query the database to verify persistence and data integrity."
-          }
-        ]
-      },
-      {
-        "id": 7,
-        "title": "Implement `/api/settings/load` Endpoint",
-        "description": "Create a FastAPI endpoint to retrieve user settings from the PostgreSQL database for a given user.",
-        "details": "The endpoint should accept a `userId` (e.g., extracted from authentication context) and return the latest `userSettings` object. Handle cases where no settings exist for the user, returning an appropriate empty or default response.",
-        "testStrategy": "Write API integration tests to verify correct data retrieval for existing and non-existing users. Test performance against the 50ms requirement.",
-        "priority": "high",
-        "dependencies": [
-          6
-        ],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Define User Settings Pydantic Models",
-            "description": "Create the Pydantic models for `UserSettings` (representing the data stored in the DB) and the response model for the `/api/settings/load` endpoint. Ensure `userId`, `lastModified`, and `version` fields are included as per project context.",
-            "dependencies": [],
-            "details": "Define `UserSettings` Pydantic model with fields like `userId` (str), `lastModified` (datetime), `version` (int), and the actual settings data (e.g., `settings: Dict[str, Any]`). Also, define the Pydantic response model for the `/load` endpoint, which might be `Optional[UserSettings]` or a specific wrapper.",
-            "status": "pending",
-            "testStrategy": "N/A (Model definition is typically verified by subsequent code using it)"
-          },
-          {
-            "id": 2,
-            "title": "Implement User Settings Database Retrieval Logic",
-            "description": "Develop the Python function(s) responsible for querying the PostgreSQL database to retrieve the latest `userSettings` record for a given `userId`.",
-            "dependencies": [
-              "7.1"
-            ],
-            "details": "Use an ORM (e.g., SQLAlchemy) or a database connector (e.g., `psycopg2`) to connect to PostgreSQL. Write a function `get_user_settings(user_id: str)` that queries the `user_settings` table, orders by `lastModified` or `version` to get the latest, and returns the data mapped to the `UserSettings` Pydantic model. Handle cases where no record is found by returning `None`.",
-            "status": "pending",
-            "testStrategy": "Write unit tests for the database retrieval function to ensure it correctly fetches data, handles `None` for non-existent users, and retrieves the latest version."
-          },
-          {
-            "id": 3,
-            "title": "Create FastAPI Endpoint Skeleton for /api/settings/load",
-            "description": "Set up the basic FastAPI route for the `/api/settings/load` endpoint, defining its path, HTTP method (GET), and how `userId` will be received.",
-            "dependencies": [
-              "7.1"
-            ],
-            "details": "Define a FastAPI `APIRouter` and add a `GET` endpoint at `/api/settings/load`. Determine how `userId` will be passed (e.g., as a query parameter, path parameter, or extracted from a dependency injection for authentication context). Add type hints for the response model.",
-            "status": "pending",
-            "testStrategy": "Write a basic integration test to ensure the endpoint is reachable and returns a 200 OK (even if it's just an empty response initially)."
-          },
-          {
-            "id": 4,
-            "title": "Integrate DB Retrieval Logic and Handle Responses",
-            "description": "Connect the FastAPI endpoint with the database retrieval logic and implement the response handling, including cases where no settings are found for the user.",
-            "dependencies": [
-              "7.2",
-              "7.3"
-            ],
-            "details": "Inside the `/api/settings/load` endpoint function, call the `get_user_settings` function (from 7.2). If settings are found, return them as a JSON response. If no settings are found, return an appropriate default or empty `userSettings` object (e.g., `{'userId': user_id, 'settings': {}}`) with a 200 OK status, as per the parent task's requirement.",
-            "status": "pending",
-            "testStrategy": "Write integration tests to verify that the endpoint correctly returns existing settings, and returns an empty/default response for non-existent users."
-          },
-          {
-            "id": 5,
-            "title": "Implement API Integration and Performance Tests",
-            "description": "Develop comprehensive API integration tests for the `/api/settings/load` endpoint, covering data retrieval for existing and non-existing users, and performance against the 50ms requirement.",
-            "dependencies": [
-              "7.4"
-            ],
-            "details": "Use `pytest` and an HTTP client (e.g., `httpx`) to send requests to the `/api/settings/load` endpoint. Include test cases for: 1) User with existing settings (verify data), 2) User with no settings (verify empty/default response), and 3) Performance test (measure response time and assert it's within 50ms).",
-            "status": "pending",
-            "testStrategy": "N/A (This subtask defines the test strategy itself)"
-          }
-        ]
-      },
-      {
-        "id": 8,
-        "title": "Develop Hybrid Settings Sync & Conflict Resolution",
-        "description": "Implement the client-server synchronization logic, prioritizing server data on initial load and handling potential conflicts between local and server settings.",
-        "details": "On app load, attempt to load from server first. If server data is newer or exists, use it. If local data is newer and server data is older/non-existent, implement a timestamp-based conflict resolution strategy (e.g., 'last write wins') or prompt the user for choice. Implement a background sync mechanism for continuous updates.",
-        "testStrategy": "Use Playwright for E2E tests simulating different sync scenarios (e.g., offline changes, concurrent changes from multiple tabs/devices, server-side updates). Unit tests for conflict resolution logic.",
-        "priority": "high",
-        "dependencies": [
-          4
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Implement Initial Load Server-First Sync",
-            "description": "Develop the logic to fetch user settings from the server upon application load. If server data is available and newer (or if no local data exists), prioritize and load the server's version of settings into the client's state.",
-            "dependencies": [],
-            "details": "Implement API call to fetch settings. Compare server timestamp with local timestamp (if local data exists). Update client state with server data if applicable. Ensure robust handling for server unavailability during initial load.\n<info added on 2025-08-21T18:53:54.447Z>\nRefine data comparison to identify field-level differences between local and server settings. Implement logic to detect concurrent modifications on specific fields, even if Last Write Wins is the default resolution strategy already implemented in 8.1. This will lay the groundwork for potential future enhancements like user-driven conflict resolution or detailed conflict reporting.\n</info added on 2025-08-21T18:53:54.447Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for server data loading and timestamp comparison logic. Integration tests to verify client state updates based on server priority."
-          },
-          {
-            "id": 2,
-            "title": "Develop Local-Server Data Comparison & Pre-Conflict Logic",
-            "description": "Implement the client-side logic to compare local settings data (from LocalStorage) with server settings data, specifically identifying scenarios where local data is newer or server data is missing, setting the stage for conflict resolution.",
-            "dependencies": [
-              "8.1"
-            ],
-            "details": "Retrieve local settings from LocalStorage. Compare timestamps of local and server settings. Determine if a conflict scenario (local data newer, server data older/non-existent) exists, and flag it for resolution.\n<info added on 2025-08-21T19:00:26.837Z>\nThis now includes an advanced data comparison system (`deepCompareObjects` for field-level differences, 6 `CONFLICT_TYPES`, `CONFLICT_SEVERITY`, `FIELD_IMPORTANCE`) and a comprehensive conflict analysis engine (`analyzeSettingsConflict`) for multi-faceted comparisons (timestamp, version, data content), automatic difference/severity calculation, and recommendation generation. An intelligent conflict resolution system (`generateConflictResolution`) provides AI-based strategy recommendations ('Last Write Wins', 'Manual Review', 'Safe Fallback') with confidence-based decisions. `PreferenceContext` was integrated to manage conflict state (`conflictAnalysis`, `conflictResolution`, `hasActiveConflict`) via dedicated reducer actions and functions. The `syncWithServer` logic was enhanced to use this analysis for intelligent auto-resolution vs. user intervention, with toast notifications and state cleanup.\n</info added on 2025-08-21T19:00:26.837Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for timestamp comparison logic, covering cases where local is newer, server is newer, and timestamps are equal. Test conflict detection flags."
-          },
-          {
-            "id": 3,
-            "title": "Implement Conflict Resolution Strategy ('Last Write Wins')",
-            "description": "Develop the core conflict resolution logic. If local data is newer than server data, implement a 'last write wins' timestamp-based strategy to determine the authoritative version and apply it to the client's state.",
-            "dependencies": [
-              "8.2"
-            ],
-            "details": "Based on the conflict detection from 8.2, apply 'last write wins' logic: the setting with the latest timestamp (either local or server) is chosen as the authoritative version. Update the client's settings state and persist the chosen version locally.\n<info added on 2025-08-21T19:06:28.545Z>\nThe 'last write wins' logic has been significantly enhanced beyond a simple timestamp comparison. The updated implementation now includes:\n*   **Advanced LWW Strategies**: A system (`lastWriteWinsUtils.js`) supporting multiple strategies: `STRICT_TIMESTAMP` (with refined timestamp analysis including time difference, recent conflict detection, and significant difference judgment), `HYBRID_METADATA`, `FIELD_LEVEL_LWW` (for individual field-level conflict analysis, win tally, and type/severity handling), `CONFIDENCE_WEIGHTED`, and `SMART_MERGE` (for intelligent, field-level confidence-based merging of settings, including nested objects).\n*   **Confidence-Based Resolution**: A 5-stage `CONFIDENCE_LEVELS` system dynamically calculates a confidence score, determining whether resolution is automatic (high confidence) or requires user intervention (medium/low confidence).\n*   **Comprehensive Orchestration**: A `comprehensiveLWW` orchestrator manages these strategies, enabling hybrid approaches and confidence-based strategy selection.\n*   **PreferenceContext Integration**: Core functions like `resolveLWWConflict`, `applyLWWResolution`, `autoResolveLWW`, and `previewLWWStrategies` are integrated.\n*   **Enhanced Sync Integration**: The `syncWithServer` process now fully leverages this advanced LWW system, providing confidence-based auto/manual branching, various resolution options, and UI feedback via toast notifications with confidence scores and action buttons.\n</info added on 2025-08-21T19:06:28.545Z>",
-            "status": "done",
-            "testStrategy": "Unit tests for 'last write wins' logic with various timestamp scenarios (local newer, server newer, equal, missing). Verify correct data selection and application."
-          },
-          {
-            "id": 4,
-            "title": "Develop Background Synchronization Mechanism",
-            "description": "Implement a continuous background synchronization mechanism to push local changes to the server and pull server updates to the client, ensuring settings remain up-to-date across sessions and devices.",
-            "dependencies": [
-              "8.1",
-              "8.3"
-            ],
-            "details": "Choose and implement a background sync strategy (e.g., periodic polling, WebSockets, or a combination). Implement logic to detect local changes and push them to the server. Implement logic to fetch server changes and apply them, utilizing the conflict resolution logic (8.3) if necessary.\n<info added on 2025-08-21T19:13:01.547Z>\nImplemented a comprehensive `BackgroundSyncManager` class in `backgroundSyncUtils.js` managing the full sync lifecycle with five strategies: PERIODIC_POLLING, VISIBILITY_BASED, CHANGE_TRIGGERED, HYBRID, and ON_DEMAND. Intelligent event-based triggers include online/offline status, page visibility, window focus/blur, and network quality monitoring. Local changes are detected via JSON serialization comparison with debouncing. Robust error handling incorporates up to 3 retries with exponential backoff (5s, 10s, 20s, max 5min) and automatic restart on network recovery. Fully integrated with `PreferenceContext` via dedicated functions (`startBackgroundSync`, `stopBackgroundSync`, `changeBackgroundSyncStrategy`, `forceBackgroundSync`, `getBackgroundSyncStatus`, `updateNetworkInfo`). Lifecycle management ensures auto-start 2 seconds post-initialization and complete resource cleanup on unmount. The system reuses `syncWithServer` for automatic 'Last Write Wins' conflict resolution (8.3) and consistent toast notifications. Performance is optimized through debouncing, pausing sync in background, and adaptive intervals based on network conditions.\n</info added on 2025-08-21T19:13:01.547Z>",
-            "status": "done",
-            "testStrategy": "Integration tests to verify background sync pushes local changes to the server. E2E tests (Playwright) to simulate concurrent changes from multiple tabs/devices and verify successful synchronization."
-          },
-          {
-            "id": 5,
-            "title": "Implement Comprehensive Error Handling & E2E Testing",
-            "description": "Implement robust error handling for network issues, server unavailability, and data corruption during sync operations. Address edge cases like initial sync with no data, concurrent modifications, and offline-then-online scenarios. Conduct comprehensive E2E testing.",
-            "dependencies": [
-              "8.1",
-              "8.2",
-              "8.3",
-              "8.4"
-            ],
-            "details": "Add try-catch blocks and retry mechanisms for API calls. Handle cases where server or local data is malformed or missing. Ensure graceful degradation or informative user feedback during sync failures. Conduct Playwright E2E tests simulating offline changes, concurrent changes, and server-side updates to validate the entire sync flow.",
-            "status": "done",
-            "testStrategy": "Playwright E2E tests for offline changes, concurrent changes from multiple tabs/devices, and server-side updates. Unit tests for specific error handling paths and edge case scenarios."
-          }
-        ]
-      },
-      {
-        "id": 9,
-        "title": "Implement `/api/settings/validate` Endpoint",
-        "description": "Create a FastAPI endpoint to perform server-side validation of PEG and Statistics configurations, independent of their submission order.",
-        "details": "This endpoint should receive partial or full settings and return validation results (e.g., `isValid: boolean`, `errors: []`, `suggestions: []`). It should identify missing dependencies (e.g., PostgreSQL connection required for PEG/Statistics) or inconsistencies within the provided configurations.",
-        "testStrategy": "Write API integration tests to verify validation logic for various PEG/Statistics configurations, including valid, invalid, and partially dependent states. Ensure it correctly identifies missing prerequisites.",
-        "priority": "medium",
-        "dependencies": [],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Define /api/settings/validate Endpoint and Pydantic Models",
-            "description": "Create the FastAPI route for `/api/settings/validate` (POST method). Define the Pydantic models for the incoming request body, allowing for partial settings (e.g., using `Optional` or `Field(default=None)`). Define the Pydantic model for the validation response, including `isValid: bool`, `errors: List[str]`, and `suggestions: List[str]` to structure the output.",
-            "dependencies": [],
-            "details": "Use `fastapi.APIRouter` to define the endpoint. Leverage `pydantic.BaseModel` for both the request payload (e.g., `SettingsValidationRequest`) and the response payload (e.g., `ValidationResult`). Ensure the request model can gracefully handle missing fields for partial validation.",
-            "status": "pending",
-            "testStrategy": "Write unit tests to verify that the Pydantic request model correctly parses valid and partial input data, and that the response model can be instantiated with expected data types."
-          },
-          {
-            "id": 2,
-            "title": "Implement Field-Level and Basic Configuration Validation",
-            "description": "Develop the core validation functions for individual fields and basic structural integrity within the PEG and Statistics configuration sections. This includes type checking, range checks, format validation (e.g., regex for URLs/IPs), and ensuring required fields within a given sub-configuration are present if that sub-configuration is provided.",
-            "dependencies": [
-              "9.1"
-            ],
-            "details": "Create a dedicated validation module or class (e.g., `settings_validator.py`). Implement specific functions for validating PEG-related fields and Statistics-related fields. Each validation function should return a list of specific error messages or suggestions for invalid inputs.",
-            "status": "pending",
-            "testStrategy": "Write comprehensive unit tests for each individual validation function, covering valid inputs, invalid data types, out-of-range values, and missing required fields within a provided sub-configuration."
-          },
-          {
-            "id": 3,
-            "title": "Implement Inter-Configuration and External Dependency Validation",
-            "description": "Develop logic to validate relationships *between* different configuration sections (e.g., if PEG is enabled, ensure specific related settings are configured). Crucially, implement checks for external dependencies, such as verifying that PostgreSQL connection details are provided and valid if PEG or Statistics features are enabled, as stated in the parent task. This should identify missing prerequisites.",
-            "dependencies": [
-              "9.1",
-              "9.2"
-            ],
-            "details": "This logic will operate on the potentially partial settings object. It should identify logical inconsistencies (e.g., feature X enabled but dependent feature Y disabled) or missing prerequisites (e.g., PostgreSQL host/port/credentials missing when PEG/Statistics are active). Focus on checking for the *presence* and *syntactic validity* of connection parameters, not necessarily establishing a live connection.",
-            "status": "pending",
-            "testStrategy": "Write unit tests for dependency checks, covering scenarios where dependencies are fully met, partially met, or entirely missing. Include tests for conflicting configurations and logical inconsistencies."
-          },
-          {
-            "id": 4,
-            "title": "Integrate Validation Logic and Construct API Response",
-            "description": "Integrate the field-level validation (from 9.2) and the cross-configuration/dependency validation (from 9.3) into the `/api/settings/validate` endpoint. The endpoint logic will orchestrate the validation process, collect all errors and suggestions from various validation steps, determine the overall `isValid` status, and construct the final `ValidationResult` response object. Ensure it correctly handles partial input, only validating provided sections but still checking dependencies if relevant sections are present.",
-            "dependencies": [
-              "9.1",
-              "9.2",
-              "9.3"
-            ],
-            "details": "The FastAPI endpoint function will call the appropriate validation functions, aggregate their results into a single list of errors and suggestions. The `isValid` flag in the response should be `True` only if no errors are found across all validation checks. Implement logic to ensure validation is performed only on the parts of the settings provided in the request, while still checking for cross-dependencies if the relevant sections are present.",
-            "status": "pending",
-            "testStrategy": "Perform API integration tests using `pytest` to verify the endpoint's overall behavior. Test with various combinations of valid, invalid, and partial settings to ensure correct aggregation of errors/suggestions and accurate `isValid` status."
-          },
-          {
-            "id": 5,
-            "title": "Develop Comprehensive API Integration Tests for Validation Endpoint",
-            "description": "Write a comprehensive suite of API integration tests for the `/api/settings/validate` endpoint. These tests should cover a wide range of scenarios, including: valid full configurations, valid partial configurations, invalid configurations (e.g., wrong data types, out-of-range values), configurations with missing internal dependencies (e.g., PEG enabled but required sub-field missing), and configurations with missing external dependencies (e.g., PEG/Statistics enabled but PostgreSQL details absent). Verify correct `isValid` status, error messages, and suggestions.",
-            "dependencies": [
-              "9.4"
-            ],
-            "details": "Use `pytest` and FastAPI's `TestClient` to simulate API requests. Define clear test cases for each validation rule and dependency check. Focus on end-to-end verification of the endpoint's behavior, ensuring all specified validation criteria from the parent task are met.",
-            "status": "pending",
-            "testStrategy": "Ensure high test coverage for the validation logic by creating diverse test payloads. Include tests for edge cases and boundary conditions to confirm robustness."
-          }
-        ]
-      },
-      {
-        "id": 10,
-        "title": "Develop Order-Independent Configuration Logic (Frontend)",
-        "description": "Enhance the frontend to allow PEG and Statistics settings to be configured in any order, using the backend validation API and providing smart guidance.",
-        "details": "Integrate the `/api/settings/validate` endpoint to perform real-time validation. Implement frontend logic to re-evaluate configuration validity dynamically as users input data. Use Context API to manage the state of PEG/Statistics configurations and their interdependencies.",
-        "testStrategy": "Use React Testing Library to simulate user input sequences for PEG/Statistics and verify correct validation feedback. E2E tests with Playwright for full user flow, ensuring order independence.",
-        "priority": "high",
-        "dependencies": [
-          8,
-          9
-        ],
         "status": "pending",
         "subtasks": [
           {
             "id": 1,
-            "title": "Establish Frontend Configuration State Management with Context API",
-            "description": "Design and implement a React Context API provider to centrally manage the state of PEG and Statistics configurations, including their interdependencies. This context will serve as the single source of truth for all configuration settings and their current validity status.",
+            "title": "개발 환경 설정 및 문제 현상 재현",
+            "description": "로컬 개발 환경을 구성하고, 대시보드와 데이터베이스 설정 저장은 실패하고 Statistics 설정 저장은 성공하는 현재의 문제 상황을 직접 재현하여 확인합니다. [Updated: 2025. 8. 22.]",
             "dependencies": [],
-            "details": "Create a `SettingsProvider` component and a `useSettings` hook. Define the shape of the configuration state (e.g., `pegSettings`, `statsSettings`, `validationResults`). Implement reducer logic or state update functions to modify these settings and their associated validation states.",
-            "status": "pending",
-            "testStrategy": "Unit tests for the Context Provider and reducer logic to ensure state updates and initial state are correct."
+            "details": "개발 서버를 실행한 후, 각 설정 페이지(대시보드, DB, Statistics)에서 저장 버튼을 클릭합니다. 브라우저 개발자 도구의 콘솔 및 네트워크 탭을 열어두고 각 동작 시 발생하는 오류 로그나 실패한 네트워크 요청을 최초로 확인 및 기록합니다.\n<info added on 2025-08-21T21:42:32.455Z>\n패키지 설치 지연으로 인해, 서버를 직접 실행하여 재현하는 대신 관련 컴포넌트(Dashboard.jsx, Preference.jsx)의 저장 로직 코드를 우선적으로 분석하여 문제 현상을 파악합니다.\n</info added on 2025-08-21T21:42:32.455Z>\n<info added on 2025-08-21T21:43:55.853Z>\n코드 분석 결과, 각 설정 저장 방식의 차이점을 파악함:\n- 대시보드/Statistics: 저장 버튼 없이 각각 `useDashboardSettings`, `useStatisticsSettings` 훅을 통해 자동 저장 로직이 구현되어 있음.\n- 데이터베이스: `PreferenceManager.jsx`의 `SettingBox` 컴포넌트를 통해 저장 버튼으로 저장 기능이 구현됨.\n- 백엔드 API: `preference.py`에서 `PUT /api/preference/settings` 엔드포인트를 확인.\n\n주요 예상 문제점은 프론트엔드의 API 호출과 백엔드 구현 간의 불일치, 또는 각 훅과 컴포넌트의 저장 로직 자체의 결함으로 추정됨. 다음 단계로 서버를 실행하여 실제 네트워크 요청을 분석하고 문제를 재현할 예정임.\n</info added on 2025-08-21T21:43:55.853Z>\n<info added on 2025-08-21T21:44:59.561Z>\n서버 구동 후 각 설정 페이지에서 저장 기능 테스트 및 네트워크 요청 분석을 통해 문제 현상을 재현함.\n- 대시보드: 설정 변경 시 `PUT /api/preference/settings` 요청이 발생했으나, 400 Bad Request 오류로 실패.\n- 데이터베이스: 저장 버튼 클릭 시 `PUT /api/preference/settings` 요청이 발생했으나, 동일하게 400 Bad Request 오류로 실패.\n- Statistics: 설정 변경 시 `PUT /api/preference/settings` 요청이 정상적으로 처리됨 (200 OK).\n\n실패한 요청과 성공한 요청 모두 동일한 API 엔드포인트를 사용하고 있음을 확인. 문제의 원인은 프론트엔드에서 전송하는 페이로드의 데이터 구조와 백엔드에서 기대하는 데이터 구조 간의 불일치일 가능성이 높음.\n</info added on 2025-08-21T21:44:59.561Z>\n<info added on 2025-08-21T21:52:16.114Z>\n실제 문제 현상 재현 결과, 이전 분석(400 Bad Request 발생)과 다른 근본적인 문제점을 발견함.\n\n- **문제 현상:** 대시보드 및 데이터베이스 설정의 저장 버튼 클릭 시, 네트워크 요청이 전혀 발생하지 않음. 팝업만 표시되거나 아무런 반응이 없는 상태이며, 이로 인해 새로고침 시 설정이 초기화됨.\n- **새로운 결론:** 문제는 API 페이로드 불일치가 아니라, 프론트엔드 컴포넌트의 저장 버튼에 연결된 이벤트 핸들러가 정상적으로 동작하지 않는 것으로 보임. 다음 단계로 관련 컴포넌트의 이벤트 핸들러 코드에 대한 상세 분석이 필요함.\n</info added on 2025-08-21T21:52:16.114Z>",
+            "status": "done",
+            "testStrategy": "대시보드/DB 저장 시 4xx 또는 5xx 에러가 네트워크 탭에 기록되고, Statistics 저장 시 2xx 성공 코드가 기록되는 것을 확인합니다."
           },
           {
             "id": 2,
-            "title": "Integrate Backend Validation Endpoint (`/api/settings/validate`)",
-            "description": "Develop the frontend service layer responsible for making real-time API calls to the `/api/settings/validate` endpoint. This service will send the current configuration state and receive validation feedback.",
+            "title": "정상 동작 기능(Statistics) 코드 분석",
+            "description": "정상적으로 동작하는 `kpi_dashboard/frontend/src/components/Statistics.jsx` 파일의 저장 로직을 분석하여 성공적인 데이터 흐름의 기준 모델을 파악합니다. [Updated: 2025. 8. 22.]",
             "dependencies": [
-              "10.1"
+              "31.1"
             ],
-            "details": "Create an API utility function (e.g., `validateSettingsApi`) that takes the current `userSettings` object as input, performs an asynchronous POST request to `/api/settings/validate`, and returns the parsed validation response. Implement basic error handling for network issues or API errors.",
-            "status": "pending",
-            "testStrategy": "Mock the API call using Jest/MSW to ensure the request payload is correct and the response is handled properly."
+            "details": "Statistics 컴포넌트 내에서 저장 버튼 클릭 이벤트 핸들러, 상태(state)로부터 전송 데이터(payload)를 구성하는 방식, 그리고 API를 호출하는 함수(예: axios.post)의 전체적인 구조와 로직을 상세히 분석합니다.\n<info added on 2025-08-21T21:53:41.393Z>\n**분석 결과:**\n\n*   **Statistics 저장 로직 (정상 동작):**\n    *   `useStatisticsSettings` 훅이 `PreferenceContext`를 통해 자동 저장 기능을 구현.\n    *   설정 변경 시, 디바운싱(debouncing)을 통해 `handleSaveDbConfig` 함수가 호출되어 `localStorage`에 설정을 저장하고 사용자에게 toast 알림을 표시함. API 호출과 `localStorage` 저장이 함께 사용되는 구조.\n\n*   **타 기능 저장 실패 원인 파악:**\n    *   **Dashboard:** `useDashboardSettings` 훅은 존재하지만, 설정을 저장할 수 있는 UI(저장 버튼)가 구현되어 있지 않음.\n    *   **Database 설정:** `SettingBox` 컴포넌트에 저장 버튼은 있으나, 실제 저장 로직을 트리거하는 이벤트 핸들러가 연결되어 있지 않음.\n    *   **구현 방식의 불일치:** Statistics는 `localStorage`를 중간 저장소로 활용하는 반면, 다른 기능들은 API를 직접 호출하려다 실패하는 구조로 파악됨. 이 불일치가 문제의 핵심 원인으로 추정됨.\n</info added on 2025-08-21T21:53:41.393Z>\n<info added on 2025-08-21T21:54:48.214Z>\n**핵심 원인 발견: API 엔드포인트 불일치**\n*   **프론트엔드 호출:** `/api/preferences/self`\n*   **백엔드 엔드포인트:** `/api/preference/settings`\n\n분석 결과, 저장 실패의 직접적인 원인은 프론트엔드와 백엔드 간의 API 엔드포인트 불일치로 밝혀졌습니다. 이에 따라 `PreferenceContext.jsx`의 `saveSettings` 함수를 수정하여 엔드포인트를 `/api/preference/settings`로 변경하고, 백엔드 명세에 맞게 요청 데이터 구조 및 응답 처리 로직을 즉시 수정할 계획입니다.\n</info added on 2025-08-21T21:54:48.214Z>\n<info added on 2025-08-21T21:56:26.723Z>\n**후속 조치: 도커 재빌드**\nAPI 엔드포인트 수정이 완료되었습니다. 변경된 프론트엔드 코드를 도커 이미지에 반영하여 저장 기능의 정상 작동을 확인하기 위해 재빌드를 진행합니다.\n</info added on 2025-08-21T21:56:26.723Z>\n<info added on 2025-08-21T22:03:32.354Z>\n[]\n</info added on 2025-08-21T22:03:32.354Z>\n<info added on 2025-08-21T22:13:01.169Z>\n**로그 분석 결과 - DB 연결 문제 지속**\n도커 재빌드 후에도 여전히 기능이 정상 동작하지 않음을 확인. 로그 분석 결과 아래와 같은 문제가 지속되고 있음:\n*   프론트엔드에서 `[PreferenceManager] No DB config found` 오류가 계속 발생.\n*   `POST http://localhost:8000/api/master/hosts` API 호출이 `400 (Bad Request)` 및 `timeout of 15000ms exceeded` 오류로 실패.\n\n**재파악된 핵심 원인:**\nAPI 엔드포인트 문제 외에, 프론트엔드에서 데이터베이스 설정 자체가 저장되지 않는 것이 근본 원인으로 파악됨. Statistics 저장 버튼 클릭 시에도 관련 네트워크 요청이 발생하지 않는 것으로 보아, 이벤트 핸들러 연결에 문제가 있는 것으로 재확인됨.\n\n**임시 조치 및 테스트 계획:**\n우선 프론트엔드에서 데이터베이스 설정을 수동으로 구성하여, 설정이 정상적으로 전달될 경우 API 호출이 성공하는지 테스트할 예정.\n</info added on 2025-08-21T22:13:01.169Z>\n<info added on 2025-08-21T22:15:58.848Z>\n이전 분석 단계에서 코드 수정이 완료되었다고 기록했으나, 이는 분석 결과에 따른 계획을 기술한 것이며 실제 코드 수정은 이루어지지 않았습니다. 분석을 통해 파악된 API 엔드포인트 불일치 문제(`/api/preferences/self` -> `/api/preference/settings`)를 해결하기 위해 지금부터 `PreferenceContext.jsx` 파일의 `saveSettings` 함수에 대한 실제 코드 수정 작업을 시작합니다.\n</info added on 2025-08-21T22:15:58.848Z>",
+            "status": "done",
+            "testStrategy": "성공적인 저장 로직의 주요 단계(데이터 수집, API 호출, 응답 처리)를 순서도로 문서화할 수 있어야 합니다."
           },
           {
             "id": 3,
-            "title": "Implement Dynamic Configuration Re-evaluation Logic",
-            "description": "Develop the frontend logic within the configuration components to dynamically re-evaluate the validity of PEG and Statistics settings as users input data. This involves triggering validation calls and updating the UI state.",
+            "title": "실패 기능(Dashboard) 코드 분석 및 비교",
+            "description": "저장이 실패하는 `kpi_dashboard/frontend/src/components/Dashboard.jsx` 파일의 저장 로직을 분석하고, 정상 동작하는 Statistics 로직과 비교하여 차이점을 식별합니다.",
             "dependencies": [
-              "10.1",
-              "10.2"
+              "31.2"
             ],
-            "details": "Within the PEG and Statistics configuration components, use `useEffect` hooks to detect changes in input fields. On change, debounce the input and then call the `validateSettingsApi` (from 10.2) with the current configuration state (from 10.1). Update the `validationResults` within the `SettingsContext` based on the API response.",
+            "details": "Dashboard 컴포넌트의 저장 로직을 Statistics의 로직과 나란히 비교합니다. 특히 호출하는 API 엔드포인트 URL, HTTP 메소드, 요청 헤더, 전송하는 데이터의 구조 및 형식에서 다른 점을 중점적으로 찾아냅니다.",
             "status": "pending",
-            "testStrategy": "Use React Testing Library to simulate user input events and verify that the validation API is called with the correct payload and that the context state is updated."
+            "testStrategy": "Statistics와 Dashboard 저장 로직 간의 코드 레벨 차이점을 목록으로 정리할 수 있어야 합니다."
           },
           {
             "id": 4,
-            "title": "Develop Smart Guidance and Real-time Feedback UI",
-            "description": "Design and implement the user interface components responsible for displaying real-time validation feedback, including error messages, warnings, and 'smart guidance,' based on the `validationResults` from the Context API.",
+            "title": "실패 기능(Preference/DB) 코드 분석 및 비교",
+            "description": "데이터베이스 설정 저장이 실패하는 `kpi_dashboard/frontend/src/components/Preference.jsx` 파일의 저장 로직을 분석하고, Statistics 로직과 비교합니다.",
             "dependencies": [
-              "10.1",
-              "10.3"
+              "31.2"
             ],
-            "details": "Create UI components that consume the `validationResults` from the `SettingsContext` (10.1). Conditionally render error messages next to specific input fields, highlight invalid sections, and display contextual 'smart guidance' messages to help users resolve configuration issues or suggest optimal settings. Ensure accessibility and clear visual cues.",
+            "details": "Preference 컴포넌트의 저장 로직을 Statistics의 성공 모델과 비교 분석합니다. Dashboard 분석(31.3)에서 발견된 차이점과 유사한 패턴이 존재하는지 확인합니다.",
             "status": "pending",
-            "testStrategy": "Use React Testing Library to render components with different `validationResults` states and assert that the correct error messages, warnings, and guidance are displayed."
+            "testStrategy": "Statistics와 Preference 저장 로직 간의 코드 레벨 차이점을 목록으로 정리할 수 있어야 합니다."
           },
           {
             "id": 5,
-            "title": "Verify Order-Independent Configuration Flow with Comprehensive Testing",
-            "description": "Conduct thorough testing to ensure the entire configuration system functions correctly regardless of the order in which PEG and Statistics settings are modified, confirming the 'order-independent' requirement.",
+            "title": "브라우저 네트워크 요청 상세 비교 분석",
+            "description": "브라우저 개발자 도구를 사용하여 세 기능(Statistics, Dashboard, DB)의 저장 API 호출 시 발생하는 실제 네트워크 요청을 캡처하고 상세하게 비교 분석합니다.",
             "dependencies": [
-              "10.1",
-              "10.2",
-              "10.3",
-              "10.4"
+              "31.1"
             ],
-            "details": "This subtask focuses on the comprehensive testing strategy for the integrated components.",
+            "details": "각 기능의 저장 요청에 대한 Request URL, Method, Headers, Payload를 정확히 확인하고 비교 테이블을 작성합니다. 실패하는 요청의 서버 응답(Response) 본문과 상태 코드를 확인하여 서버 측에서 반환하는 오류 메시지를 확보합니다.",
             "status": "pending",
-            "testStrategy": "Use React Testing Library to simulate various user input sequences for PEG and Statistics settings (e.g., entering PEG data first, then Statistics; entering Statistics first, then PEG; making partial inputs; correcting errors) and verify that the correct validation feedback is displayed at each step. Implement E2E tests with Playwright to simulate full user flows, including navigating to settings, modifying PEG and Statistics in different orders, and observing real-time validation."
+            "testStrategy": "성공 요청과 실패 요청의 네트워크 파라미터 차이점을 명확히 기술한 비교표를 작성할 수 있어야 합니다."
+          },
+          {
+            "id": 6,
+            "title": "백엔드 API 엔드포인트 및 로직 확인",
+            "description": "프론트엔드에서 호출하는 API 엔드포인트가 백엔드에 올바르게 구현되어 있는지 확인하고, 요청을 처리하는 서버 로직을 검토합니다.",
+            "dependencies": [
+              "31.5"
+            ],
+            "details": "네트워크 분석(31.5)에서 확인된 실패 요청의 URL을 기준으로 백엔드 라우팅 코드를 확인합니다. 해당 엔드포인트가 존재하는지, 예상하는 데이터 형식(DTO)과 일치하는지, 그리고 관련 비즈니스 로직에 문제가 없는지 검토합니다.",
+            "status": "pending",
+            "testStrategy": "프론트엔드 호출과 백엔드 API 명세(또는 코드) 간의 불일치 여부를 확인할 수 있어야 합니다."
+          },
+          {
+            "id": 7,
+            "title": "근본 원인 종합 및 진단",
+            "description": "지금까지의 코드 분석, 네트워크 요청 비교, 백엔드 확인 결과를 종합하여 저장 기능 실패의 근본적인 원인을 명확하게 정의합니다.",
+            "dependencies": [
+              "31.3",
+              "31.4",
+              "31.6"
+            ],
+            "details": "문제의 원인이 'API 엔드포인트 주소 오타', '요청 데이터 구조 불일치', '백엔드에 해당 API 미구현', '인증/권한 문제' 등 구체적인 항목으로 진단합니다. 여러 원인이 복합적으로 작용하는지도 판단합니다.",
+            "status": "pending",
+            "testStrategy": "문제의 원인을 한두 문장으로 명확하게 요약하여 기술할 수 있어야 합니다."
+          },
+          {
+            "id": 8,
+            "title": "분석 결과 보고서 작성 및 공유",
+            "description": "수행한 분석 과정, 발견된 사실, 진단된 근본 원인, 그리고 해결을 위한 권장 사항을 포함하는 기술 분석 보고서를 작성하여 팀에 공유합니다.",
+            "dependencies": [
+              "31.7"
+            ],
+            "details": "보고서에는 각 컴포넌트별 코드 분석 내용, 네트워크 로그 스크린샷, 원인 분석 요약, 그리고 후속 조치(예: Task 33에서 API 엔드포인트 수정 또는 신규 구현 필요)를 명시하여 정리합니다.",
+            "status": "pending",
+            "testStrategy": "작성된 보고서를 통해 다른 팀원이 문제 상황과 해결 방향을 명확하게 이해할 수 있어야 합니다."
           }
         ]
       },
       {
-        "id": 11,
-        "title": "Implement Intuitive Configuration Guidance UI",
-        "description": "Design and implement clear, contextual guidance messages for users during the configuration process, especially regarding PEG/Statistics dependencies.",
-        "details": "Based on validation results from Task 10, display actionable messages (e.g., 'Please configure PostgreSQL first', 'Missing required field X'). Utilize UI patterns like tooltips, inline error messages, or guided wizards to improve user experience.",
-        "testStrategy": "Conduct UI/UX review with target personas. Perform user acceptance testing (UAT) to ensure messages are clear and helpful. Verify messages appear correctly for various validation states.",
-        "priority": "medium",
-        "dependencies": [
-          10
-        ],
-        "status": "pending",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Research and Design UI Patterns for Configuration Guidance",
-            "description": "Analyze the types of validation messages expected from Task 9 (e.g., missing fields, dependency issues like 'PostgreSQL first'). Research and design appropriate UI patterns (e.g., inline error messages for specific fields, tooltips for contextual help, guided wizard steps for dependency chains) to display these messages intuitively. Create wireframes/mockups and detailed design specifications.",
-            "dependencies": [],
-            "details": "Focus on clarity, actionability, and minimizing user frustration. Consider accessibility guidelines. The output should be a set of UI/UX design artifacts.",
-            "status": "pending",
-            "testStrategy": "Internal design review with product and UX leads to ensure alignment with user experience goals."
-          },
-          {
-            "id": 2,
-            "title": "Develop Reusable Frontend Components for Guidance Display",
-            "description": "Implement the core, reusable UI components (e.g., `InlineErrorMessage`, `ContextualTooltip`, `GuidanceBanner`, `GuidedWizardStep`) based on the design specifications from Subtask 11.1. These components should be generic enough to display various types of validation messages and suggestions.",
-            "dependencies": [
-              "11.1"
-            ],
-            "details": "Use the chosen frontend framework (e.g., React, Vue, Angular). Ensure components are styled consistently with the application's design system and are highly reusable.",
-            "status": "pending",
-            "testStrategy": "Write unit tests for component rendering, prop handling, and state changes. Conduct visual regression tests to ensure consistent appearance."
-          },
-          {
-            "id": 3,
-            "title": "Integrate Configuration UI with Validation Endpoint (Task 9)",
-            "description": "Implement the frontend logic to call the `/api/settings/validate` endpoint (Task 9) in real-time as users interact with configuration fields or attempt to save. This involves setting up API calls, handling loading states, and storing the validation results in the frontend state.",
-            "dependencies": [],
-            "details": "Implement debouncing for validation calls on input changes to optimize performance. Map backend validation responses (e.g., `isValid`, `errors`, `suggestions`) to frontend-consumable error structures. Ensure robust error handling for API failures.",
-            "status": "pending",
-            "testStrategy": "Write frontend integration tests to verify API calls are made correctly, responses are processed, and the frontend state is updated appropriately. Mock Task 9 responses to test various validation scenarios."
-          },
-          {
-            "id": 4,
-            "title": "Implement Contextual Message Rendering Logic",
-            "description": "Develop the specific logic within the configuration forms and pages to consume the validation results obtained from Subtask 11.3 and dynamically render the appropriate guidance messages using the components from Subtask 11.2. Ensure messages are displayed contextually (e.g., next to the relevant input field, as a prominent banner for global issues, or as part of a guided wizard flow).",
-            "dependencies": [
-              "11.2",
-              "11.3"
-            ],
-            "details": "Map specific error codes/types from Task 9's output to predefined message templates and component placements. Implement conditional rendering based on validation state and user interaction. Prioritize actionable messages.",
-            "status": "pending",
-            "testStrategy": "Conduct end-to-end UI tests to verify messages appear correctly for various valid, invalid, and partially configured states. Test different UI patterns (tooltip, inline, wizard step) and ensure messages are contextually relevant."
-          },
-          {
-            "id": 5,
-            "title": "Conduct UI/UX Review and User Acceptance Testing (UAT)",
-            "description": "Perform a comprehensive internal UI/UX review of the implemented guidance system. Prepare and execute user acceptance testing (UAT) with target personas to gather feedback on clarity, helpfulness, and intuitiveness of the messages and guidance flow. Iterate on the UI and message content based on UAT results.",
-            "dependencies": [
-              "11.4"
-            ],
-            "details": "Define UAT scenarios covering all expected validation states (e.g., missing dependencies, invalid inputs, successful configuration). Collect qualitative and quantitative feedback. Document UAT findings and prioritize necessary refinements.",
-            "status": "pending",
-            "testStrategy": "Document UAT findings, create bug reports/enhancement requests based on feedback. Verify all identified issues are addressed and the guidance system meets user expectations for clarity and helpfulness."
-          }
-        ]
-      },
-      {
-        "id": 12,
-        "title": "Implement `/api/settings/reset` Endpoint",
-        "description": "Create a FastAPI endpoint to completely reset a user's settings in the database.",
-        "details": "This endpoint should delete or archive all `userSettings` records associated with a given `userId`. Implement appropriate security checks, such as requiring a POST request and robust user authentication/authorization to prevent unauthorized resets.",
-        "testStrategy": "Write API integration tests to verify that settings are correctly removed/reset for a user. Test edge cases like attempting to reset non-existent settings or unauthorized attempts.",
+        "id": 32,
+        "title": "[Backend] 사용자별 설정 관리를 위한 DB 스키마 설계 및 구현",
+        "description": "사용자별 설정을 독립적으로 저장하기 위한 데이터베이스 스키마를 설계하고 구현합니다. `user_settings`와 `user_sessions` 테이블(또는 컬렉션)을 생성합니다.",
+        "details": "PostgreSQL에 `user_settings` 테이블(userId, setting_type, setting_data)을 생성하고, MongoDB에 `user_sessions` 컬렉션을 생성합니다. 기존 'default' 사용자의 데이터를 마이그레이션할 방안을 고려합니다.",
+        "testStrategy": "스키마가 정상적으로 생성되고, 샘플 사용자 데이터를 삽입/조회할 수 있는지 데이터베이스 클라이언트를 통해 확인합니다.",
         "priority": "high",
         "dependencies": [],
-        "status": "cancelled",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Set up `/api/settings/reset` FastAPI Endpoint Structure",
-            "description": "Create the basic FastAPI route for `/api/settings/reset`, ensuring it accepts POST requests. Define the necessary request and response models.",
-            "dependencies": [],
-            "details": "Utilize FastAPI's `APIRouter` to define the POST endpoint. The endpoint should not require a request body, as the `userId` will be derived from the authentication context. Define a simple response model for success confirmation.",
-            "status": "pending",
-            "testStrategy": "Manually test endpoint accessibility and basic response structure using a tool like Postman or curl."
-          },
-          {
-            "id": 2,
-            "title": "Implement User Authentication and Authorization for Reset Endpoint",
-            "description": "Integrate robust security checks to ensure only authenticated and authorized users can trigger a settings reset for their own `userId`.",
-            "dependencies": [
-              "12.1"
-            ],
-            "details": "Utilize FastAPI's dependency injection for authentication (e.g., JWT token validation) to extract the `userId` from the request. Implement authorization logic to verify that the authenticated user is permitted to reset settings for the identified `userId` (typically their own). Return 401 Unauthorized for unauthenticated attempts and 403 Forbidden for unauthorized access attempts (e.g., trying to reset another user's settings).",
-            "status": "pending",
-            "testStrategy": "Write unit/integration tests to verify correct handling of valid tokens, invalid tokens, missing tokens, and attempts to reset settings for a different user."
-          },
-          {
-            "id": 3,
-            "title": "Develop Database Logic for User Settings Reset",
-            "description": "Write the database interaction logic to either delete all `userSettings` records associated with the authenticated `userId` or mark them as archived in the PostgreSQL database.",
-            "dependencies": [
-              "12.2"
-            ],
-            "details": "Connect to the PostgreSQL database using the established ORM (e.g., SQLAlchemy). Implement a `DELETE` operation on the `userSettings` table where the `userId` column matches the authenticated user's ID. Alternatively, if archiving is preferred, implement an `UPDATE` operation to set an `isArchived` flag or similar status. Ensure the operation is atomic.",
-            "status": "pending",
-            "testStrategy": "Write unit tests for the database interaction layer to ensure correct SQL queries are generated and executed for deletion/archiving. Mock the database connection for isolated testing."
-          },
-          {
-            "id": 4,
-            "title": "Implement API Responses and Error Handling for Reset Endpoint",
-            "description": "Define appropriate HTTP responses for success and various error scenarios, such as no settings found for the user, database errors, or internal server errors.",
-            "dependencies": [
-              "12.3"
-            ],
-            "details": "Return a 200 OK response upon successful reset, possibly with a confirmation message. Handle cases where no settings were found for the user (e.g., still return 200 OK with a specific message, or 204 No Content if appropriate, as the 'reset' state is achieved). Implement `try-except` blocks around database operations to catch and handle potential exceptions, returning 500 Internal Server Error for unexpected database issues.",
-            "status": "pending",
-            "testStrategy": "Test the endpoint's responses for successful operations, cases where no settings exist to reset, and simulated database errors to ensure correct HTTP status codes and response bodies."
-          },
-          {
-            "id": 5,
-            "title": "Write Comprehensive Integration Tests for `/api/settings/reset`",
-            "description": "Create automated API integration tests to verify the correct functionality, security, and error handling of the `/api/settings/reset` endpoint.",
-            "dependencies": [
-              "12.4"
-            ],
-            "details": "Use `pytest` and FastAPI's `TestClient` or `httpx`. Test cases should include: successful reset for an authenticated user with existing settings; successful reset for an authenticated user with no existing settings; unauthorized access attempts (e.g., missing token, invalid token, attempting to reset another user's settings); and verification that settings are indeed removed/archived from the database after a successful reset. Ensure tests cover edge cases as described in the parent task.",
-            "status": "pending",
-            "testStrategy": "Execute tests against a test database instance. Verify database state before and after endpoint calls. Use mock authentication for security tests."
-          }
-        ]
-      },
-      {
-        "id": 13,
-        "title": "Develop Full Settings Reset UI with Safety Confirmation",
-        "description": "Implement a UI component that allows users to completely reset their settings, including a mandatory confirmation dialog to prevent accidental data loss.",
-        "details": "Design a clear button/menu item for 'Reset All Settings'. The confirmation dialog should explicitly state the irreversible nature of the action and require user confirmation (e.g., typing 'RESET'). Integrate this UI with the `/api/settings/reset` endpoint.",
-        "testStrategy": "Manually test the reset flow, including confirmation and cancellation. Use React Testing Library to ensure dialog behavior is correct and the API call is only made upon explicit confirmation.",
-        "priority": "high",
-        "dependencies": [
-          8,
-          12
-        ],
         "status": "pending",
         "subtasks": [
           {
             "id": 1,
-            "title": "Implement 'Reset All Settings' UI Trigger",
-            "description": "Create the visual button or menu item that initiates the settings reset process.",
+            "title": "PostgreSQL `user_settings` 테이블 상세 스키마 설계",
+            "description": "`user_settings` 테이블의 컬럼, 데이터 타입, 제약 조건(기본 키, 외래 키, NOT NULL 등)을 상세히 정의합니다. `userId`는 `users` 테이블을 참조하는 외래 키로, `setting_data`는 JSONB 타입으로 설계하여 유연성을 확보합니다.",
             "dependencies": [],
-            "details": "Design a clear, distinct button or menu item (e.g., in a settings page or profile dropdown) labeled 'Reset All Settings'. Ensure it's visually distinct and accessible.",
+            "details": "컬럼 정의: `id` (PK, SERIAL), `user_id` (FK, UUID), `setting_type` (VARCHAR(50)), `setting_data` (JSONB), `created_at` (TIMESTAMPZ), `updated_at` (TIMESTAMPZ). `(user_id, setting_type)`에 UNIQUE 제약 조건을 추가하는 것을 고려합니다.",
             "status": "pending",
-            "testStrategy": "Unit tests to ensure the button renders correctly and triggers an event (e.g., `onClick`) when clicked."
+            "testStrategy": "설계된 스키마가 요구사항을 모두 충족하는지 동료 리뷰를 통해 검증합니다."
           },
           {
             "id": 2,
-            "title": "Develop Settings Reset Confirmation Dialog UI",
-            "description": "Create the modal or dialog component that prompts the user for confirmation before resetting settings.",
-            "dependencies": [
-              "13.1"
-            ],
-            "details": "Design a modal dialog with a clear title (e.g., 'Confirm Settings Reset'), a warning message about irreversibility, and an input field where the user must type 'RESET' to confirm. Include 'Cancel' and 'Confirm' buttons.",
+            "title": "MongoDB `user_sessions` 컬렉션 스키마 설계",
+            "description": "사용자 세션 정보를 저장할 `user_sessions` 컬렉션의 문서 구조를 설계합니다. 세션 ID, 사용자 ID, 생성 및 만료 시각 등의 필드를 포함합니다.",
+            "dependencies": [],
+            "details": "필드 정의: `_id` (Session ID), `userId` (String or ObjectId), `createdAt` (ISODate), `expiresAt` (ISODate), `sessionData` (Object). `expiresAt` 필드에 TTL(Time-To-Live) 인덱스를 적용하여 만료된 세션을 자동으로 삭제하는 방안을 포함합니다.",
             "status": "pending",
-            "testStrategy": "Snapshot tests for the dialog's appearance. React Testing Library tests to verify all elements (title, message, input, buttons) are present when the dialog is open."
+            "testStrategy": "설계된 문서 구조가 세션 관리에 필요한 모든 정보를 포함하고 있는지 확인합니다."
           },
           {
             "id": 3,
-            "title": "Implement Confirmation Dialog Logic and Input Validation",
-            "description": "Add the frontend logic to control the visibility of the confirmation dialog, handle user input in the confirmation field, and enable/disable the confirm button based on input.",
+            "title": "PostgreSQL `user_settings` 테이블 생성 및 제약 조건 적용",
+            "description": "설계된 스키마를 바탕으로 `user_settings` 테이블을 생성하는 SQL DDL(Data Definition Language) 스크립트를 작성하고 실행합니다.",
             "dependencies": [
-              "13.2"
+              "32.1"
             ],
-            "details": "Implement state management for dialog visibility. Add an event handler for the input field to check if the typed text matches 'RESET' (case-sensitive). The 'Confirm' button should only become active when the input is correct. Handle 'Cancel' button logic to close the dialog.",
+            "details": "Flyway 또는 Alembic과 같은 데이터베이스 마이그레이션 도구를 사용하여 DDL 스크립트를 버전 관리하고, 개발 데이터베이스에 적용합니다.",
             "status": "pending",
-            "testStrategy": "React Testing Library tests to simulate typing 'RESET' and verify the 'Confirm' button state. Test cancellation behavior."
+            "testStrategy": "데이터베이스 클라이언트를 통해 테이블과 제약 조건이 설계대로 정확하게 생성되었는지 확인합니다."
           },
           {
             "id": 4,
-            "title": "Integrate Settings Reset UI with Backend API",
-            "description": "Implement the logic to make an API call to `/api/settings/reset` when the user confirms the reset action.",
+            "title": "MongoDB `user_sessions` 컬렉션 생성 및 TTL 인덱스 설정",
+            "description": "설계된 스키마에 따라 MongoDB에 `user_sessions` 컬렉션을 생성하고, `expiresAt` 필드에 TTL 인덱스를 설정하여 세션 자동 만료 기능을 구현합니다.",
             "dependencies": [
-              "13.3"
+              "32.2"
             ],
-            "details": "Upon successful confirmation (i.e., 'Confirm' button clicked and input validated), dispatch an asynchronous action to call the `/api/settings/reset` endpoint. Handle loading states during the API call.",
+            "details": "MongoDB shell 또는 드라이버를 사용하여 `db.createCollection(\"user_sessions\")` 명령과 `createIndex` 명령으로 TTL 인덱스를 생성합니다.",
             "status": "pending",
-            "testStrategy": "Use Jest mocks for `fetch` or `axios` to simulate API success and failure. Verify that the API call is made with the correct method (e.g., POST/DELETE) and only after explicit confirmation."
+            "testStrategy": "샘플 세션 문서를 삽입하고, `expiresAt` 시간이 지난 후 해당 문서가 자동으로 삭제되는지 확인합니다."
           },
           {
             "id": 5,
-            "title": "Implement Post-Reset UI Updates and Error Handling",
-            "description": "Manage the UI state after the API call, including displaying success/error messages and potentially redirecting or refreshing the settings.",
+            "title": "기존 'default' 사용자 설정 데이터 마이그레이션 스크립트 작성 및 실행",
+            "description": "현재 'default' 사용자의 설정 데이터를 식별하고, 이를 새로운 `user_settings` 테이블 구조에 맞게 변환하여 이전하는 마이그레이션 스크립트를 작성합니다.",
             "dependencies": [
-              "13.4"
+              "32.3"
             ],
-            "details": "After a successful API response, display a success notification (e.g., a toast message), close the dialog, and potentially trigger a re-fetch of settings or a page refresh to reflect the reset state. Implement robust error handling for API failures, displaying user-friendly error messages.",
+            "details": "일회성 스크립트(Python, Node.js, or SQL)를 작성하여 기존 데이터를 읽고, 새로운 `user_settings` 테이블에 INSERT 합니다. 마이그레이션 전 데이터 백업 절차를 포함합니다.",
             "status": "pending",
-            "testStrategy": "React Testing Library tests to verify success/error messages are displayed correctly. Test that the dialog closes and the UI updates appropriately after a mocked successful API call. Test error message display on mocked API failure."
+            "testStrategy": "스크립트 실행 후, `user_settings` 테이블에 'default' 사용자의 설정 데이터가 정확하게 이전되었는지 SQL 쿼리를 통해 검증합니다."
+          },
+          {
+            "id": 6,
+            "title": "쿼리 성능 최적화를 위한 인덱스 전략 수립 및 적용",
+            "description": "주요 조회 쿼리(예: 특정 사용자의 모든 설정 조회)의 성능을 분석하고, PostgreSQL과 MongoDB에 필요한 인덱스를 생성하여 응답 시간을 최적화합니다.",
+            "dependencies": [
+              "32.3",
+              "32.4"
+            ],
+            "details": "PostgreSQL `user_settings` 테이블의 `user_id` 컬럼에 B-tree 인덱스를 생성합니다. MongoDB `user_sessions` 컬렉션의 `userId` 필드에도 인덱스를 추가하여 사용자별 세션 조회를 최적화합니다.",
+            "status": "pending",
+            "testStrategy": "인덱스 생성 전후로 `EXPLAIN ANALYZE`와 같은 쿼리 실행 계획 분석 도구를 사용하여 쿼리 성능이 개선되었는지 측정하고 비교합니다."
+          },
+          {
+            "id": 7,
+            "title": "스키마 보안 및 데이터 무결성 검토",
+            "description": "구현된 데이터베이스 스키마의 보안 취약점을 검토하고, 데이터 무결성을 보장하기 위한 제약 조건(외래 키, CHECK 제약 등)이 올바르게 설정되었는지 최종 확인합니다.",
+            "dependencies": [
+              "32.3",
+              "32.4"
+            ],
+            "details": "`setting_data` (JSONB) 필드에 저장될 데이터 구조에 대한 기본 검증 규칙을 문서화하고, 애플리케이션 레벨(Task 41)에서 수행할 유효성 검사의 기반을 마련합니다. 데이터베이스 사용자 권한을 검토하여 최소 권한 원칙이 지켜지는지 확인합니다.",
+            "status": "pending",
+            "testStrategy": "동료 리뷰를 통해 스키마 설계 및 구현에서 간과된 보안 및 무결성 문제가 없는지 교차 검증합니다."
           }
         ]
       },
       {
-        "id": 14,
-        "title": "Enhance Backup/Restore UI & Implement Client-Side Versioning",
-        "description": "Improve the existing backup/restore UI and add client-side logic for basic settings versioning to allow reverting to previous states.",
-        "details": "For backup, allow users to download a JSON file of their current settings. For restore, allow uploading a JSON file to apply settings. Implement a simple client-side versioning mechanism (e.g., storing the last 3-5 versions of settings in LocalStorage or IndexedDB) to enable quick reverts.",
-        "testStrategy": "Manually test backup (download) and restore (upload) functionalities with various valid and invalid JSON files. Write unit tests for the client-side versioning logic, ensuring versions are correctly stored and retrieved.",
+        "id": 33,
+        "title": "[Backend] 사용자 식별 및 설정 관리 API 엔드포인트 구현",
+        "description": "사용자 생성, 조회 및 사용자별 설정 저장/로드를 위한 백엔드 API를 구현합니다. PRD에 명시된 모든 관련 엔드포인트를 개발합니다.",
+        "details": "PRD에 명시된 API 엔드포인트 구현: POST /api/user/create, GET /api/user/{userId}/exists, POST /api/user/settings/dashboard, GET /api/user/settings/dashboard/{userId}, POST /api/user/settings/database, GET /api/user/settings/database/{userId}",
+        "testStrategy": "API 테스트 도구(Postman, Swagger)를 사용하여 각 엔드포인트가 명세에 따라 정상적으로 동작하고 올바른 HTTP 상태 코드를 반환하는지 확인합니다.",
+        "priority": "high",
+        "dependencies": [
+          32
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 34,
+        "title": "[Frontend] 클라이언트 측 사용자 ID 생성 및 세션 관리 로직 구현",
+        "description": "프론트엔드에서 고유한 사용자 ID를 생성하고 LocalStorage에 저장하여 세션을 유지하는 로직을 구현합니다. 페이지 로드 시 사용자 ID가 없으면 새로 생성하고, 있으면 기존 ID를 사용합니다.",
+        "details": "ID는 'user_${timestamp}_${randomString}' 형식으로 생성합니다. LocalStorage API를 사용하여 브라우저 세션 간 ID를 유지합니다. Context API 또는 Redux를 사용하여 사용자 ID를 전역 상태로 관리합니다.",
+        "testStrategy": "브라우저를 새로고침하거나 재시작해도 동일한 사용자 ID가 LocalStorage에서 로드되는지 확인합니다. 시크릿 모드에서는 새로운 ID가 생성되는지 확인합니다.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 35,
+        "title": "[Frontend] 대시보드 설정 저장 기능 수정 및 API 연동",
+        "description": "동작하지 않는 대시보드 설정 저장 버튼이 새로운 사용자별 설정 저장 API(POST /api/user/settings/dashboard)를 호출하도록 수정합니다.",
+        "details": "Dashboard.jsx 또는 관련 컴포넌트를 수정합니다. Axios 또는 Fetch API를 사용하여 API를 호출하며, 요청 시 현재 사용자 ID와 설정 데이터를 함께 전송합니다.",
+        "testStrategy": "대시보드 설정을 변경하고 저장 버튼을 눌렀을 때, 네트워크 탭에서 올바른 API로 요청이 전송되고 200 OK 응답을 받는지 확인합니다. DB에 해당 사용자의 설정이 저장되었는지 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          31,
+          33,
+          34
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 36,
+        "title": "[Frontend] 데이터베이스 설정 저장 기능 수정 및 API 연동",
+        "description": "동작하지 않는 데이터베이스 설정 저장 버튼이 새로운 사용자별 설정 저장 API(POST /api/user/settings/database)를 호출하도록 수정합니다.",
+        "details": "Preference.jsx 또는 관련 컴포넌트를 수정합니다. Axios 또는 Fetch API를 사용하여 API를 호출하며, 요청 시 현재 사용자 ID와 설정 데이터를 함께 전송합니다.",
+        "testStrategy": "데이터베이스 설정을 변경하고 저장 버튼을 눌렀을 때, 올바른 API로 요청이 전송되고 성공 응답을 받는지 확인합니다. DB에 해당 사용자의 설정이 저장되었는지 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          31,
+          33,
+          34
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 37,
+        "title": "[Frontend] 페이지 로드 시 사용자 설정 정보 로드 기능 구현",
+        "description": "웹페이지에 재접속하거나 새로고침 시, 현재 사용자 ID를 기반으로 DB에 저장된 설정 정보를 불러와 UI에 적용하는 기능을 구현합니다.",
+        "details": "useEffect 훅을 사용하여 컴포넌트 마운트 시 GET /api/user/settings/dashboard/{userId} 및 GET /api/user/settings/database/{userId} API를 호출합니다. 불러온 데이터로 React 상태를 초기화합니다.",
+        "testStrategy": "설정을 저장한 후 페이지를 새로고침했을 때, 이전에 저장한 설정이 UI에 그대로 표시되는지 확인합니다. 데이터 지속성 100%를 목표로 합니다.",
+        "priority": "high",
+        "dependencies": [
+          35,
+          36
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 38,
+        "title": "[Frontend] 저장 상태 피드백 UI 구현",
+        "description": "모든 저장 버튼에 대해 로딩, 성공, 실패 상태를 사용자에게 명확하게 보여주는 UI 피드백을 구현합니다.",
+        "details": "저장 버튼 클릭 시 '저장 중...' 또는 로딩 스피너를 표시합니다. API 응답 성공 시 '저장되었습니다' 메시지(예: Toast, Snackbar)를 표시하고, 실패 시 명확한 에러 메시지를 표시합니다.",
+        "testStrategy": "각 저장 시나리오(성공, 실패, 네트워크 지연)에서 상태 표시가 디자인대로 정확하게 나타나는지 확인합니다.",
         "priority": "medium",
         "dependencies": [
-          8
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Implement Backup UI and Settings Export",
-            "description": "Develop the user interface elements (e.g., a 'Download Settings' button) and the client-side logic to gather the current application settings and prepare them for download as a JSON file.",
-            "dependencies": [],
-            "details": "Retrieve the current settings from the application's state/store, serialize them into a JSON string, and trigger a file download in the browser using Blob and URL.createObjectURL.\n<info added on 2025-08-21T19:27:04.337Z>\nIt has been confirmed that Task 14.1 is already completed. All requirements for Task 14.1 are already implemented, and no additional work is needed.\n\n**Existing Implementation Details:**\n*   A complete backup UI is implemented in the `ImportExportBox.jsx` component.\n*   The `usePreference.js` hook provides the `exportSettings` function.\n*   JSON file download functionality is fully operational.\n*   Supports both full and partial settings export.\n*   Custom file naming is possible.\n*   Individual selection export is available for 5 setting sections.\n*   Real-time status display and progress UI are included.\n\n**Implemented Core Features:**\n1.  Current settings are serialized into JSON.\n2.  File download is handled using Blob and URL.createObjectURL.\n3.  Timestamp-based automatic file naming is implemented.\n4.  Metadata (export time, version, etc.) is included.\n5.  Error handling and Toast notifications are provided.\n</info added on 2025-08-21T19:27:04.337Z>",
-            "status": "done",
-            "testStrategy": "Manually test the 'Download Settings' button to ensure a JSON file is downloaded with the correct current settings. Unit tests for the settings serialization logic."
-          },
-          {
-            "id": 2,
-            "title": "Implement Restore UI and Settings Import",
-            "description": "Develop the user interface elements (e.g., an 'Upload Settings' button/input) and the client-side logic to allow users to select a JSON file, read its content, and perform initial parsing.",
-            "dependencies": [],
-            "details": "Create an input element of type 'file' that accepts JSON files. Use the FileReader API to read the content of the selected file and attempt to parse it as JSON. Handle basic file reading errors.",
-            "status": "done",
-            "testStrategy": "Manually test the file upload input with valid JSON files and invalid (non-JSON) files. Unit tests for file reading and initial JSON parsing logic, ensuring error handling for malformed JSON."
-          },
-          {
-            "id": 3,
-            "title": "Integrate Imported Settings and Basic Validation",
-            "description": "Implement the logic to apply the settings parsed from the uploaded JSON file to the application's state. This includes basic structural validation to ensure the uploaded file contains expected settings keys before applying them.",
-            "dependencies": [
-              "14.2"
-            ],
-            "details": "After successfully parsing the JSON from the uploaded file, update the application's settings state. Add checks to ensure the uploaded JSON structure matches the expected settings schema (e.g., presence of key fields) to prevent application errors. Provide user feedback on success or validation failure.",
-            "status": "done",
-            "testStrategy": "Unit tests to verify that valid JSON settings are correctly applied to the application state. Test with malformed or incomplete JSON to ensure basic validation catches errors and provides appropriate user feedback."
-          },
-          {
-            "id": 4,
-            "title": "Develop Client-Side Settings Versioning Logic",
-            "description": "Implement the core logic for storing multiple versions of user settings client-side (e.g., in LocalStorage or IndexedDB). This includes functions to save a new version, retrieve all stored versions, and manage the version history (e.g., keeping only the last 3-5 versions).",
-            "dependencies": [],
-            "details": "Choose LocalStorage or IndexedDB for storage. Implement functions like `saveSettingsVersion(settings)`, `getSettingsVersions()`, and `pruneOldVersions()`. Each saved version should include a timestamp and a unique identifier. Ensure the version limit (3-5) is enforced.",
-            "status": "done",
-            "testStrategy": "Unit tests to verify that versions are correctly saved, retrieved, and pruned according to the specified limit. Test edge cases like saving the first version, saving beyond the limit, and retrieving non-existent versions."
-          },
-          {
-            "id": 5,
-            "title": "Integrate Versioning UI and Revert Functionality",
-            "description": "Enhance the UI to display available settings versions and provide a mechanism (e.g., a dropdown or list of versions with 'Revert' buttons) for users to select and apply a previous version of their settings.",
-            "dependencies": [
-              "14.3",
-              "14.4"
-            ],
-            "details": "Use the functions developed in 14.4 to populate a UI component (e.g., a list or dropdown) with available settings versions. When a user selects a version to revert, retrieve that version's data and apply it to the application's settings state using the logic from 14.3. Ensure a new version is saved *after* a successful revert, as the reverted state becomes the new current state.",
-            "status": "done",
-            "testStrategy": "Manually test the version history display and the 'Revert' functionality for different versions. Unit tests for the logic that applies a selected historical version to the current settings. Ensure a new version is correctly saved after a revert operation."
-          }
-        ]
-      },
-      {
-        "id": 15,
-        "title": "Configure E2E Testing & CI/CD Integration",
-        "description": "Set up Playwright for end-to-end testing of key user flows and integrate all new tests into the existing CI/CD pipeline.",
-        "details": "Write comprehensive Playwright tests covering the core user flows: persistent settings (login, configure, re-login), order-independent configuration (PEG/Statistics setup), and settings management (backup, restore, reset). Update Dockerfiles and CI/CD scripts to automatically run these E2E tests on every code push.",
-        "testStrategy": "Run full CI/CD pipeline to verify E2E tests pass. Monitor test results and coverage reports. Ensure tests are stable and reliable across different environments.",
-        "priority": "high",
-        "dependencies": [
-          8,
-          10,
-          13
+          35,
+          36
         ],
         "status": "pending",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Initialize Playwright Test Environment",
-            "description": "Set up the Playwright testing framework in the project, including installation of necessary dependencies and creation of a basic sanity test.",
-            "dependencies": [],
-            "details": "Install Playwright, configure `playwright.config.ts` for browser setup (Chromium, Firefox, WebKit), and create a simple 'hello world' test (e.g., navigating to the homepage and asserting title) to confirm the setup is working.",
-            "status": "pending",
-            "testStrategy": "Run `npx playwright test` locally to ensure the basic test passes and browsers launch correctly."
-          },
-          {
-            "id": 2,
-            "title": "Develop E2E Tests for Persistent Settings Flow",
-            "description": "Write comprehensive Playwright tests to cover the core user flow involving login, configuring settings, and verifying persistence after re-login.",
-            "dependencies": [
-              "15.1"
-            ],
-            "details": "Create Playwright test suites for: successful user login and authentication; navigating to user settings and making changes (e.g., preferences); logging out and then logging back in; and finally, verifying that the previously configured settings are correctly loaded and displayed upon re-login.",
-            "status": "pending",
-            "testStrategy": "Run these specific test suites locally using Playwright to ensure all assertions pass for the persistent settings flow."
-          },
-          {
-            "id": 3,
-            "title": "Develop E2E Tests for Configuration & Management Flows",
-            "description": "Develop Playwright tests for the order-independent configuration of PEG/Statistics and the settings management features (backup, restore, reset).",
-            "dependencies": [
-              "15.1"
-            ],
-            "details": "Create Playwright test suites for: configuring PEG settings and verifying their dependencies/validation (leveraging Task 10/11 context); configuring Statistics settings and verifying their dependencies/validation; testing the ability to backup user settings; testing the ability to restore user settings from a backup; and testing the ability to reset user settings to default. Ensure tests cover various valid and invalid configuration scenarios.",
-            "status": "pending",
-            "testStrategy": "Run these specific test suites locally using Playwright to ensure all assertions pass for various configuration and management scenarios."
-          },
-          {
-            "id": 4,
-            "title": "Update Dockerfiles for Playwright Test Execution",
-            "description": "Modify existing Dockerfiles to include all necessary dependencies for Playwright to run within the containerized environment.",
-            "dependencies": [
-              "15.2",
-              "15.3"
-            ],
-            "details": "Add Playwright browser dependencies (e.g., `ms-playwright-browser-drivers` or system-level browser packages like Chromium, Firefox, WebKit) to the relevant Dockerfile(s). Ensure the test runner can be invoked within the container and has the necessary permissions and environment variables.",
-            "status": "pending",
-            "testStrategy": "Build the Docker image and run a simple Playwright test command inside the container to verify that Playwright can execute tests successfully within the containerized environment."
-          },
-          {
-            "id": 5,
-            "title": "Configure CI/CD Pipeline for E2E Test Automation",
-            "description": "Update the CI/CD pipeline scripts to automatically trigger and run the Playwright E2E tests on every code push, and ensure results are reported.",
-            "dependencies": [
-              "15.4"
-            ],
-            "details": "Modify the CI/CD configuration (e.g., `.github/workflows/*.yml`, `.gitlab-ci.yml`, `Jenkinsfile`) to add a new stage or step for E2E testing. This step should build the Docker image (if not already done), run the Playwright tests within the container, and configure reporting mechanisms (e.g., JUnit XML, Playwright HTML report archiving) for visibility.",
-            "status": "pending",
-            "testStrategy": "Push a small code change to trigger the CI/CD pipeline. Verify that the E2E test stage runs, completes successfully, and reports results as expected. Monitor for stability and reliability across different CI/CD runs."
-          }
-        ]
+        "subtasks": []
+      },
+      {
+        "id": 39,
+        "title": "[Frontend] PEG 목록 표시를 드롭다운 컴포넌트로 교체",
+        "description": "대시보드 설정의 '표시할 peg 목록'을 기존 텍스트 입력 방식에서 다중 선택이 가능한 드롭다운 방식으로 개선합니다.",
+        "details": "react-select나 MUI Autocomplete와 같은 라이브러리를 사용하거나 커스텀 드롭다운 컴포넌트를 개발합니다. 다중 선택(multi-select) 및 검색 기능을 포함해야 합니다.",
+        "testStrategy": "드롭다운에서 여러 PEG 항목을 선택/해제할 수 있는지 확인합니다. 검색 기능이 정상적으로 동작하는지 확인합니다. UI 응답 시간이 500ms 미만이어야 합니다.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 40,
+        "title": "[Frontend] 드롭다운 컴포넌트와 대시보드 설정 저장 로직 연동",
+        "description": "새로 구현된 PEG 목록 드롭다운에서 선택된 값들이 대시보드 설정 저장 시 올바른 데이터 형식으로 API에 전송되도록 연동합니다.",
+        "details": "드롭다운 컴포넌트의 상태(선택된 항목 배열)를 대시보드 설정 상태 객체에 반영합니다. 저장 버튼 클릭 시 이 데이터를 포함하여 API 요청을 보냅니다.",
+        "testStrategy": "드롭다운에서 PEG를 선택하고 저장한 뒤, 페이지를 새로고침했을 때 선택한 항목들이 드롭다운에 그대로 유지되는지 확인합니다.",
+        "priority": "medium",
+        "dependencies": [
+          35,
+          39
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 41,
+        "title": "[Backend] 설정 데이터 유효성 검사 및 에러 처리 강화",
+        "description": "백엔드 API에서 프론트엔드로부터 받은 설정 데이터의 형식과 내용을 검증하는 로직을 추가하고, 유효하지 않은 데이터에 대해 명확한 에러 응답을 반환하도록 개선합니다.",
+        "details": "Pydantic 모델 등을 사용하여 요청 body의 데이터 구조를 검증합니다. 필수 필드 누락, 데이터 타입 불일치 등을 체크하고 400 Bad Request와 같은 적절한 HTTP 상태 코드와 에러 메시지를 반환합니다.",
+        "testStrategy": "의도적으로 잘못된 형식의 데이터를 API로 전송하여, 예상된 에러 응답이 반환되는지 확인합니다.",
+        "priority": "medium",
+        "dependencies": [
+          33
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 42,
+        "title": "E2E(End-to-End) 테스트 시나리오 작성 및 실행",
+        "description": "전체 기능 흐름에 대한 E2E 테스트 시나리오를 작성하고 실행하여 기능 통합 후에도 문제가 없는지 검증합니다.",
+        "details": "시나리오 예시: 1) 신규 사용자로 접속 -> 2) 대시보드 설정(PEG 목록 포함) 변경 및 저장 -> 3) DB 설정 변경 및 저장 -> 4) 페이지 새로고침 -> 5) 모든 설정이 유지되는지 확인.",
+        "testStrategy": "작성된 모든 E2E 테스트 시나리오를 통과해야 합니다. Cypress나 Playwright 같은 테스트 프레임워크 사용을 고려합니다.",
+        "priority": "medium",
+        "dependencies": [
+          37,
+          40
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 43,
+        "title": "다중 사용자 동시 접속 및 데이터 격리 테스트",
+        "description": "여러 사용자가 동시에 시스템에 접속하여 각자의 설정을 저장하고 로드할 때, 다른 사용자의 설정에 영향을 주지 않고 독립적으로 관리되는지 테스트합니다.",
+        "details": "브라우저 2개(일반 모드, 시크릿 모드)를 열어 각각 다른 사용자 ID로 접속합니다. 한쪽에서 설정을 변경해도 다른 쪽에는 영향이 없는지 확인합니다.",
+        "testStrategy": "사용자 A가 설정을 변경해도 사용자 B의 설정은 변경되지 않음을 확인합니다. DB에서 각 사용자 ID별로 데이터가 정확히 저장되었는지 확인하여 사용자 격리 100% 보장을 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          37
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 44,
+        "title": "성능 최적화 및 코드 리팩토링",
+        "description": "구현된 기능들의 성능을 검토하고 최적화합니다. 불필요한 리렌더링을 방지하고, API 응답 시간을 측정하며, 관련 코드의 가독성과 유지보수성을 높이기 위해 리팩토링을 진행합니다.",
+        "details": "React Profiler를 사용하여 컴포넌트 렌더링 성능을 분석합니다. useMemo, useCallback을 적절히 사용하여 최적화합니다. API 응답 시간이 2초 이내인지 확인합니다.",
+        "testStrategy": "Lighthouse 점수나 Web Vitals 지표를 측정하여 개선 전후를 비교합니다. 코드 리뷰를 통해 리팩토링 결과물의 품질을 검증합니다.",
+        "priority": "low",
+        "dependencies": [
+          42,
+          43
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 45,
+        "title": "최종 기능 문서화 및 사용자 가이드 작성",
+        "description": "변경된 기능, 새로운 API 명세, 프론트엔드 아키텍처에 대한 기술 문서를 작성합니다. 또한, 사용자를 위해 변경된 UI(특히 PEG 드롭다운) 사용법에 대한 간단한 가이드를 작성합니다.",
+        "details": "API 문서는 Swagger/OpenAPI 형식으로 업데이트합니다. 프로젝트 README나 Wiki에 아키텍처 변경 사항을 기록합니다. 사용자 가이드는 스크린샷을 포함하여 작성합니다.",
+        "testStrategy": "작성된 문서를 팀원이 리뷰하여 명확성과 정확성을 검증합니다. 비개발자가 사용자 가이드를 보고 기능을 쉽게 이해하고 사용할 수 있는지 확인합니다.",
+        "priority": "low",
+        "dependencies": [
+          44
+        ],
+        "status": "pending",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-08-21T17:53:09.230Z",
-      "updated": "2025-08-21T19:25:44.012Z",
+      "updated": "2025-08-21T21:55:29.677Z",
       "description": "Tasks for master context"
     }
   }

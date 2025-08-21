@@ -10,7 +10,7 @@ import logging
 import json
 from fastapi import APIRouter, Body, Query, HTTPException, status, UploadFile, File
 from fastapi.responses import JSONResponse
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from io import StringIO
@@ -37,6 +37,30 @@ from ..exceptions import (
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
+def _deep_merge_dicts(base: Dict[Any, Any], overlay: Dict[Any, Any]) -> Dict[Any, Any]:
+    """
+    두 딕셔너리를 깊게 병합합니다.
+    
+    Args:
+        base: 기본 딕셔너리 (기본값)
+        overlay: 덮어씌울 딕셔너리 (기존 설정)
+    
+    Returns:
+        Dict: 병합된 딕셔너리
+    """
+    result = base.copy()
+    
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            # 둘 다 딕셔너리인 경우 재귀적으로 병합
+            result[key] = _deep_merge_dicts(result[key], value)
+        else:
+            # 그렇지 않으면 overlay 값으로 덮어씌움
+            result[key] = value
+    
+    return result
+
+
 # 라우터 생성
 router = APIRouter(
     prefix="/api/preference",
@@ -62,7 +86,7 @@ async def get_user_preference(
     """
     특정 사용자의 설정을 조회합니다.
     
-    - **user_id**: 조회할 사용자의 ID
+    - **userId**: 조회할 사용자의 ID
     
     사용자 설정이 없는 경우 기본 설정으로 새로 생성합니다.
     """
@@ -71,15 +95,15 @@ async def get_user_preference(
         
         logger.info(f"사용자 설정 조회: user_id={user_id}")
         
-        # 사용자 설정 조회
-        document = await collection.find_one({"user_id": user_id})
+        # 사용자 설정 조회 (MongoDB에서는 userId 필드로 저장됨)
+        document = await collection.find_one({"userId": user_id})
         
         if not document:
             # 설정이 없으면 기본 설정으로 새로 생성
             logger.info(f"사용자 설정이 없어 기본 설정 생성: user_id={user_id}")
             
             default_preference = UserPreferenceCreate(user_id=user_id)
-            preference_dict = default_preference.model_dump(by_alias=True, exclude_unset=True)
+            preference_dict = default_preference.model_dump(by_alias=True, exclude_unset=False)
             
             # 메타데이터 설정 - metadata 딕셔너리가 없으면 생성
             if "metadata" not in preference_dict:
@@ -92,15 +116,25 @@ async def get_user_preference(
             
             # 생성된 문서 조회
             document = await collection.find_one({"_id": insert_result.inserted_id})
+            preference_model = UserPreferenceModel.from_mongo(document)
         else:
+            logger.info(f"기존 사용자 설정 로드: user_id={user_id}")
+            
+            # 기존 문서에 누락된 필드가 있을 수 있으므로 기본값과 병합
+            default_preference = UserPreferenceCreate(user_id=user_id)
+            default_dict = default_preference.model_dump(by_alias=True, exclude_unset=False)
+            
+            # 기존 문서의 데이터를 기본값 위에 덮어씌움 (깊은 병합)
+            merged_data = _deep_merge_dicts(default_dict, document)
+            
             # 마지막 접근 시간 업데이트
             await collection.update_one(
-                {"user_id": user_id},
+                {"userId": user_id},
                 {"$set": {"metadata.last_accessed": datetime.utcnow()}}
             )
-        
-        # 응답 모델로 변환
-        preference_model = UserPreferenceModel.from_mongo(document)
+            
+            # 병합된 데이터로 모델 생성
+            preference_model = UserPreferenceModel.from_mongo(merged_data)
         
         logger.info(f"사용자 설정 조회 완료: user_id={user_id}")
         
@@ -125,7 +159,7 @@ async def get_user_preference(
     description="특정 사용자의 설정을 업데이트합니다."
 )
 async def update_user_preference(
-    user_id: str = Query(..., description="사용자 ID"),
+    userId: str = Query(..., description="사용자 ID"),
     update_data: UserPreferenceUpdate = Body(
         ...,
         example={
@@ -143,7 +177,7 @@ async def update_user_preference(
     """
     특정 사용자의 설정을 업데이트합니다.
     
-    - **user_id**: 업데이트할 사용자의 ID
+    - **userId**: 업데이트할 사용자의 ID
     - **update_data**: 업데이트할 설정 데이터 (부분 업데이트 지원)
     
     설정이 없는 경우 404 오류를 반환합니다.
@@ -151,12 +185,12 @@ async def update_user_preference(
     try:
         collection = get_preference_collection()
         
-        logger.info(f"사용자 설정 업데이트 시도: user_id={user_id}")
+        logger.info(f"사용자 설정 업데이트 시도: userId={userId}")
         
         # 기존 설정 존재 확인
-        existing = await collection.find_one({"user_id": user_id})
+        existing = await collection.find_one({"userId": userId})
         if not existing:
-            raise UserPreferenceNotFoundException(user_id)
+            raise UserPreferenceNotFoundException(userId)
         
         # 업데이트 데이터 준비
         update_dict = update_data.model_dump(by_alias=True, exclude_unset=True)
@@ -167,14 +201,14 @@ async def update_user_preference(
             
             # 문서 업데이트
             await collection.update_one(
-                {"user_id": user_id},
+                {"userId": userId},
                 {"$set": update_dict}
             )
             
-            logger.info(f"사용자 설정 업데이트 완료: user_id={user_id}")
+            logger.info(f"사용자 설정 업데이트 완료: userId={userId}")
         
         # 업데이트된 문서 조회
-        updated_document = await collection.find_one({"user_id": user_id})
+        updated_document = await collection.find_one({"userId": userId})
         preference_model = UserPreferenceModel.from_mongo(updated_document)
         
         return UserPreferenceUpdateResponse(
@@ -209,19 +243,19 @@ async def create_user_preference(
     
     - **preference**: 생성할 사용자 설정 데이터
     
-    이미 동일한 user_id로 설정이 있는 경우 409 오류를 반환합니다.
+    이미 동일한 userId로 설정이 있는 경우 409 오류를 반환합니다.
     """
     try:
         collection = get_preference_collection()
         
-        logger.info(f"사용자 설정 생성 시도: user_id={preference.user_id}")
+        logger.info(f"사용자 설정 생성 시도: userId={preference.userId}")
         
         # 중복 검사
-        existing = await collection.find_one({"user_id": preference.user_id})
+        existing = await collection.find_one({"userId": preference.userId})
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"User preference for user '{preference.user_id}' already exists"
+                detail=f"User preference for user '{preference.userId}' already exists"
             )
         
         # 데이터 준비
@@ -238,7 +272,7 @@ async def create_user_preference(
         created_document = await collection.find_one({"_id": insert_result.inserted_id})
         preference_model = UserPreferenceModel.from_mongo(created_document)
         
-        logger.info(f"사용자 설정 생성 성공: user_id={preference.user_id}")
+        logger.info(f"사용자 설정 생성 성공: userId={preference.userId}")
         
         return UserPreferenceCreateResponse(
             message="User preference created successfully",
@@ -264,25 +298,25 @@ async def create_user_preference(
     description="사용자 설정을 JSON 형태로 내보냅니다."
 )
 async def export_user_preference(
-    user_id: str = Query(..., description="사용자 ID")
+    userId: str = Query(..., description="사용자 ID")
 ):
     """
     사용자 설정을 JSON 형태로 내보냅니다.
     
-    - **user_id**: 내보낼 사용자의 ID
+    - **userId**: 내보낼 사용자의 ID
     
     내보내기 가능한 설정만 포함되며, 메타데이터는 제외됩니다.
     """
     try:
         collection = get_preference_collection()
         
-        logger.info(f"사용자 설정 내보내기: user_id={user_id}")
+        logger.info(f"사용자 설정 내보내기: userId={userId}")
         
         # 사용자 설정 조회
-        document = await collection.find_one({"user_id": user_id})
+        document = await collection.find_one({"userId": userId})
         
         if not document:
-            raise UserPreferenceNotFoundException(user_id)
+            raise UserPreferenceNotFoundException(userId)
         
         # Export 모델로 변환 (민감한 정보 제외)
         export_data = UserPreferenceImportExport(
@@ -297,9 +331,9 @@ async def export_user_preference(
         
         # 파일명 생성
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"kpi_dashboard_preferences_{user_id}_{timestamp}.json"
+        filename = f"kpi_dashboard_preferences_{userId}_{timestamp}.json"
         
-        logger.info(f"사용자 설정 내보내기 완료: user_id={user_id}")
+        logger.info(f"사용자 설정 내보내기 완료: userId={userId}")
         
         return PreferenceExportResponse(
             message="Preference exported successfully",
@@ -326,14 +360,14 @@ async def export_user_preference(
     description="JSON 파일에서 사용자 설정을 가져옵니다."
 )
 async def import_user_preference(
-    user_id: str = Query(..., description="사용자 ID"),
+    userId: str = Query(..., description="사용자 ID"),
     file: UploadFile = File(..., description="가져올 JSON 설정 파일"),
     overwrite: bool = Query(False, description="기존 설정 덮어쓰기 여부")
 ):
     """
     JSON 파일에서 사용자 설정을 가져옵니다.
     
-    - **user_id**: 설정을 가져올 사용자의 ID
+    - **userId**: 설정을 가져올 사용자의 ID
     - **file**: 설정이 담긴 JSON 파일
     - **overwrite**: 기존 설정 덮어쓰기 여부 (기본값: False)
     
@@ -342,7 +376,7 @@ async def import_user_preference(
     try:
         collection = get_preference_collection()
         
-        logger.info(f"사용자 설정 가져오기 시도: user_id={user_id}, file={file.filename}")
+        logger.info(f"사용자 설정 가져오기 시도: userId={userId}, file={file.filename}")
         
         # 파일 확장자 검사
         if not file.filename.endswith('.json'):
@@ -364,7 +398,7 @@ async def import_user_preference(
             raise PreferenceImportException(f"Invalid preference data structure: {str(e)}")
         
         # 기존 설정 확인
-        existing = await collection.find_one({"user_id": user_id})
+        existing = await collection.find_one({"userId": userId})
         
         if existing and not overwrite:
             raise PreferenceImportException(
@@ -387,15 +421,15 @@ async def import_user_preference(
         if existing:
             # 기존 설정 업데이트
             await collection.update_one(
-                {"user_id": user_id},
+                {"userId": userId},
                 {"$set": update_data}
             )
             imported_settings = ["dashboard_settings", "statistics_settings", "notification_settings", "theme", "language"]
-            logger.info(f"기존 사용자 설정 업데이트 완료: user_id={user_id}")
+            logger.info(f"기존 사용자 설정 업데이트 완료: userId={userId}")
         else:
             # 새 설정 생성
             new_preference = UserPreferenceCreate(
-                user_id=user_id,
+                userId=userId,
                 dashboard_settings=validated_import.dashboard_settings,
                 statistics_settings=validated_import.statistics_settings,
                 notification_settings=validated_import.notification_settings,
@@ -409,9 +443,9 @@ async def import_user_preference(
             
             await collection.insert_one(preference_dict)
             imported_settings = ["dashboard_settings", "statistics_settings", "notification_settings", "theme", "language"]
-            logger.info(f"새 사용자 설정 생성 완료: user_id={user_id}")
+            logger.info(f"새 사용자 설정 생성 완료: userId={userId}")
         
-        logger.info(f"사용자 설정 가져오기 완료: user_id={user_id}")
+        logger.info(f"사용자 설정 가져오기 완료: userId={userId}")
         
         return PreferenceImportResponse(
             message="Preference imported successfully",
@@ -438,25 +472,25 @@ async def import_user_preference(
     description="특정 사용자의 설정을 삭제합니다."
 )
 async def delete_user_preference(
-    user_id: str = Query(..., description="삭제할 사용자의 ID")
+    userId: str = Query(..., description="삭제할 사용자의 ID")
 ):
     """
     특정 사용자의 설정을 삭제합니다.
     
-    - **user_id**: 삭제할 사용자의 ID
+    - **userId**: 삭제할 사용자의 ID
     """
     try:
         collection = get_preference_collection()
         
-        logger.info(f"사용자 설정 삭제 시도: user_id={user_id}")
+        logger.info(f"사용자 설정 삭제 시도: userId={userId}")
         
         # 설정 삭제
-        delete_result = await collection.delete_one({"user_id": user_id})
+        delete_result = await collection.delete_one({"userId": userId})
         
         if delete_result.deleted_count == 0:
-            raise UserPreferenceNotFoundException(user_id)
+            raise UserPreferenceNotFoundException(userId)
         
-        logger.info(f"사용자 설정 삭제 완료: user_id={user_id}")
+        logger.info(f"사용자 설정 삭제 완료: userId={userId}")
         
         # 204 No Content 응답 (body 없음)
         return
@@ -524,7 +558,7 @@ async def get_preference_summary():
         # 최근 활동 사용자 (상위 5명)
         recent_users = await collection.find(
             {},
-            {"user_id": 1, "metadata.last_accessed": 1, "theme": 1, "language": 1}
+            {"userId": 1, "metadata.last_accessed": 1, "theme": 1, "language": 1}
         ).sort("metadata.last_accessed", -1).limit(5).to_list(length=5)
         
         # 테마별 통계

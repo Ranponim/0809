@@ -139,14 +139,14 @@ export const mapBackendToUserSettings = (backendPreference) => {
       
       preferences: {
         dashboard: {
-          selectedPegs: preference.dashboard_settings?.selected_pegs || 
-                      preference.dashboardSettings?.selected_pegs || [],
-          defaultNe: preference.dashboard_settings?.selected_nes?.[0] || 
-                    preference.dashboardSettings?.selected_nes?.[0] || '',
-          defaultCellId: preference.dashboard_settings?.selected_cell_ids?.[0] || 
-                        preference.dashboardSettings?.selected_cell_ids?.[0] || '',
-          autoRefreshInterval: preference.dashboard_settings?.refresh_interval || 
-                              preference.dashboardSettings?.refresh_interval || 30,
+          selectedPegs: preference.dashboardSettings?.selected_pegs || 
+                      preference.dashboard_settings?.selected_pegs || [],
+          defaultNe: preference.dashboardSettings?.selectedNEs?.[0] || 
+                    preference.dashboard_settings?.selected_nes?.[0] || '',
+          defaultCellId: preference.dashboardSettings?.selectedCellIds?.[0] || 
+                        preference.dashboard_settings?.selected_cell_ids?.[0] || '',
+          autoRefreshInterval: preference.dashboardSettings?.refresh_interval || 
+                              preference.dashboard_settings?.refresh_interval || 30,
           chartStyle: preference.dashboard_settings?.layout_config?.chartStyle || 
                      preference.dashboardSettings?.layout_config?.chartStyle || 'line',
           showLegend: preference.dashboard_settings?.layout_config?.showLegend !== false,

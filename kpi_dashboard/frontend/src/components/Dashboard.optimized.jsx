@@ -197,21 +197,37 @@ const Dashboard = () => {
     error: settingsError
   } = useDashboardSettings()
 
+  // 디버깅: dashboardSettings 값 확인
+  console.log('[Dashboard.optimized] dashboardSettings:', dashboardSettings)
+
   // 상수들을 메모이제이션
   const defaultKpiKeys = useMemo(() => [
     'availability','rrc','erab','sar','mobility_intra','cqi'
   ], [])
   
   // 현재 설정에서 값 추출 (기본값 포함) - 메모이제이션
-  const settings = useMemo(() => ({
-    selectedPegs: dashboardSettings.selectedPegs?.length > 0 ? dashboardSettings.selectedPegs : defaultKpiKeys,
-    defaultNe: dashboardSettings.defaultNe || '',
-    defaultCellId: dashboardSettings.defaultCellId || '',
-    autoRefreshInterval: dashboardSettings.autoRefreshInterval || 30,
-    chartStyle: dashboardSettings.chartStyle || 'line',
-    showLegend: dashboardSettings.showLegend !== false,
-    showGrid: dashboardSettings.showGrid !== false
-  }), [dashboardSettings, defaultKpiKeys])
+  const settings = useMemo(() => {
+    // selectedPegs가 없거나 빈 배열이면 기본값 사용
+    const selectedPegs = dashboardSettings?.selectedPegs && dashboardSettings.selectedPegs.length > 0 
+      ? dashboardSettings.selectedPegs 
+      : defaultKpiKeys
+    
+    console.log('[Dashboard.optimized] settings 생성:', {
+      dashboardSelectedPegs: dashboardSettings?.selectedPegs,
+      finalSelectedPegs: selectedPegs,
+      defaultKpiKeys
+    })
+    
+    return {
+      selectedPegs,
+      defaultNe: dashboardSettings?.defaultNe || '',
+      defaultCellId: dashboardSettings?.defaultCellId || '',
+      autoRefreshInterval: dashboardSettings?.autoRefreshInterval || 30,
+      chartStyle: dashboardSettings?.chartStyle || 'line',
+      showLegend: dashboardSettings?.showLegend !== false,
+      showGrid: dashboardSettings?.showGrid !== false
+    }
+  }, [dashboardSettings, defaultKpiKeys])
 
   // 제목 매핑을 메모이제이션
   const titleMap = useMemo(() => ({
