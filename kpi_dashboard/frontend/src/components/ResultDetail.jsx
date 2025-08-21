@@ -156,49 +156,12 @@ const ResultDetail = ({
     }
   }
 
-  // === Mock 데이터 생성 (API 실패 시 대체) ===
-  const generateMockData = (result) => {
-    const kpiTypes = ['availability', 'rrc', 'erab', 'sar', 'mobility_intra', 'cqi']
-    
-    return {
-      ...result,
-      summary: {
-        totalKpis: kpiTypes.length,
-        successfulAnalysis: Math.floor(Math.random() * kpiTypes.length) + 1,
-        averageScore: (Math.random() * 40 + 60).toFixed(1),
-        recommendations: Math.floor(Math.random() * 5) + 1
-      },
-      kpiResults: kpiTypes.map(type => ({
-        name: type,
-        value: (Math.random() * 40 + 60).toFixed(2),
-        trend: Math.random() > 0.5 ? 'up' : 'down',
-        change: (Math.random() * 10 - 5).toFixed(1),
-        status: Math.random() > 0.8 ? 'warning' : 'good'
-      })),
-      timeline: Array.from({ length: 24 }, (_, i) => ({
-        hour: i,
-        value: Math.random() * 100,
-        timestamp: new Date(Date.now() - (23 - i) * 60 * 60 * 1000).toISOString()
-      })),
-      recommendations: [
-        '네트워크 성능 최적화를 위해 특정 셀의 설정 조정을 권장합니다.',
-        'RRC 연결 성공률 개선을 위한 안테나 각도 조정이 필요합니다.',
-        'ERAB 성공률 향상을 위해 백홀 용량 증설을 고려해보세요.'
-      ]
-    }
-  }
+  // (모킹 제거)
 
   // === 처리된 결과 데이터 ===
   const processedResults = useMemo(() => {
-    return results.map(result => {
-      if (result.error) {
-        return generateMockData(result)
-      }
-      // LLM 구조(results[0].kpi_results) 또는 mock 구조(kpiResults)를 모두 지원
-      const hasLlmKpis = !!(result?.results?.[0]?.kpi_results?.length)
-      const hasMockKpis = !!(result?.kpiResults?.length)
-      return (hasLlmKpis || hasMockKpis) ? result : generateMockData(result)
-    })
+    // 모킹 제거: 에러가 있는 항목은 제외하고 그대로 사용
+    return results.filter(r => !r.error)
   }, [results])
 
   // === 비교 모드 데이터 처리 ===
@@ -357,8 +320,8 @@ const ResultDetail = ({
 
     // 단일 결과 차트 - 개선된 N-1/N 비교 차트
     const result = results[0]
-    // 백엔드(LLM) 구조(results[0].kpi_results)와 mock 구조(kpiResults)를 모두 지원
-    const kpiResults = (result?.results?.[0]?.kpi_results || result?.kpiResults || [])
+    // 모킹 제거: 백엔드 LLM 구조만 사용
+    const kpiResults = (result?.results?.[0]?.kpi_results || [])
     
     if (!kpiResults.length) {
       return <div className="text-center text-muted-foreground">차트 데이터가 없습니다.</div>

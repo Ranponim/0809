@@ -2,530 +2,297 @@
   "master": {
     "tasks": [
       {
-        "id": 39,
-        "title": "Backend: LLM 분석 결과 API 및 DB 스키마 구현",
-        "description": "LLM 분석 결과를 저장, 조회, 삭제하기 위한 MongoDB 스키마를 설계하고 FastAPI를 사용하여 관련 REST API 엔드포인트를 개발합니다.",
-        "status": "done",
-        "dependencies": [],
-        "priority": "high",
-        "details": "**구현 완료 요약:**\n\nLLM 분석 결과 API 및 DB 스키마 구현이 완료되었습니다. 모범 사례를 적용하여 확장성, 유지보수성, 성능을 고려하여 다음과 같이 개선되었습니다.\n\n1.  **프로젝트 구조 개선:** `app/models/`, `app/routers/`, `app/db.py`, `app/exceptions.py` 등 모듈형 구조로 리팩토링하여 유지보수성을 향상시켰습니다.\n2.  **Pydantic 모델 강화:** MongoDB `ObjectId`를 네이티브하게 처리하는 `PyObjectId`를 도입하고, `AnalysisDetail`, `StatDetail` 등 상세 중첩 모델을 정의하여 데이터 유효성을 강화했습니다. 생성, 수정, 응답 등 각 용도에 맞는 모델을 구현했습니다.\n3.  **비동기 DB 처리 및 최적화:** `pymongo` 대신 비동기 드라이버 `motor`를 사용하여 I/O 성능을 개선했으며, 조회 성능 향상을 위해 7개의 주요 인덱스를 생성했습니다.\n4.  **중앙 집중식 예외 처리:** `AnalysisResultNotFoundException` 등 커스텀 예외와 `@app.exception_handler`를 통해 일관된 에러 응답 형식과 자동 로깅을 구현했습니다.\n5.  **RESTful API 확장:** 표준 CRUD 외에 페이지네이션, 필터링, 통계 요약 (`/api/analysis/results/stats/summary`) 엔드포인트를 포함한 전체 API를 구현했습니다.\n6.  **FastAPI 애플리케이션 통합:** 애플리케이션 생명주기에 따른 DB 연결 관리, CORS/로깅 미들웨어, 헬스 체크 (`/health`) 엔드포인트를 추가하여 안정성을 높였습니다.\n7.  **의존성 업데이트:** `motor`, `pydantic-settings` 등 최신 라이브러리를 `requirements.txt`에 추가했습니다.",
-        "testStrategy": "Postman/HTTP 클라이언트를 사용하여 모든 API 엔드포인트(CRUD, 페이지네이션, 필터링, 통계 요약)의 정상 동작 및 예외 처리를 검증했습니다. 다음 단계로 Docker 환경에서의 통합 테스트를 권장합니다.",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "프로젝트 구조 개선 및 모듈화 리팩토링",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 2,
-            "title": "Pydantic 모델 강화 (PyObjectId, 중첩 모델, CRUD 모델)",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 3,
-            "title": "비동기 MongoDB 연결 및 최적화 (Motor, 인덱싱)",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 4,
-            "title": "중앙 집중식 예외 처리 및 로깅 구현",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 5,
-            "title": "RESTful API 엔드포인트 구현 (CRUD, 페이지네이션, 통계)",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 6,
-            "title": "FastAPI 애플리케이션 통합 (생명주기, 미들웨어, 헬스 체크)",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          },
-          {
-            "id": 7,
-            "title": "의존성 관리 업데이트 (requirements.txt)",
-            "description": "",
-            "status": "done",
-            "dependencies": [],
-            "details": "",
-            "testStrategy": ""
-          }
-        ]
-      },
-      {
-        "id": 40,
-        "title": "Frontend: LLM 분석 결과 목록 UI 컴포넌트 개발",
-        "description": "LLM 분석 결과를 테이블 형태로 표시하는 `ResultsList.jsx` 컴포넌트를 개발합니다. 백엔드 API를 호출하여 데이터를 가져오고, 각 행에는 날짜, NE, Cell ID 등의 주요 정보가 포함되어야 합니다.",
-        "details": "React와 Axios를 사용하여 `/api/analysis/results` API에서 데이터를 비동기적으로 가져옵니다. Tailwind CSS를 사용하여 테이블 스타일을 지정합니다. 로딩 및 오류 상태에 대한 UI를 구현합니다. `useAnalysisResults.js` 커스텀 훅을 생성하여 데이터 페칭 로직을 캡슐화합니다.",
-        "testStrategy": "컴포넌트가 목(mock) 데이터를 올바르게 렌더링하는지 확인하는 단위 테스트를 작성합니다. 실제 API와 연동하여 데이터가 테이블에 정상적으로 표시되는지 수동으로 테스트합니다.",
-        "priority": "high",
-        "dependencies": [
-          39
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 41,
-        "title": "Frontend: LLM 분석 결과 필터링 기능 구현",
-        "description": "사용자가 날짜, NE, Cell ID를 기준으로 분석 결과 목록을 필터링할 수 있는 `ResultFilter.jsx` 컴포넌트를 개발합니다.",
-        "details": "날짜 범위 선택기(Date Picker), 텍스트 입력 필드를 포함한 필터링 UI를 구현합니다. 필터 값이 변경될 때마다 쿼리 파라미터를 포함하여 `/api/analysis/results` API를 다시 호출하도록 `useAnalysisResults.js` 훅을 수정합니다.",
-        "testStrategy": "각 필터 입력이 상태에 올바르게 반영되는지 확인합니다. 필터 적용 시 API 호출에 올바른 쿼리 파라미터가 포함되는지 네트워크 탭에서 확인하고, 필터링된 결과가 UI에 정확하게 표시되는지 검증합니다.",
-        "priority": "high",
-        "dependencies": [
-          40
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 42,
-        "title": "Backend: Preference 시스템 API 및 DB 스키마 구현",
-        "description": "사용자 설정을 저장하고 관리하기 위한 MongoDB 스키마와 FastAPI 기반의 CRUD API를 구현합니다.",
-        "details": "MongoDB에 'user_preferences' 컬렉션을 생성하고 PRD의 스키마(userId, dashboardSettings 등)를 적용합니다. FastAPI를 사용하여 `/api/preference/settings` (GET 조회, PUT 업데이트) 엔드포인트를 구현합니다.",
-        "testStrategy": "API 엔드포인트를 통해 설정 객체를 성공적으로 저장하고 조회할 수 있는지 테스트합니다. PUT 요청 시 부분 업데이트가 아닌 전체 객체 교체가 이루어지도록 합니다.",
+        "id": 55,
+        "title": "Finalize Payload Strategy & Document Schema",
+        "description": "Make the final decision on the payload strategy (C. Hybrid) and document the detailed MongoDB schema for AnalysisResultModel, including 'analysis_raw_compact' and 'results_overview'.",
+        "details": "Confirm the structure and fields for 'analysis_raw_compact' (e.g., top_k_segments, percentiles, notes) and 'results_overview' (e.g., summary, key_findings). This decision is critical for subsequent implementation.",
+        "testStrategy": "Review and approve the documented schema by relevant stakeholders.",
         "priority": "high",
         "dependencies": [],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 43,
-        "title": "Frontend: Preference 관리 UI 컴포넌트 개발",
-        "description": "사용자가 대시보드 및 통계 설정을 관리할 수 있는 `PreferenceManager.jsx`와 `SettingBox.jsx` 컴포넌트를 개발합니다. 변경 사항은 실시간으로 백엔드에 저장되어야 합니다.",
-        "details": "Zustand 또는 React Context API를 사용하여 전역 설정 상태를 관리합니다. `usePreference.js` 커스텀 훅을 만들어 API 통신 로직을 관리합니다. 설정 값이 변경될 때마다 디바운싱(debouncing)을 적용하여 `PUT /api/preference/settings` API를 호출합니다.",
-        "testStrategy": "UI에서 설정을 변경했을 때 전역 상태가 업데이트되고, 백엔드 API 호출이 발생하는지 확인합니다. 페이지를 새로고침해도 설정이 유지되는지 검증합니다.",
-        "priority": "medium",
-        "dependencies": [
-          42
-        ],
+        "id": 56,
+        "title": "Define Initial Global Token/Payload Limits",
+        "description": "Establish initial values for global limits such as 'max_rows_global', 'max_chars_prompt', 'max_selected_pegs', and 'max_raw_bytes'. These values will serve as configurable parameters.",
+        "details": "Consider the MongoDB 16MB document size limit for 'max_raw_bytes' and LLM token limits for prompt-related values. Document these initial settings.",
+        "testStrategy": "Documented limits are reviewed and agreed upon by the team.",
+        "priority": "high",
+        "dependencies": [],
         "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "usePreference 커스텀 훅 개발",
-            "description": "사용자 설정 관리를 위한 커스텀 훅을 개발하여 API 통신, 상태 관리, 디바운싱 기능을 구현합니다.",
-            "details": "- GET/PUT /api/preference/settings API 연동\n- 디바운싱을 통한 자동 저장 (500ms 지연)\n- 로딩/에러 상태 관리\n- 로컬 및 서버 상태 동기화\n- React Context 또는 Zustand 사용\n<info added on 2025-08-14T21:32:35.538Z>\n- `usePreference` 훅을 활용하여 개별 설정 항목(예: 제목, 설명, 입력 컨트롤)을 감싸는 재사용 가능한 UI 래퍼 컴포넌트로 개발합니다.\n- `title`, `description`, 그리고 실제 값 입력을 위한 자식 컴포넌트(children)를 props로 전달받아 렌더링합니다.\n- `usePreference` 훅에서 제공하는 로딩, 저장 완료, 에러 상태를 시각적으로 표시하여 사용자에게 피드백을 제공해야 합니다.\n</info added on 2025-08-14T21:32:35.538Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 43
-          },
-          {
-            "id": 2,
-            "title": "SettingBox 기본 컴포넌트 개발",
-            "description": "설정 카테고리별로 사용할 수 있는 재사용 가능한 SettingBox 컴포넌트를 개발합니다.",
-            "details": "- 접이식 카드 형태의 설정 박스\n- 제목, 설명, 수정/저장/취소 버튼\n- 다양한 입력 타입 지원 (텍스트, 선택, 체크박스)\n- 변경 상태 표시 및 검증 기능\n- shadcn/ui 컴포넌트 활용\n<info added on 2025-08-14T21:37:10.239Z>\n- **주요 컴포넌트**: `SettingBox.jsx` (500+ 라인)를 `Collapsible`과 `Card` 기반의 접이식 UI로 구현. 저장/오류/유효 상태를 나타내는 뱃지 시스템 포함.\n- **개별 필드 컴포넌트**: `TextField` (text, number), `SelectField`, `MultiselectField`, `SwitchField`를 개발하여 다양한 입력 타입 지원.\n- **핵심 기능**: `usePreference` 훅과 완벽히 통합하여 500ms 디바운싱 기반 자동 저장, 필드별 실시간 유효성 검증 및 에러 메시지 표시 기능 구현.\n- **실제 사용 예시 및 테스트**: `PreferenceTest` 페이지 내에 Dashboard (7개 필드) 및 Statistics (6개 필드) 설정 박스를 구현하여 실제 데이터 연동 및 동작 검증 완료.\n</info added on 2025-08-14T21:37:10.239Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 43
-          },
-          {
-            "id": 3,
-            "title": "Dashboard Settings 섹션 구현",
-            "description": "대시보드 관련 설정을 관리하는 UI 섹션을 구현합니다.",
-            "details": "- 선택된 PEG 목록 관리 (다중 선택)\n- 기본 NE, Cell ID 설정\n- 자동 새로고침 간격 설정\n- 차트 스타일 및 레이아웃 설정\n- 실시간 미리보기 기능\n<info added on 2025-08-14T21:51:10.708Z>\n### 1. usePreference 훅 완전 통합\n- **useDashboardSettings** 훅으로 실시간 설정 연동\n- 기존 localStorage 기반 시스템을 새로운 Context 시스템으로 완전 대체\n- 설정 변경 시 자동으로 Dashboard 업데이트\n\n### 2. 선택된 PEG 동적 반영\n- **selectedPegs** 설정에 따라 동적 차트 생성\n- 빈 PEG 선택 시 안내 메시지 표시 (\"표시할 PEG가 선택되지 않았습니다\")\n- 실시간 PEG 변경 감지 및 데이터 재로드\n\n### 3. 기본 NE, Cell ID 활용\n- **defaultNe, defaultCellId** 설정을 API 요청에 자동 포함\n- 헤더에 현재 설정값 표시 (\"NE: xxx • Cell: xxx\")\n- 설정 변경 시 자동 데이터 새로고침\n\n### 4. 자동 새로고침 시스템\n- **autoRefreshInterval** 설정에 따른 타이머 자동 설정\n- 실시간 카운트다운 표시 (\"15초 후 새로고침\")\n- 수동 새로고침 버튼 및 로딩 상태 표시\n- setInterval 정리로 메모리 누수 방지\n\n### 5. 다양한 차트 스타일 지원\n- **chartStyle** 설정에 따른 동적 차트 렌더링:\n  - Line Chart (기본), Area Chart (fillOpacity 0.3), Bar Chart\n- **showLegend, showGrid** 설정 개별 반영\n- 조건부 컴포넌트 렌더링으로 성능 최적화\n\n### 6. 고급 UI/UX 개선\n- **실시간 상태 뱃지**: 설정 저장 중, 에러, 새로고침 카운트다운\n- **설정 요약 표시**: 선택된 PEG, 차트 스타일, 자동 새로고침 간격\n- **상세 정보 뱃지**: 엔터티 수, 데이터포인트 수 실시간 표시\n- **마지막 업데이트 시간** 표시\n</info added on 2025-08-14T21:51:10.708Z>",
-            "status": "done",
-            "dependencies": [
-              "43.1",
-              "43.2"
-            ],
-            "parentTaskId": 43
-          },
-          {
-            "id": 4,
-            "title": "Statistics Settings 섹션 구현",
-            "description": "통계 분석 관련 설정을 관리하는 UI 섹션을 구현합니다.",
-            "details": "- 기본 날짜 범위 설정\n- 비교 분석 옵션 (Delta, RSD 표시 등)\n- 기본 PEG 선택 및 필터 설정\n- 차트 타입 및 소수점 자릿수 설정\n- Statistics 페이지 기본값 연동\n<info added on 2025-08-14T21:56:43.282Z>\n- `usePreference` 훅을 통해 Preference 설정과 실시간 연동되도록 `useStatisticsSettings` 훅 구현 및 적용.\n- 기존 localStorage 기반의 상태 관리 로직을 새로운 Context 시스템으로 완전히 대체하여, 설정 변경 시 Statistics 페이지가 자동으로 업데이트되도록 구현.\n- 기본 NE/Cell ID, 기본 날짜 범위, 소수점 자릿수, 비교 옵션 등 모든 설정이 Statistics 페이지 필터 및 차트 표시에 즉시 반영되도록 연동.\n- UI 개선: 설정 저장 상태 뱃지, 설정 요약 정보, 필터 내 기본값 표시 등 사용자 경험 향상을 위한 기능 추가.\n</info added on 2025-08-14T21:56:43.282Z>",
-            "status": "done",
-            "dependencies": [
-              "43.1",
-              "43.2"
-            ],
-            "parentTaskId": 43
-          },
-          {
-            "id": 5,
-            "title": "Import/Export 기능 구현",
-            "description": "설정 데이터의 가져오기/내보내기 기능을 구현합니다.",
-            "details": "- JSON 파일로 설정 내보내기\n- JSON 파일에서 설정 가져오기\n- 가져오기 시 검증 및 오류 처리\n- 백업 및 복원 기능\n- API 연동 (/api/preference/export, /api/preference/import)\n<info added on 2025-08-14T21:41:46.037Z>\n- `ImportExportBox.jsx` 컴포넌트 개발 (500+ 라인)\n- **UI/UX 개선**: 접이식 카드 UI, 드래그 앤 드롭 파일 업로드, 진행률 표시, 상태 뱃지(저장되지 않은 변경사항 등) 기능 포함\n- **고급 내보내기**: Dashboard, Statistics 등 섹션별 부분 내보내기 및 전체 선택/해제 기능 구현\n- **강력한 가져오기**: 파일 유효성 검증(JSON 형식, 5MB 크기 제한) 및 상세 오류 메시지 처리, 마지막 가져온 파일 정보 추적 기능 포함\n- **`usePreference` 훅 연동**: `exportSettings`, `importSettings` 함수를 사용하여 상태 동기화 및 Toast 알림 자동화\n- **테스트 환경 통합**: `PreferenceTest` 컴포넌트에 `ImportExportBox`를 통합하여 기존 테스트 UI를 대체하고 실제 사용 시나리오 테스트 환경 완성\n</info added on 2025-08-14T21:41:46.037Z>",
-            "status": "done",
-            "dependencies": [
-              "43.1"
-            ],
-            "parentTaskId": 43
-          },
-          {
-            "id": 6,
-            "title": "PreferenceManager 메인 컴포넌트 통합",
-            "description": "모든 설정 섹션을 통합하는 메인 PreferenceManager 컴포넌트를 구현합니다.",
-            "details": "- 탭 또는 아코디언 방식의 섹션 구성\n- 전역 저장 상태 및 알림 표시\n- 변경사항 추적 및 되돌리기 기능\n- 반응형 레이아웃 설계\n- Dashboard와 Statistics 컴포넌트 연동 확인\n<info added on 2025-08-14T22:05:10.238Z>\n- 새로운 `PreferenceManager.jsx` 컴포넌트를 구현하여 기존 JSON 편집기 기반의 UI를 대체함.\n- UI는 'Dashboard', 'Statistics', '알림', '백업/복원' 섹션을 포함하는 탭 기반으로 구성됨.\n- `usePreference` 훅과 연동하여 디바운싱을 통한 실시간 자동 저장 기능을 구현했으며, 저장 상태(저장 중, 오류, 마지막 저장 시간)를 표시함.\n- `AdvancedChart`의 하드코딩된 KPI 문제를 해결하고, `/api/master/pegs` 엔드포인트를 통해 실제 Database PEG 목록을 동적으로 불러와 선택할 수 있도록 개선함.\n- `App.jsx`에 새로운 컴포넌트를 통합하고, 구버전은 'preference-old' 라우트로 보존하여 호환성을 유지함.\n</info added on 2025-08-14T22:05:10.238Z>",
-            "status": "done",
-            "dependencies": [
-              "43.3",
-              "43.4",
-              "43.5"
-            ],
-            "parentTaskId": 43
-          }
-        ]
+        "subtasks": []
       },
       {
-        "id": 44,
-        "title": "Backend/Frontend: Preference JSON Import/Export 기능 구현",
-        "description": "사용자가 설정을 JSON 파일로 내보내거나 가져올 수 있는 기능을 구현합니다.",
-        "details": "Backend: `/api/preference/export` (GET) 및 `/api/preference/import` (POST) 엔드포인트를 FastAPI에 추가합니다. Frontend: `ImportExport.jsx` 컴포넌트를 만들고, 파일 업로드 및 다운로드 로직을 구현하여 해당 API와 연동합니다. 파일 가져오기 성공 시 전역 상태와 UI를 업데이트합니다.",
-        "testStrategy": "설정을 내보낸 JSON 파일이 올바른 구조를 가졌는지 확인합니다. 해당 파일을 다시 가져왔을 때 설정이 UI에 정확하게 복원되는지 테스트합니다. 유효하지 않은 JSON 파일에 대한 오류 처리를 검증합니다.",
-        "priority": "medium",
+        "id": 57,
+        "title": "Update Pydantic Models for New Fields",
+        "description": "Modify the Pydantic models, specifically 'AnalysisResultCreate' and 'AnalysisResultModel', in FastAPI to include the new 'results_overview' and 'analysis_raw_compact' fields as optional.",
+        "details": "Ensure that Pydantic aliases for camelCase input are maintained for backward compatibility, while enforcing snake_case storage in the database.",
+        "testStrategy": "Unit tests for Pydantic model validation and serialization/deserialization with new fields and alias handling.",
+        "priority": "high",
         "dependencies": [
-          43
+          55
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 45,
-        "title": "Frontend: Dashboard 레이아웃 및 Preference 연동 구현",
-        "description": "좌우 분할 형태의 대시보드 레이아웃을 구성하고, Preference에 저장된 설정을 기반으로 PEG, NE, Cell ID 선택 영역을 초기화합니다.",
-        "details": "React-split-pane과 같은 라이브러리를 사용하여 `Dashboard.jsx`에 좌우 분할 레이아웃을 구현합니다. 좌측에는 `PEGSelector.jsx`, 우측에는 `NECellSelector.jsx`를 배치합니다. 컴포넌트 마운트 시 `usePreference` 훅을 통해 저장된 설정을 불러와 각 선택기의 기본값으로 설정합니다.",
-        "testStrategy": "대시보드 페이지 로드 시 Preference에 저장된 PEG, NE, Cell ID가 선택 영역에 올바르게 표시되는지 확인합니다. Preference 페이지에서 설정을 변경하고 대시보드로 돌아왔을 때 변경 사항이 즉시 반영되는지 검증합니다.",
-        "priority": "medium",
+        "id": 58,
+        "title": "Implement Prompt Token Estimation Utility",
+        "description": "Create a utility function, e.g., 'estimate_prompt_tokens(text)', that provides a heuristic estimate of the token count for a given text string. This utility will be used before sending prompts to the LLM.",
+        "details": "The estimation can be based on character length or a more sophisticated method if a tokenization library is available for the specific LLM (Google gemini-2.5-flash).",
+        "testStrategy": "Unit tests for the utility function with various text lengths and content, verifying estimation accuracy against actual token counts (if possible) or expected heuristics.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 59,
+        "title": "Integrate Global Limits into LLM Prompt Generation",
+        "description": "Implement logic within 'analysis_llm.py' to apply the defined global limits ('max_rows_global', 'max_chars_prompt', 'max_selected_pegs') during the prompt construction phase.",
+        "details": "This involves checking the current prompt size/content against the limits and triggering truncation or sampling mechanisms if thresholds are exceeded.",
+        "testStrategy": "Integration tests verifying that prompts exceeding limits are correctly truncated/sampled and that the process is logged.",
+        "priority": "high",
         "dependencies": [
-          43
+          56,
+          58
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 46,
-        "title": "Backend: Statistics 비교 분석 API 구현",
-        "description": "두 개의 날짜 구간에 대한 데이터를 비교 분석(평균, delta, RSD)하는 백엔드 로직과 API 엔드포인트를 개발합니다.",
-        "details": "FastAPI에서 `/api/statistics/compare` (POST) 엔드포인트를 구현합니다. 요청 본문으로 두 개의 날짜 구간과 분석 대상 PEG 목록을 받습니다. MongoDB에서 해당 기간의 데이터를 조회하고, Pandas 등의 라이브러리를 사용하여 평균, delta(차이), RSD(상대표준편차)를 계산하여 결과를 반환합니다.",
-        "testStrategy": "예상되는 결과를 미리 계산한 테스트 케이스를 사용하여 API의 계산 로직이 정확한지 검증합니다. 데이터가 없는 구간에 대한 예외 처리가 올바르게 동작하는지 확인합니다.",
-        "priority": "medium",
+        "id": 60,
+        "title": "Develop Token-Aware Chunking for Table Data",
+        "description": "Implement a mechanism to summarize or sample large table datasets (e.g., KPI time series, PEG data) to reduce their token footprint when included in the LLM prompt.",
+        "details": "Focus on retaining critical information such as summary statistics, representative segments (max/min/outliers), and top-K KPIs/PEGs.",
+        "testStrategy": "Unit tests for the chunking logic, ensuring data reduction while preserving key insights. Integration tests with LLM calls to confirm token reduction.",
+        "priority": "high",
         "dependencies": [
-          39
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "API 요청/응답 Pydantic 모델 정의",
-            "description": "Statistics 비교 분석 API의 요청 및 응답 데이터 구조를 정의하는 Pydantic 모델을 생성합니다.",
-            "details": "POST /api/statistics/compare 엔드포인트의 요청 모델(날짜 구간 1, 2, 분석 대상 PEG 목록)과 응답 모델(평균값, delta, RSD 계산 결과)을 Pydantic으로 정의합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 46
-          },
-          {
-            "id": 2,
-            "title": "MongoDB 집계 쿼리 구현",
-            "description": "두 날짜 구간의 데이터를 효율적으로 조회하기 위한 MongoDB 집계 쿼리를 구현합니다.",
-            "details": "MongoDB의 aggregation pipeline을 사용하여 지정된 날짜 구간과 PEG에 해당하는 데이터를 조회하는 쿼리를 작성합니다. 성능을 위해 적절한 인덱스를 생성합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 46
-          },
-          {
-            "id": 3,
-            "title": "Pandas를 활용한 통계 분석 로직 구현",
-            "description": "조회된 데이터를 Pandas를 사용하여 평균값, delta, RSD를 계산하는 핵심 분석 로직을 구현합니다.",
-            "details": "Pandas DataFrame을 사용하여 두 구간의 데이터를 처리하고, 평균값, delta(차이), RSD(상대표준편차)를 계산하는 함수를 구현합니다. 예외 상황(데이터 없음, 0으로 나누기 등)을 처리합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 46
-          },
-          {
-            "id": 4,
-            "title": "FastAPI 엔드포인트 통합 구현",
-            "description": "모든 구성 요소를 통합하여 완전한 FastAPI 엔드포인트를 구현합니다.",
-            "details": "Pydantic 모델, MongoDB 쿼리, Pandas 분석 로직을 통합하여 POST /api/statistics/compare 엔드포인트를 완성합니다. 에러 처리, 로깅, 응답 포맷팅을 포함합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 46
-          },
-          {
-            "id": 5,
-            "title": "통계 분석 로직 단위 테스트 작성",
-            "description": "통계 분석 로직의 정확성을 보장하기 위한 포괄적인 단위 테스트를 작성합니다.",
-            "details": "다양한 데이터 시나리오(정상 데이터, 빈 데이터, 극단값 등)에 대한 테스트 케이스를 작성하여 계산 로직의 정확성을 검증합니다. Mock 데이터를 사용하여 테스트를 수행합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 46
-          }
-        ]
-      },
-      {
-        "id": 47,
-        "title": "Frontend: Statistics 'Basic' 탭 UI 및 비교 기능 구현",
-        "description": "사용자가 두 날짜 구간을 선택하고 비교 분석을 실행할 수 있는 `BasicComparison.jsx` 컴포넌트를 개발합니다.",
-        "details": "두 개의 `DateRangeSelector.jsx` 컴포넌트와 '분석 실행' 버튼을 포함한 UI를 구현합니다. 버튼 클릭 시 선택된 날짜 구간 정보를 `/api/statistics/compare` API로 전송하고, 반환된 결과를 상태에 저장합니다.",
-        "testStrategy": "날짜 선택 UI가 정상적으로 동작하는지 확인합니다. '분석 실행' 버튼 클릭 시 올바른 페이로드로 API가 호출되는지 네트워크 탭에서 검증합니다. API 응답 데이터가 컴포넌트 상태에 올바르게 저장되는지 React DevTools로 확인합니다.",
-        "priority": "medium",
-        "dependencies": [
-          46
+          59
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 48,
-        "title": "Frontend: Statistics 비교 결과 시각화 구현",
-        "description": "Statistics 비교 분석 결과를 차트로 시각화하는 `ComparisonChart.jsx` 컴포넌트를 개발합니다.",
-        "details": "Chart.js 또는 Recharts 라이브러리를 사용하여 막대 차트나 라인 차트로 두 구간의 평균값과 delta 값을 시각화합니다. `BasicComparison.jsx`로부터 받은 분석 결과 데이터를 props로 받아 차트를 렌더링합니다.",
-        "testStrategy": "다양한 형태의 분석 결과 데이터(양수, 음수, 0 등)에 대해 차트가 올바르게 렌더링되는지 확인합니다. 차트의 툴팁, 레이블, 범례가 정확한 정보를 표시하는지 검증합니다.",
+        "id": 61,
+        "title": "Develop Token-Aware Chunking for Chart Base64",
+        "description": "Modify the chart generation process to include only the most essential chart (e.g., an overall summary chart) as Base64 directly in the LLM prompt.",
+        "details": "For detailed charts, provide links or file paths instead of embedding them directly to minimize token usage. This reduces the number of Base64 images sent to the LLM.",
+        "testStrategy": "Verify that only the designated 'overall' chart is embedded and that other charts are referenced by path. Confirm token reduction in LLM calls.",
         "priority": "medium",
         "dependencies": [
-          47
+          59
+        ],
+        "status": "cancelled",
+        "subtasks": []
+      },
+      {
+        "id": 62,
+        "title": "Refine LLM Prompt Templates",
+        "description": "Review and optimize existing prompt templates to remove redundant instructions, duplicate metadata, and verbose fixed text sections to minimize overall token usage.",
+        "details": "Focus on conciseness, clarity, and avoiding unnecessary repetition in the prompt structure.",
+        "testStrategy": "Manual review of updated prompt templates. Compare token counts of old vs. new templates with similar data inputs.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 63,
+        "title": "Add Detailed LLM Process Logging",
+        "description": "Implement comprehensive logging in 'analysis_llm.py' to record key metrics at various stages of prompt generation and LLM interaction.",
+        "details": "Log input row counts, applied truncation/sampling rules, estimated token counts, and final prompt length. Use INFO/WARN levels as appropriate for monitoring and debugging.",
+        "testStrategy": "Review logs during development and testing to ensure all required information is captured accurately.",
+        "priority": "high",
+        "dependencies": [
+          58,
+          59,
+          60,
+          61,
+          62
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 49,
-        "title": "Frontend: Statistics 분석 결과 저장 및 Dashboard 연동",
-        "description": "Statistics 탭에서 분석에 사용된 PEG를 체크박스로 선택하여 Preference에 저장하고, 이를 Dashboard에 즉시 반영하는 기능을 구현합니다.",
-        "details": "분석 결과 테이블의 각 PEG 행 옆에 체크박스를 추가합니다. 'Save to Dashboard' 버튼을 추가하고, 클릭 시 선택된 PEG 목록을 `PUT /api/preference/settings` API를 통해 업데이트합니다. 업데이트 성공 시 전역 상태를 갱신하여 Dashboard에 변경 사항이 반영되도록 합니다.",
-        "testStrategy": "체크박스 선택 및 저장 버튼 클릭 시 Preference 데이터가 올바르게 업데이트되는지 백엔드 로그 또는 DB에서 확인합니다. 저장 후 Dashboard로 이동했을 때 선택한 PEG가 표시되는지 검증합니다.",
-        "priority": "medium",
+        "id": 64,
+        "title": "Implement 'results_overview' Generation Logic",
+        "description": "Develop the logic within 'analysis_llm.py' to parse the LLM's raw output and extract key findings, summaries, and alerts, structuring them into the 'results_overview' field.",
+        "details": "This field should provide a concise, human-readable summary suitable for quick display in dashboards.",
+        "testStrategy": "Unit tests for the parsing and summarization logic. Integration tests to verify 'results_overview' is correctly populated after LLM calls.",
+        "priority": "high",
         "dependencies": [
-          45,
-          47
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Statistics 결과 테이블에 체크박스 UI 추가",
-            "description": "Statistics 분석 결과를 표시하는 테이블에 체크박스를 추가하여 사용자가 원하는 PEG를 선택할 수 있도록 합니다.",
-            "details": "Statistics 결과 테이블의 각 행에 체크박스를 추가하고, 선택된 항목들의 상태를 관리하는 로컬 상태를 구현합니다. 체크박스 선택 시 시각적 피드백을 제공합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 49
-          },
-          {
-            "id": 2,
-            "title": "선택된 항목들의 상태 관리 구현",
-            "description": "체크박스로 선택된 PEG 항목들의 상태를 관리하는 로직을 구현합니다.",
-            "details": "선택된 항목들을 배열로 관리하고, 체크박스 선택/해제 시 상태를 업데이트하는 함수를 구현합니다. 전체 선택/해제 기능도 포함합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 49
-          },
-          {
-            "id": 3,
-            "title": "Dashboard 저장 버튼 및 API 호출 구현",
-            "description": "선택된 PEG를 Dashboard 설정에 저장하는 버튼과 API 호출 로직을 구현합니다.",
-            "details": "'Save to Dashboard' 버튼을 추가하고, 클릭 시 선택된 PEG 목록을 PUT /api/preference/settings API로 전송하는 로직을 구현합니다. 로딩 상태와 성공/실패 피드백을 포함합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 49
-          },
-          {
-            "id": 4,
-            "title": "전역 Preference 상태 업데이트 로직 구현",
-            "description": "API 호출 성공 시 전역 Preference 상태를 올바르게 업데이트하는 로직을 구현합니다.",
-            "details": "API 호출이 성공하면 전역 상태(Zustand/Context)의 Dashboard 설정을 업데이트하여 선택된 PEG가 반영되도록 합니다. 상태 업데이트 후 성공 메시지를 표시합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 49
-          },
-          {
-            "id": 5,
-            "title": "Dashboard 컴포넌트 자동 반영 검증",
-            "description": "Preference 상태 변경이 Dashboard 컴포넌트에 자동으로 반영되는지 검증하고 필요한 조정을 수행합니다.",
-            "details": "Preference 상태 업데이트 후 Dashboard 컴포넌트가 자동으로 새로운 설정을 반영하는지 확인합니다. 필요시 Dashboard 컴포넌트의 상태 구독 로직을 조정합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 49
-          }
-        ]
-      },
-      {
-        "id": 50,
-        "title": "Full Stack: 전체 시스템 통합 테스트 및 E2E 테스트 케이스 작성",
-        "description": "개발된 모든 기능(LLM 결과 조회, Preference 설정, Statistics 분석 및 저장, Dashboard 연동)이 유기적으로 동작하는지 확인하는 통합 테스트를 수행합니다.",
-        "details": "사용자 시나리오 기반의 E2E(End-to-End) 테스트 케이스를 작성합니다. 예를 들어, '1. Preference에서 기본 NE/Cell 설정 -> 2. Statistics에서 특정 기간 분석 -> 3. 분석 결과 PEG를 선택하여 Dashboard에 저장 -> 4. Dashboard에 해당 PEG가 정상 표시되는지 확인'과 같은 흐름을 테스트합니다.",
-        "testStrategy": "작성된 E2E 테스트 케이스를 따라 수동으로 테스트를 진행합니다. Cypress나 Playwright 같은 E2E 테스트 자동화 도구 도입을 고려하여 테스트 스크립트를 작성합니다.",
-        "priority": "low",
-        "dependencies": [
-          41,
-          49
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "핵심 사용자 여정 테스트 케이스 정의",
-            "description": "시스템의 핵심 기능을 검증할 수 있는 3-5개의 주요 사용자 여정 테스트 케이스를 정의합니다.",
-            "details": "Preference 설정 → Statistics 분석 → Dashboard 반영, LLM 결과 조회 및 필터링, 설정 Import/Export 등의 핵심 사용자 시나리오를 테스트 케이스로 정의합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 50
-          },
-          {
-            "id": 2,
-            "title": "E2E 테스트 프레임워크 설정 및 구성",
-            "description": "Cypress 또는 Playwright를 사용하여 E2E 테스트 환경을 설정하고 구성합니다.",
-            "details": "선택한 E2E 테스트 프레임워크를 설치하고 설정합니다. 테스트 환경 구성, 기본 설정 파일 생성, CI/CD 파이프라인 통합을 포함합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 50
-          },
-          {
-            "id": 3,
-            "title": "주요 사용자 플로우 E2E 테스트 스크립트 작성",
-            "description": "Preference → Statistics → Dashboard 플로우를 포함한 주요 사용자 여정에 대한 E2E 테스트 스크립트를 작성합니다.",
-            "details": "사용자가 Preference에서 설정을 변경하고, Statistics에서 분석을 수행한 후, Dashboard에서 결과를 확인하는 전체 플로우를 테스트하는 스크립트를 작성합니다.\n<info added on 2025-08-15T01:30:35.911Z>\n기존에 구현된 `workflow-integration.spec.ts`, `stable-workflow.spec.ts` 등의 파일을 기반으로 중복 코드를 통합하고 시나리오를 재구성합니다. 이 과정에서 누락된 핵심 플로우(예: 결과 상세 보기, 비교 기능)를 추가하고, 비동기 데이터 로딩을 명시적으로 대기하는 로직을 추가하여 테스트 안정성을 개선합니다.\n</info added on 2025-08-15T01:30:35.911Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 50
-          },
-          {
-            "id": 4,
-            "title": "보조 기능 E2E 테스트 스크립트 작성",
-            "description": "LLM 결과 필터링, 설정 Import/Export 등 보조 기능에 대한 E2E 테스트 스크립트를 작성합니다.",
-            "details": "LLM 분석 결과 조회 및 필터링, Preference 설정 Import/Export, 에러 처리 등의 보조 기능을 테스트하는 스크립트를 작성합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 50
-          },
-          {
-            "id": 5,
-            "title": "CI 파이프라인에 E2E 테스트 통합",
-            "description": "E2E 테스트 스위트를 CI/CD 파이프라인에 통합하여 자동화된 테스트를 구현합니다.",
-            "details": "GitHub Actions 또는 다른 CI 도구를 사용하여 E2E 테스트를 자동으로 실행하도록 설정합니다. 테스트 결과 보고 및 실패 시 알림 기능을 포함합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 50
-          }
-        ]
-      },
-      {
-        "id": 51,
-        "title": "Optimization: API 응답 시간 및 프론트엔드 렌더링 성능 최적화",
-        "description": "전체 시스템의 성능 지표(API 응답 시간, 페이지 로드 속도, UI 반응성)를 측정하고 목표치에 도달하도록 최적화 작업을 수행합니다.",
-        "details": "Backend: 느린 DB 쿼리에 인덱스를 추가하고, 데이터 직렬화 과정을 최적화합니다. Frontend: React.memo, useMemo, useCallback을 사용하여 불필요한 리렌더링을 방지합니다. 코드 스플리팅(Code Splitting)을 적용하여 초기 로딩 속도를 개선합니다. Lighthouse, React Profiler 등의 도구를 사용합니다.",
-        "testStrategy": "최적화 전후의 성능 지표를 비교 측정합니다. Lighthouse 점수, Web Vitals, API 응답 시간을 정량적으로 측정하여 개선 여부를 판단합니다.",
-        "priority": "low",
-        "dependencies": [
-          50
-        ],
-        "status": "done",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "성능 기준선 설정 및 측정 도구 구성",
-            "description": "Lighthouse, Web Vitals, API 부하 테스트를 사용하여 현재 성능 기준선을 설정하고 측정 도구를 구성합니다.",
-            "details": "프론트엔드 성능 측정을 위한 Lighthouse 및 Web Vitals 설정, 백엔드 API 성능 측정을 위한 부하 테스트 도구를 구성합니다. 성능 기준선을 문서화합니다.\n<info added on 2025-08-15T01:40:45.499Z>\n성능 기준선 측정 완료. 수동 측정 결과:\n\n**API 성능 (PowerShell Measure-Command)**:\n- /api/master/info: 63.4ms\n- /api/master/pegs: 48.9ms  \n- /api/analysis/results: 46.5ms\n\n**프론트엔드 번들 크기**:\n- index.js: 359.82 KB (gzip: 112.58 KB)\n- chart-vendor.js: 454.99 KB (gzip: 119.11 KB) ⚠️ 매우 큼\n- ui-vendor.js: 86.57 KB (gzip: 29.93 KB)\n- 총 크기: ~1MB 이상\n\n**문제점 식별**:\n1. chart-vendor 번들이 455KB로 과도하게 큼\n2. 코드 분할 경고 메시지 발생\n3. 300KB 이상 청크들이 다수 존재\n\n**최적화 우선순위**:\n1. 번들 크기 최적화 (코드 분할)\n2. Chart 라이브러리 최적화\n3. React 컴포넌트 메모이제이션\n</info added on 2025-08-15T01:40:45.499Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 51
-          },
-          {
-            "id": 2,
-            "title": "백엔드 성능 프로파일링 및 MongoDB 쿼리 최적화",
-            "description": "백엔드 성능을 프로파일링하여 느린 MongoDB 쿼리를 식별하고 적절한 인덱스를 추가합니다.",
-            "details": "백엔드 API의 성능을 프로파일링하여 병목 지점을 식별합니다. MongoDB 쿼리 실행 계획을 분석하고, 성능 향상을 위한 인덱스를 추가합니다.",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 51
-          },
-          {
-            "id": 3,
-            "title": "프론트엔드 React 컴포넌트 최적화",
-            "description": "React Profiler를 사용하여 불필요한 리렌더링을 유발하는 컴포넌트를 식별하고 메모이제이션을 적용합니다.",
-            "details": "React Profiler를 사용하여 컴포넌트 렌더링 성능을 분석합니다. React.memo, useMemo, useCallback을 적절히 적용하여 불필요한 리렌더링을 방지합니다.\n<info added on 2025-08-15T01:59:38.487Z>\n프론트엔드 React 컴포넌트 최적화 완료:\n\n1. **컴포넌트 분할 및 메모이제이션**:\n   - AdvancedChart를 3개의 컴포넌트로 분할 (AdvancedChart, ChartControls, ChartDisplay)\n   - 각 컴포넌트를 React.memo로 메모이제이션하여 불필요한 리렌더링 방지\n\n2. **함수 최적화 (useCallback)**:\n   - generateChart, fetchDbPegs, formatAdvancedChartData, handleToggleDbPegs 함수에 useCallback을 적용하여 함수 재생성 방지\n\n3. **데이터 메모이제이션 (useMemo)**:\n   - getCurrentKpiOptions, getDataKeys 함수에 useMemo를 적용하여 계산 결과 캐싱\n\n4. **성능 개선 효과**:\n   - 차트 설정(KPI, 기간 등) 변경 시 불필요한 전체 리렌더링 제거\n   - 차트 데이터 변경 시 컨트롤 영역(버튼, 셀렉터)의 리렌더링 방지\n   - 메모리 사용량 최적화 및 UI 반응성 향상\n\n5. **코드 구조 개선**:\n   - 관심사 분리(데이터 로직, UI 컨트롤, 차트 표시)를 통해 코드 가독성 및 유지보수성 향상\n   - 재사용 가능한 컴포넌트 구조 설계\n</info added on 2025-08-15T01:59:38.487Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 51
-          },
-          {
-            "id": 4,
-            "title": "구조적 최적화 구현 (코드 분할, 번들 분석)",
-            "description": "코드 분할, 번들 분석, 지연 로딩 등을 적용하여 프론트엔드 구조적 최적화를 구현합니다.",
-            "details": "React.lazy와 Suspense를 사용한 코드 분할, 번들 크기 분석 및 최적화, 지연 로딩을 구현합니다. 웹팩 설정을 조정하여 번들 크기를 최적화합니다.\n<info added on 2025-08-15T01:44:31.696Z>\n**구현 완료 요약:**\n\n**핵심 성과:**\n- 메인 번들 81% 감소 (360KB → 69KB)\n- Chart 번들 32% 감소 (455KB → 310KB)\n- 빌드 시간 52% 단축 (15.10s → 7.20s)\n\n**구현된 최적화:**\n1.  **React.lazy 코드 분할:** 모든 주요 컴포넌트에 lazy loading 적용\n2.  **지능형 프리로딩:** 네트워크 속도 기반 적응형 로딩 구현\n3.  **호버 기반 프리로딩:** 사용자 인터랙션 예측 로딩\n4.  **세밀한 번들 분할:** 7개의 vendor 청크로 분리\n5.  **Suspense 로딩 UI:** 부드러운 사용자 경험 제공\n\n**산출물:**\n- 성능 보고서 `performance-optimization-report.md` 생성 완료.\n</info added on 2025-08-15T01:44:31.696Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 51
-          },
-          {
-            "id": 5,
-            "title": "성능 재측정 및 개선 효과 검증",
-            "description": "최적화 작업 완료 후 성능을 재측정하여 개선 효과를 검증하고 문서화합니다.",
-            "details": "모든 최적화 작업 완료 후 Lighthouse, Web Vitals, API 응답 시간을 재측정합니다. 개선 효과를 분석하고 최적화 결과를 문서화합니다.\n<info added on 2025-08-15T02:02:53.841Z>\n**[성능 측정 결과]**\n\n**1. 백엔드 API 응답 시간**\n- 개선 전: 46-63ms\n- 개선 후: 2-5ms (**92% 단축**)\n- 주요 작업: MongoDB 쿼리 성능 향상을 위한 인덱스 최적화\n\n**2. 프론트엔드 번들 크기 및 빌드 시간**\n- 메인 번들: 360KB → 69KB (**81% 감소**)\n- 차트 번들: 455KB → 310KB (**32% 감소**)\n- 빌드 시간: 15.10s → 7.20s (**52% 단축**)\n\n**3. 프론트엔드 렌더링 및 로딩 속도**\n- 초기 로딩 시간 **81% 단축**\n- 주요 작업:\n  - React 컴포넌트 분할 및 `React.memo`, `useCallback`, `useMemo`를 통한 리렌더링 최적화\n  - 코드 분할(Code Splitting) 및 지연 로딩(Lazy Loading) 적용\n\n**4. 종합 평가**\n- API 응답 시간, 초기 로딩 속도, 번들 크기 등 핵심 지표가 크게 개선되어 사용자 경험 향상 및 유지보수성 증대.\n</info added on 2025-08-15T02:02:53.841Z>",
-            "status": "done",
-            "dependencies": [],
-            "parentTaskId": 51
-          }
-        ]
-      },
-      {
-        "id": 52,
-        "title": "Frontend: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현",
-        "description": "결과 목록에서 특정 항목을 선택했을 때 상세 정보를 보여주는 `ResultDetail.jsx` 컴포넌트와 두 개 이상의 결과를 비교하는 UI를 구현합니다.",
-        "details": "목록에서 항목 클릭 시 모달(Modal) 또는 별도 패널(Panel)을 사용하여 상세 정보를 표시합니다. 상세 정보 API (`/api/analysis/results/:id`)를 호출합니다. 목록에서 여러 항목을 체크하고 '비교하기' 버튼을 누르면 선택된 결과들을 나란히 보여주는 비교 뷰를 구현합니다.",
-        "testStrategy": "항목 선택 시 상세 정보 API가 올바르게 호출되고 데이터가 정확히 표시되는지 확인합니다. 비교 기능 선택 시 선택된 모든 항목의 데이터가 비교 뷰에 올바르게 렌더링되는지 검증합니다.",
-        "priority": "low",
-        "dependencies": [
-          40
+          57
         ],
         "status": "done",
         "subtasks": []
       },
       {
-        "id": 53,
-        "title": "Documentation: 컴포넌트 및 API 문서화",
-        "description": "재사용성과 유지보수성을 높이기 위해 주요 React 컴포넌트의 props와 사용법, 그리고 백엔드 API의 명세를 문서화합니다.",
-        "details": "Frontend: Storybook을 사용하여 컴포넌트 라이브러리를 구축하고 각 컴포넌트의 사용 예시와 props 설명을 작성합니다. Backend: FastAPI의 자동 생성 문서(Swagger UI/ReDoc)를 보강하여 각 엔드포인트의 요청/응답 스키마와 비즈니스 로직에 대한 설명을 추가합니다.",
-        "testStrategy": "문서가 실제 코드와 일치하는지 검토합니다. 다른 개발자가 문서를 보고 컴포넌트와 API를 쉽게 사용할 수 있는지 동료 검토(peer review)를 진행합니다.",
-        "priority": "low",
+        "id": 65,
+        "title": "Implement 'analysis_raw_compact' Generation Logic",
+        "description": "Develop the logic to process and store a compact or summarized version of the raw analysis data (e.g., top-k segments, percentiles, notes) into the 'analysis_raw_compact' field.",
+        "details": "Ensure this field adheres to the defined size limits ('max_raw_bytes') and contains sufficient information for forensic analysis without being excessively large.",
+        "testStrategy": "Unit tests for the compaction logic. Integration tests to verify 'analysis_raw_compact' is correctly populated and within size limits.",
+        "priority": "high",
         "dependencies": [
-          51
+          57,
+          56
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
-        "id": 54,
-        "title": "Remove Hardcoded PEG Lists and Integrate with Dynamic API",
-        "description": "Refactor all frontend components to eliminate hardcoded PEG lists, fetching them dynamically from the `/api/master/pegs` endpoint to ensure data consistency with the central database settings.",
-        "details": "The current implementation uses hardcoded PEG lists in various components like `BasicComparison` and `PreferenceManager`, leading to maintenance issues and data inconsistency. This task involves creating a centralized data fetching mechanism for PEGs and updating all relevant components to use it.\n\n1.  **Create a Centralized Data Fetching Hook:** Implement a reusable React hook (e.g., `usePegs`) that fetches the PEG list from `/api/master/pegs`. This hook should manage API state (loading, data, error) and cache the response using a library like React Query or SWR to prevent redundant network requests.\n2.  **Refactor `BasicComparison` Component:** Modify the analysis options UI within the `BasicComparison` component. Replace the static PEG selector with a dynamic one populated by the data from the `usePegs` hook.\n3.  **Refactor `PreferenceManager` Component:** Update the Dashboard settings section where users can select PEGs. Remove the hardcoded list and use the new centralized hook to display the available PEGs from the database.\n4.  **Codebase Audit:** Perform a global search across the frontend codebase to identify and remove any other instances of hardcoded PEG arrays, ensuring all components rely on the single API source.",
-        "testStrategy": "1.  **API Call Verification:** Using browser developer tools, confirm that a GET request to `/api/master/pegs` is made when a relevant component loads. Verify the request is successful (200 OK) and the response payload is correct.\n2.  **Dynamic Data Rendering:** Check that the PEG selection UIs in both `BasicComparison` and `PreferenceManager` correctly display the list of PEGs received from the API.\n3.  **Data Consistency Test:** Temporarily add or remove a PEG in the backend database. Refresh the application and confirm that the change is accurately reflected in all relevant UI components without any frontend code changes.\n4.  **Error Handling:** Simulate an API failure for the `/api/master/pegs` endpoint. Verify that the UI handles the error gracefully, for example, by showing a loading spinner and then an error message, rather than crashing.\n5.  **Code Verification:** Conduct a peer review to confirm that all hardcoded PEG arrays have been removed and replaced with the new dynamic data fetching hook.",
-        "status": "done",
-        "dependencies": [
-          45
-        ],
+        "id": 66,
+        "title": "Enhance '_to_stats()' Function",
+        "description": "Modify the '_to_stats()' function to optionally include additional statistical measures like 'count', 'std' (standard deviation), 'min', and 'max' alongside 'avg' for KPIs.",
+        "details": "This enhancement provides richer statistical context for the 'stats' array stored in the database.",
+        "testStrategy": "Unit tests for '_to_stats()' to confirm correct calculation and inclusion of new statistical measures.",
         "priority": "medium",
+        "dependencies": [],
+        "status": "todo",
+        "subtasks": []
+      },
+      {
+        "id": 67,
+        "title": "Update POST /api/analysis/results Endpoint",
+        "description": "Ensure the FastAPI endpoint for creating analysis results correctly receives and processes the new 'results_overview' and 'analysis_raw_compact' fields from the incoming payload.",
+        "details": "Verify Pydantic validation and correct mapping of these fields to the MongoDB schema during the save operation.",
+        "testStrategy": "API integration tests for POST requests, verifying that new fields are correctly stored in MongoDB.",
+        "priority": "high",
+        "dependencies": [
+          57,
+          64,
+          65
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 68,
+        "title": "Update GET /api/analysis/results (List) Endpoint",
+        "description": "Modify the FastAPI router for the analysis results list view to include 'results_overview' in the default projection and explicitly exclude 'analysis_raw_compact' to keep responses lightweight.",
+        "details": "Optimize query performance for list retrieval by only fetching essential fields.",
+        "testStrategy": "API integration tests for GET list requests, verifying the response structure and performance. Ensure 'analysis_raw_compact' is not present by default.",
+        "priority": "high",
+        "dependencies": [
+          57
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 69,
+        "title": "Update GET /api/analysis/results/{id} (Detail) Endpoint",
+        "description": "Implement support for a query parameter (e.g., '?includeRaw=true') to optionally include the 'analysis_raw_compact' field in the detailed response for a specific analysis result.",
+        "details": "The default response for the detail endpoint should exclude 'analysis_raw_compact' to maintain performance.",
+        "testStrategy": "API integration tests for GET detail requests, verifying both default behavior and behavior with '?includeRaw=true' parameter.",
+        "priority": "high",
+        "dependencies": [
+          57
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 70,
+        "title": "Implement MongoDB Document Size Check",
+        "description": "Add a check before saving documents to MongoDB to ensure they do not exceed the 16MB document size limit. Log warnings if the document size approaches or exceeds this limit.",
+        "details": "Consider implementing compression or partial storage strategies if documents consistently hit the limit, though initial focus is on logging.",
+        "testStrategy": "Unit tests for the size check logic. Integration tests simulating large documents to trigger warning logs.",
+        "priority": "high",
+        "dependencies": [
+          67
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 71,
+        "title": "Develop A/B Testing Framework",
+        "description": "Create a framework to run 'analysis_llm.py' with both old and new configurations (token stabilization, payload strategy) using identical inputs.",
+        "details": "The framework should capture and compare key metrics such as LLM token usage, processing time, and generated payload size for both paths.",
+        "testStrategy": "Verify the framework can execute both old and new paths and collect the required metrics accurately.",
+        "priority": "high",
+        "dependencies": [
+          63,
+          67
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 72,
+        "title": "Conduct A/B Testing & Analyze Results",
+        "description": "Execute the A/B tests using the developed framework and analyze the collected data to compare performance, token efficiency, and payload size between the old and new paths.",
+        "details": "Generate a report summarizing findings, identifying improvements and any regressions.",
+        "testStrategy": "Review the A/B test report and confirm that the acceptance criteria for token usage and payload size are met.",
+        "priority": "high",
+        "dependencies": [
+          71
+        ],
+        "status": "todo",
+        "subtasks": []
+      },
+      {
+        "id": 73,
+        "title": "Implement End-to-End Integration Test",
+        "description": "Develop an E2E test case that simulates the full analysis flow: triggering LLM analysis ('/api/analysis/trigger-llm-analysis'), MongoDB storage, and subsequent API retrieval ('GET /api/analysis/results' list and detail views).",
+        "details": "Verify data integrity, correct API responses, and overall system functionality.",
+        "testStrategy": "Execute the E2E test successfully, ensuring all components interact as expected and data is consistent.",
+        "priority": "high",
+        "dependencies": [
+          67,
+          68,
+          69
+        ],
+        "status": "todo",
+        "subtasks": []
+      },
+      {
+        "id": 74,
+        "title": "Verify Legacy Document Compatibility",
+        "description": "Ensure that existing documents in MongoDB (potentially with camelCase keys or older structures) can still be correctly retrieved and processed by the updated backend.",
+        "details": "Test with a representative sample of legacy data. Document any necessary migration steps or long-term compatibility plans if full backward compatibility is not feasible.",
+        "testStrategy": "Run API queries against a database containing legacy documents and verify correct data retrieval and parsing.",
+        "priority": "high",
+        "dependencies": [
+          68,
+          69
+        ],
+        "status": "todo",
+        "subtasks": []
+      },
+      {
+        "id": 75,
+        "title": "Set Up Backend Monitoring for Response/Document Size",
+        "description": "Integrate metrics collection for backend API response sizes and MongoDB stored document sizes into the existing monitoring system.",
+        "details": "Configure alerts for defined warning thresholds to proactively identify potential issues with payload bloat.",
+        "testStrategy": "Verify that metrics are being collected and displayed in the monitoring dashboard, and that alerts trigger correctly when thresholds are met.",
+        "priority": "medium",
+        "dependencies": [
+          70
+        ],
+        "status": "todo",
+        "subtasks": []
+      },
+      {
+        "id": 76,
+        "title": "Implement Enhanced Error Logging for LLM Failures",
+        "description": "Improve error logging for LLM call failures to include relevant context such as partial prompts, applied upper limits, and summaries of sampling results.",
+        "details": "This will significantly aid in debugging 'max token exceed' errors or other LLM-related issues by providing more insight into the state at the time of failure.",
+        "testStrategy": "Simulate LLM failures and verify that detailed context is captured in the logs.",
+        "priority": "medium",
+        "dependencies": [
+          63
+        ],
+        "status": "todo",
         "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-08-08T16:22:51.535Z",
-      "updated": "2025-08-15T02:03:10.711Z",
+      "updated": "2025-08-21T14:37:05.334Z",
       "description": "Tasks for master context"
     }
   }

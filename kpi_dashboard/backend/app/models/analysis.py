@@ -107,6 +107,17 @@ class AnalysisResultBase(BaseModel):
     )
     status: str = Field(default="success", description="분석 상태")
     report_path: Optional[str] = Field(None, description="보고서 파일 경로")
+    # 운영 요약 및 압축 원본(하이브리드 전략용)
+    results_overview: Optional[Dict[str, Any]] = Field(
+        None,
+        description="요약 결과(핵심 소견/경보/권장사항)",
+        alias="resultsOverview"
+    )
+    analysis_raw_compact: Optional[Dict[str, Any]] = Field(
+        None,
+        description="압축된 원본 분석 데이터(상세 Raw의 경량 버전)",
+        alias="analysisRawCompact"
+    )
     metadata: AnalysisMetadata = Field(
         default_factory=AnalysisMetadata,
         description="분석 메타데이터"

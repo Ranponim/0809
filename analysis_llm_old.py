@@ -34,141 +34,10 @@ import base64
 import html
 import datetime
 import logging
-import math
-import time
-
-# --- 글로벌 안전 상수 (요청으로 오버라이드 가능) ---
-DEFAULT_MAX_PROMPT_TOKENS = 24000
-DEFAULT_MAX_PROMPT_CHARS = 80000
-DEFAULT_SPECIFIC_MAX_ROWS = 500
-DEFAULT_MAX_RAW_STR = 4000
-DEFAULT_MAX_RAW_ARRAY = 100
-
-# --- 토큰/프롬프트 가드 유틸 ---
-def estimate_prompt_tokens(text: str) -> int:
-    """아주 단순한 휴리스틱으로 토큰 수를 추정합니다.
-    - 영어/한글 혼합 환경에서 안전 측을 위해 평균 3.5 chars/token 가정
-    - 실제 모델별 토크나이저와 차이가 있으므로 상한 체크용 보수 추정치
-    """
-    if not text:
-        return 0
-    try:
-        return int(math.ceil(len(text) / 3.5))
-    except Exception:
-        return len(text) // 4
-
-def clamp_prompt(text: str, max_chars: int) -> tuple[str, bool]:
-    """문자 기반 상한으로 프롬프트를 잘라내 안전 가드.
-    Returns: (clamped_text, was_clamped)
-    """
-    if text is None:
-        return "", False
-    if len(text) <= max_chars:
-        return text, False
-    head = text[: max_chars - 200]
-    tail = "\n\n[...truncated due to safety guard...]\n"
-    return head + tail, True
-
-def _compact_value(value, max_str: int, max_array: int, depth: int, max_depth: int):
-    """재귀적으로 dict/list의 크기를 제한하여 경량화합니다."""
-    if depth > max_depth:
-        return "[truncated: max depth exceeded]"
-    if isinstance(value, str):
-        if len(value) <= max_str:
-            return value
-        return value[: max(0, max_str - 100)] + "\n[...truncated...]"
-    if isinstance(value, list):
-        if len(value) <= max_array:
-            return [_compact_value(v, max_str, max_array, depth + 1, max_depth) for v in value]
-        sliced = value[: max_array]
-        return [_compact_value(v, max_str, max_array, depth + 1, max_depth) for v in sliced] + [
-            f"[...{len(value) - max_array} more items truncated...]"
-        ]
-    if isinstance(value, dict):
-        compacted = {}
-        for k, v in value.items():
-            compacted[k] = _compact_value(v, max_str, max_array, depth + 1, max_depth)
-        return compacted
-    return value
-
-def compact_analysis_raw(raw: dict | list | str | None, *, max_str: int = 4000, max_array: int = 100, max_depth: int = 3):
-    """LLM 원본 결과를 안전하게 경량화합니다."""
-    try:
-        return _compact_value(raw, max_str, max_array, depth=0, max_depth=max_depth)
-    except Exception:
-        return "[compact failed]"
-
-def build_results_overview(analysis: dict | str | None) -> dict:
-    """LLM 결과에서 핵심 요약을 추출합니다."""
-    overview: dict = {"summary": None, "key_findings": [], "recommended_actions": []}
-    try:
-        if isinstance(analysis, dict):
-            summary = analysis.get("executive_summary") or analysis.get("summary") or None
-            recs = analysis.get("recommended_actions") or analysis.get("actions") or []
-            findings = analysis.get("issues") or analysis.get("alerts") or analysis.get("key_findings") or []
-            if isinstance(recs, dict):
-                recs = list(recs.values())
-            if isinstance(findings, dict):
-                findings = list(findings.values())
-            overview["summary"] = summary if isinstance(summary, str) else None
-            overview["recommended_actions"] = recs if isinstance(recs, list) else []
-            overview["key_findings"] = findings if isinstance(findings, list) else []
-        elif isinstance(analysis, str):
-            overview["summary"] = analysis[:2000] + ("..." if len(analysis) > 2000 else "")
-    except Exception:
-        pass
-    return overview
-
-
-# --- 테이블 데이터 토큰-인식 축약(샘플링) ---
-def downsample_dataframe_for_prompt(df: pd.DataFrame, max_rows_global: int, max_selected_pegs: int) -> tuple[pd.DataFrame, bool]:
-    """
-    LLM 프롬프트에 포함하기 전 DataFrame을 크기 제한에 맞게 축약합니다.
-
-    규칙:
-    - 전체 행수가 상한 이내면 그대로 사용
-    - 'peg_name' 컬럼이 있으면 상위 빈도 peg를 최대 max_selected_pegs만 유지
-    - 여전히 상한을 초과하면 균등 간격 샘플링으로 전체를 max_rows_global 이하로 축소
-    """
-    try:
-        if df is None or df.empty:
-            logging.info("downsample: 입력이 비어 있음")
-            return df, False
-
-        original_rows = len(df)
-        if original_rows <= max_rows_global:
-            logging.info("downsample: 축약 불필요 (rows=%d ≤ max=%d)", original_rows, max_rows_global)
-            return df, False
-
-        reduced = df
-        if 'peg_name' in df.columns:
-            counts = df['peg_name'].astype(str).value_counts()
-            keep_pegs = counts.index.tolist()[: max_selected_pegs]
-            reduced = df[df['peg_name'].astype(str).isin(keep_pegs)]
-            logging.info(
-                "downsample: peg 필터 적용 (%d→%d rows), peg=%d",
-                original_rows, len(reduced), len(keep_pegs)
-            )
-            if len(reduced) == 0:
-                reduced = df
-
-        if len(reduced) > max_rows_global:
-            step = int(math.ceil(len(reduced) / max_rows_global))
-            reduced = reduced.iloc[::step].copy()
-            logging.info(
-                "downsample: 균등 샘플링 적용 step=%d, 결과 rows=%d",
-                step, len(reduced)
-            )
-
-        return reduced, True
-    except Exception as e:
-        logging.warning("downsample 실패: %s (원본 사용)", e)
-        return df, False
 import subprocess
 from typing import Dict, Tuple, Optional
 import ast
 import math
-import re
 
 import pandas as pd
 import matplotlib
@@ -213,180 +82,40 @@ def _get_default_tzinfo() -> datetime.tzinfo:
 
 def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datetime]:
     """
-    "YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM" 또는 단일 날짜 "YYYY-MM-DD"를 받아
-    (start_dt, end_dt) (둘 다 tz-aware) 튜플을 반환합니다.
+    "yyyy-mm-dd_hh:mm~yyyy-mm-dd_hh:mm" 또는 단일 날짜 "yyyy-mm-dd" 를 받아
+    (start, end) datetime 튜플을 반환합니다.
 
-    - 범위 형식: 주어진 시각 범위를 그대로 사용(엄격 포맷).
-    - 단일 날짜: 해당 날짜의 00:00:00 ~ 23:59:59 로 확장.
+    - 범위 형식: 주어진 시각 범위 그대로 사용
+    - 단일 날짜: 해당 날짜의 00:00 ~ 23:59:59 로 확장
 
-    형식/값/논리/타입 오류를 세분화하여 명확한 예외 메시지를 제공합니다.
+    Args:
+        range_text: 시간 범위 문자열 또는 단일 날짜 문자열
+
+    Returns:
+        (start_dt, end_dt)
     """
+    # 사람이 읽는 시간 범위를 엄격한 포맷으로 변환해 하위 단계에서 일관되게 사용
     logging.info("parse_time_range() 호출: 입력 문자열 파싱 시작: %s", range_text)
-
-    # --- 타입 검증 ---
-    if not isinstance(range_text, str):
-        msg = {
-            "code": "TYPE_ERROR",
-            "message": "입력은 문자열(str)이어야 합니다",
-            "input": str(range_text)
-        }
-        logging.error("parse_time_range() 타입 오류: %s", msg)
-        raise TypeError(json.dumps(msg, ensure_ascii=False))
-
-    # 전처리: 트리밍 및 기본 체크
-    text = (range_text or "").strip()
-    if text == "":
-        msg = {
-            "code": "FORMAT_ERROR",
-            "message": "빈 문자열은 허용되지 않습니다",
-            "input": range_text,
-            "hint": "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08"
-        }
-        logging.error("parse_time_range() 형식 오류: %s", msg)
-        raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-    tzinfo = _get_default_tzinfo()
-
-    # 정규식 패턴 (엄격 포맷)
-    date_pat = r"\d{4}-\d{2}-\d{2}"
-    time_pat = r"\d{2}:\d{2}"
-    dt_pat = rf"{date_pat}_{time_pat}"
-
-    # 범위 구분자 허용: ~ 앞뒤 공백 허용. 다른 구분자 사용은 오류 처리
-    if "~" in text:
-        # '~'가 여러 개인 경우 오류
-        if text.count("~") != 1:
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "범위 구분자 '~'가 없거나 잘못되었습니다",
-                "input": text,
-                "hint": "예: 2025-08-08_15:00~2025-08-08_19:00"
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        # 공백 허용 분리
-        parts = [p.strip() for p in text.split("~")]
-        if len(parts) != 2 or not parts[0] or not parts[1]:
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "시작/종료 시각이 모두 필요합니다",
-                "input": text
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        left, right = parts[0], parts[1]
-
-        # 잘못된 구분자 사용 가이드 (예: '-' 범위 구분)
-        if re.search(rf"^{dt_pat}-{dt_pat}$", text.replace(" ", "")):
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "범위 구분자는 '~'만 허용됩니다",
-                "input": text,
-                "hint": "예: 2025-08-08_15:00~2025-08-08_19:00"
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        # 각 토큰 형식 검증
-        if not re.fullmatch(dt_pat, left):
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "왼쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM)",
-                "input": left
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-        if not re.fullmatch(dt_pat, right):
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "오른쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM)",
-                "input": right
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        # 값 검증 (존재하지 않는 날짜/시간 등)
-        try:
-            start_dt = datetime.datetime.strptime(left, "%Y-%m-%d_%H:%M")
-            end_dt = datetime.datetime.strptime(right, "%Y-%m-%d_%H:%M")
-        except Exception as e:
-            msg = {
-                "code": "VALUE_ERROR",
-                "message": f"유효하지 않은 날짜/시간입니다: {e}",
-                "input": text
-            }
-            logging.error("parse_time_range() 값 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        # tz 부여
-        if start_dt.tzinfo is None:
-            start_dt = start_dt.replace(tzinfo=tzinfo)
-        if end_dt.tzinfo is None:
-            end_dt = end_dt.replace(tzinfo=tzinfo)
-
-        # 논리 검증
-        if start_dt == end_dt:
-            msg = {
-                "code": "LOGIC_ERROR",
-                "message": "동일한 시각 범위는 허용되지 않습니다",
-                "input": text
-            }
-            logging.error("parse_time_range() 논리 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-        if start_dt > end_dt:
-            msg = {
-                "code": "LOGIC_ERROR",
-                "message": "시작 시각은 종료 시각보다 빠라야 합니다",
-                "input": text
-            }
-            logging.error("parse_time_range() 논리 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
+    try:
+        tzinfo = _get_default_tzinfo()
+        if "~" in range_text:
+            start_str, end_str = range_text.split("~")
+            start_dt = datetime.datetime.strptime(start_str.strip(), "%Y-%m-%d_%H:%M")
+            end_dt = datetime.datetime.strptime(end_str.strip(), "%Y-%m-%d_%H:%M")
+            # 타임존 정보 부여
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=tzinfo)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=tzinfo)
+        else:
+            day = datetime.datetime.strptime(range_text.strip(), "%Y-%m-%d").date()
+            start_dt = datetime.datetime.combine(day, datetime.time(0, 0, 0, tzinfo=tzinfo))
+            end_dt = datetime.datetime.combine(day, datetime.time(23, 59, 59, tzinfo=tzinfo))
         logging.info("parse_time_range() 성공: %s ~ %s", start_dt, end_dt)
         return start_dt, end_dt
-
-    # 단일 날짜 케이스
-    if re.fullmatch(date_pat, text):
-        try:
-            day = datetime.datetime.strptime(text, "%Y-%m-%d").date()
-        except Exception as e:
-            msg = {
-                "code": "VALUE_ERROR",
-                "message": f"유효하지 않은 날짜입니다: {e}",
-                "input": text
-            }
-            logging.error("parse_time_range() 값 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        start_dt = datetime.datetime.combine(day, datetime.time(0, 0, 0, tzinfo=tzinfo))
-        end_dt = datetime.datetime.combine(day, datetime.time(23, 59, 59, tzinfo=tzinfo))
-        logging.info("parse_time_range() 성공(단일 날짜 확장): %s ~ %s", start_dt, end_dt)
-        return start_dt, end_dt
-
-    # 여기까지 오면 형식 오류
-    # 흔한 오타 케이스 힌트 제공
-    uses_dash_range = re.search(rf"^{dt_pat}-{dt_pat}$", text.replace(" ", "")) is not None
-    uses_space_instead_underscore = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", text) is not None
-    time_with_dash = re.search(r"\d{2}-\d{2}", text) is not None
-
-    hint = "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08"
-    if uses_dash_range:
-        hint = "범위 구분자는 '-'가 아니라 '~'를 사용하세요"
-    elif uses_space_instead_underscore:
-        hint = "날짜와 시간은 공백이 아니라 '_'로 구분하세요"
-    elif time_with_dash:
-        hint = "시간은 '15-00'이 아니라 '15:00' 형식이어야 합니다"
-
-    msg = {
-        "code": "FORMAT_ERROR",
-        "message": "입력 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM 또는 YYYY-MM-DD)",
-        "input": text,
-        "hint": hint
-    }
-    logging.error("parse_time_range() 형식 오류: %s", msg)
-    raise ValueError(json.dumps(msg, ensure_ascii=False))
+    except Exception as e:
+        logging.exception("parse_time_range() 실패: %s", e)
+        raise
 
 
 # --- DB 연결 ---
@@ -637,12 +366,7 @@ def create_llm_analysis_prompt_overall(processed_df: pd.DataFrame, n1_range: str
     """
     # LLM 입력은 맥락/가정/출력 요구사항을 명확히 포함해야 일관된 답변을 유도할 수 있다
     logging.info("create_llm_analysis_prompt_overall() 호출: 프롬프트 생성 시작")
-    # 경량 표 포맷터 사용: 열 제한 및 행 제한을 사전에 적용
-    preview_cols = [c for c in processed_df.columns if c in ("peg_name", "avg_value", "period")]
-    if not preview_cols:
-        preview_cols = list(processed_df.columns)[:5]
-    preview_df = processed_df[preview_cols].head(200)
-    data_preview = preview_df.to_string(index=False)
+    data_preview = processed_df.to_string(index=False)
     prompt = f"""
     당신은 3GPP 이동통신망 최적화를 전공한 MIT 박사급 전문가입니다. 다음 표는 PEG 단위로 집계한 결과이며, 두 기간은 동일한 시험환경에서 수행되었다고 가정합니다.
 
@@ -694,11 +418,7 @@ def create_llm_analysis_prompt_enhanced(processed_df: pd.DataFrame, n1_range: st
     - recommended_actions: 우선순위가 부여된 구체적인 실행 계획 목록
     """
     logging.info("create_llm_analysis_prompt_enhanced() 호출: 고도화된 프롬프트 생성 시작")
-    preview_cols = [c for c in processed_df.columns if c in ("peg_name", "avg_value", "period")]
-    if not preview_cols:
-        preview_cols = list(processed_df.columns)[:5]
-    preview_df = processed_df[preview_cols].head(200)
-    data_preview = preview_df.to_string(index=False)
+    data_preview = processed_df.to_string(index=False)
 
     prompt = f"""
 [페르소나 및 임무]
@@ -772,11 +492,7 @@ def create_llm_analysis_prompt_specific_pegs(processed_df_subset: pd.DataFrame, 
     }
     """
     logging.info("create_llm_analysis_prompt_specific_pegs() 호출: 선택 PEG=%s, 행수=%d", selected_pegs, len(processed_df_subset))
-    preview_cols = [c for c in processed_df_subset.columns if c in ("peg_name", "avg_value", "period")]
-    if not preview_cols:
-        preview_cols = list(processed_df_subset.columns)[:5]
-    preview_df = processed_df_subset[preview_cols].head(200)
-    data_preview = preview_df.to_string(index=False)
+    data_preview = processed_df_subset.to_string(index=False)
 
     prompt = f"""
 [페르소나 및 임무]
@@ -808,7 +524,50 @@ def create_llm_analysis_prompt_specific_pegs(processed_df_subset: pd.DataFrame, 
     logging.info("create_llm_analysis_prompt_specific_pegs() 완료")
     return prompt
 
-# (모킹 제거)
+# --- 테스트용 가상 LLM 응답 생성 ---
+def generate_mock_llm_response(processed_df: pd.DataFrame, is_test_mode: bool = False) -> dict:
+    """
+    테스트 모드에서 사용할 가상 LLM 응답을 생성합니다.
+    실제 LLM 서버가 없을 때 사용됩니다.
+    """
+    logging.info("generate_mock_llm_response() 호출: 가상 LLM 응답 생성 (test_mode=%s)", is_test_mode)
+    
+    # 가장 변화율이 큰 PEG 찾기
+    if not processed_df.empty and 'pct_change' in processed_df.columns:
+        top_changes = processed_df.nlargest(3, 'pct_change', keep='all')
+        top_peg = top_changes.iloc[0] if len(top_changes) > 0 else None
+    else:
+        top_peg = None
+    
+    mock_response = {
+        "executive_summary": f"테스트 분석 결과: {len(processed_df)}개의 PEG 분석 완료. " + 
+                           (f"주요 변화는 {top_peg['peg_name']} ({top_peg['pct_change']:.1f}% 변화)입니다." if top_peg is not None else "데이터가 부족합니다."),
+        "diagnostic_findings": [
+            {
+                "primary_hypothesis": "테스트 모드에서 생성된 가상 가설입니다. 실제 분석에서는 실제 네트워크 상황에 맞는 가설이 제시됩니다.",
+                "supporting_evidence": f"분석된 {len(processed_df)}개 PEG 중 일부에서 변화가 관찰되었습니다.",
+                "confounding_factors_assessment": "테스트 환경에서는 실제 교란 요인 분석이 제한적입니다."
+            }
+        ],
+        "recommended_actions": [
+            {
+                "priority": "P1",
+                "action": "테스트 데이터 검증",
+                "details": "실제 운영 환경에서 분석을 재실행하여 결과를 검증해주세요."
+            },
+            {
+                "priority": "P2", 
+                "action": "LLM 서버 연결 확인",
+                "details": "실제 LLM 분석을 위해 LLM 서버 연결 상태를 확인해주세요."
+            }
+        ]
+    }
+    
+    logging.info("가상 LLM 응답 생성 완료: findings=%d, actions=%d", 
+                len(mock_response['diagnostic_findings']), 
+                len(mock_response['recommended_actions']))
+    
+    return mock_response
 
 
 # --- LLM API 호출 함수 (subprocess + curl) ---
@@ -898,8 +657,29 @@ def query_llm(prompt: str, enable_mock: bool = False) -> dict:
             logging.error("예기치 못한 오류 (%s): %s", type(e).__name__, e, exc_info=True)
             continue
     
-    # 모든 엔드포인트 실패 시 예외 발생 (모킹 제거)
-    raise ConnectionError("모든 LLM API 엔드포인트에 연결하지 못했습니다.")
+    # 모든 엔드포인트 실패 시 mock 모드 처리
+    if enable_mock:
+        logging.warning("모든 LLM API 엔드포인트 연결 실패. Mock 모드로 가상 응답 생성합니다.")
+        # processed_df는 없으므로 기본적인 mock 응답 생성
+        return {
+            "executive_summary": "LLM 서버 연결 실패로 인한 테스트 응답입니다.",
+            "diagnostic_findings": [
+                {
+                    "primary_hypothesis": "LLM 서버에 연결할 수 없어 가상 분석을 제공합니다.",
+                    "supporting_evidence": "네트워크 연결 또는 LLM 서버 상태를 확인해주세요.",
+                    "confounding_factors_assessment": "실제 분석을 위해서는 LLM 서버 연결이 필요합니다."
+                }
+            ],
+            "recommended_actions": [
+                {
+                    "priority": "P1",
+                    "action": "LLM 서버 연결 상태 점검",
+                    "details": "vLLM 서버가 정상 동작하는지 확인하고 네트워크 연결을 점검해주세요."
+                }
+            ]
+        }
+    else:
+        raise ConnectionError("모든 LLM API 엔드포인트에 연결하지 못했습니다.")
 
 
 # --- HTML 리포트 생성 (통합 분석 전용) ---
@@ -1386,20 +1166,14 @@ def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optio
             "method": "POST",
             "payload": parsed_preview,
         }, ensure_ascii=False, indent=2))
-
-        # POST 시도
-        resp = requests.post(
-            url,
-            data=json_text.encode('utf-8'),
-            headers={'Content-Type': 'application/json; charset=utf-8'},
-            timeout=timeout
-        )
-
-
-        # 그 외 상태코드는 예외로 처리
-        logging.error("백엔드 POST 실패: status=%s body=%s", resp.status_code, resp.text[:500])
+        resp = requests.post(url, data=json_text.encode('utf-8'), headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=timeout)
         resp.raise_for_status()
-        return None
+        logging.info("백엔드 POST 성공: status=%s", resp.status_code)
+        try:
+            return resp.json()
+        except Exception:
+            logging.warning("백엔드 응답 본문 JSON 파싱 실패, text 반환")
+            return {"status_code": resp.status_code, "text": resp.text}
     except Exception as e:
         logging.exception("백엔드 POST 실패: %s", e)
         return None
@@ -1435,7 +1209,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
 
         output_dir = request.get('output_dir', os.path.abspath('./analysis_output'))
         # 기본 백엔드 업로드 URL: 요청값 > 환경변수 > 로컬 기본값 (복수형 컬렉션 엔드포인트로 수정)
-        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://165.213.69.30:8000/api/analysis/results/'
+        backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://localhost:8000/api/analysis/results'
 
         db = request.get('db', {})
         table = request.get('table', 'summary')
@@ -1496,68 +1270,23 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             logging.info("파생 PEG 병합 완료: n-1=%d행, n=%d행", len(n1_df), len(n_df))
 
         # 처리 & 시각화 (파생 포함)
-        # 프롬프트 입력 축약(전역 상한 적용)
-        max_rows_global = int(request.get('max_rows_global', DEFAULT_SPECIFIC_MAX_ROWS * 2))
-        max_selected_pegs = int(request.get('max_selected_pegs', 50))
-        n1_df_ds, n1_ds_applied = downsample_dataframe_for_prompt(n1_df, max_rows_global, max_selected_pegs)
-        n_df_ds, n_ds_applied = downsample_dataframe_for_prompt(n_df, max_rows_global, max_selected_pegs)
-        logging.info("입력 축약 적용: n-1=%s, n=%s (max_rows_global=%d, max_selected_pegs=%d)", n1_ds_applied, n_ds_applied, max_rows_global, max_selected_pegs)
-
-        processed_df, charts_base64 = process_and_visualize(n1_df_ds, n_df_ds)
+        processed_df, charts_base64 = process_and_visualize(n1_df, n_df)
         logging.info("처리 완료: processed_df=%d행, charts=%d", len(processed_df), len(charts_base64))
 
-        # LLM 프롬프트 & 분석 (모킹 제거: 항상 실제 호출)
-        test_mode = False
+        # LLM 프롬프트 & 분석 (테스트 모드 감지)
+        test_mode = request.get('test_mode', False) or request.get('enable_mock', False)
         prompt = create_llm_analysis_prompt_enhanced(processed_df, n1_text, n_text)
-        prompt_tokens = estimate_prompt_tokens(prompt)
-        logging.info("프롬프트 길이: %d자, 추정 토큰=%d", len(prompt), prompt_tokens)
-
-        # 하드 가드: 안전 상한 적용 (요청에서 오버라이드 가능)
-        max_tokens = int(request.get('max_prompt_tokens', DEFAULT_MAX_PROMPT_TOKENS))
-        max_chars = int(request.get('max_prompt_chars', DEFAULT_MAX_PROMPT_CHARS))
-        logging.info(
-            "프롬프트 상한 설정: max_tokens=%d, max_chars=%d",
-            max_tokens, max_chars
-        )
-        if prompt_tokens > max_tokens or len(prompt) > max_chars:
-            logging.warning(
-                "프롬프트 상한 초과: tokens=%d/%d, chars=%d/%d → 자동 축약",
-                prompt_tokens, max_tokens, len(prompt), max_chars
-            )
-            prompt, clamped = clamp_prompt(prompt, max_chars)
-            logging.info("프롬프트 축약 결과: 길이=%d자, clamped=%s", len(prompt), clamped)
+        logging.info("프롬프트 길이: %d자, test_mode=%s", len(prompt), test_mode)
         
         try:
-            t0 = time.perf_counter()
-            llm_analysis = query_llm(prompt, enable_mock=False)
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            try:
-                import json as _json  # 지역 import로 안전 사용
-                result_size = len(_json.dumps(llm_analysis, ensure_ascii=False).encode('utf-8')) if isinstance(llm_analysis, (dict, list)) else len(str(llm_analysis).encode('utf-8'))
-            except Exception:
-                result_size = -1
-            logging.info(
-                "LLM 호출 완료: 소요=%.1fms, 결과타입=%s, 결과크기=%dB",
-                elapsed_ms,
-                type(llm_analysis),
-                result_size,
-            )
-            if isinstance(llm_analysis, dict):
-                logging.info("LLM 결과 키: %s", list(llm_analysis.keys()))
+            llm_analysis = query_llm(prompt, enable_mock=test_mode)
+            logging.info("LLM 결과 키: %s", list(llm_analysis.keys()) if isinstance(llm_analysis, dict) else type(llm_analysis))
         except ConnectionError as e:
-            # 실패 컨텍스트 로깅(프롬프트 일부, 상한값, 다운샘플링 여부)
-            prompt_head = (prompt or "")[:1000]
-            logging.error(
-                "LLM 호출 실패: %s\n- prompt head: %s\n- limits: tokens=%d, chars=%d\n- downsample: n-1=%s, n=%s",
-                e,
-                prompt_head,
-                max_tokens,
-                max_chars,
-                n1_ds_applied,
-                n_ds_applied,
-            )
-            # 모킹 제거: 실패 시 상위로 예외 전파
-            raise
+            if test_mode:
+                logging.warning("LLM 연결 실패하지만 test_mode이므로 가상 응답 생성: %s", e)
+                llm_analysis = generate_mock_llm_response(processed_df, is_test_mode=True)
+            else:
+                raise
 
         # '특정 peg 분석' 처리: preference / peg_definitions / selected_pegs
         try:
@@ -1596,23 +1325,32 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             if unique_selected:
                 subset_df = processed_df[processed_df['peg_name'].isin(unique_selected)].copy()
                 # LLM에 보낼 수 있는 행수/토큰 보호를 위해 상한을 둘 수 있음(예: 500행). 필요 시 조정
-                max_rows = int(request.get('specific_max_rows', DEFAULT_SPECIFIC_MAX_ROWS))
+                max_rows = int(request.get('specific_max_rows', 500))
                 if len(subset_df) > max_rows:
                     logging.warning("선택 PEG 서브셋이 %d행으로 큼. 상한 %d행으로 절단", len(subset_df), max_rows)
                     subset_df = subset_df.head(max_rows)
 
                 sp_prompt = create_llm_analysis_prompt_specific_pegs(subset_df, unique_selected, n1_text, n_text)
-                sp_tokens = estimate_prompt_tokens(sp_prompt)
-                logging.info("특정 PEG 프롬프트 길이: %d자, 추정 토큰=%d, 선택 PEG=%d개", len(sp_prompt), sp_tokens, len(unique_selected))
-                if sp_tokens > max_tokens or len(sp_prompt) > max_chars:
-                    logging.warning(
-                        "특정 PEG 프롬프트 상한 초과: tokens=%d/%d, chars=%d/%d → 축약",
-                        sp_tokens, max_tokens, len(sp_prompt), max_chars
-                    )
-                    sp_prompt, sp_clamped = clamp_prompt(sp_prompt, max_chars)
-                    logging.info("특정 PEG 프롬프트 축약: 길이=%d자, clamped=%s", len(sp_prompt), sp_clamped)
+                logging.info("특정 PEG 프롬프트 길이: %d자, 선택 PEG=%d개", len(sp_prompt), len(unique_selected))
                 
-                sp_result = query_llm(sp_prompt, enable_mock=False)
+                try:
+                    sp_result = query_llm(sp_prompt, enable_mock=test_mode)
+                except ConnectionError as e:
+                    if test_mode:
+                        logging.warning("특정 PEG LLM 연결 실패하지만 test_mode이므로 가상 응답 생성: %s", e)
+                        sp_result = {
+                            "summary": f"테스트 모드: {len(unique_selected)}개 선택 PEG에 대한 가상 분석 결과입니다.",
+                            "peg_insights": {peg: f"{peg}에 대한 테스트 분석 결과" for peg in unique_selected[:5]},  # 최대 5개만
+                            "prioritized_actions": [
+                                {
+                                    "priority": "P1",
+                                    "action": f"선택된 PEG {len(unique_selected)}개에 대한 상세 검토",
+                                    "details": "실제 운영 환경에서 재분석 필요"
+                                }
+                            ]
+                        }
+                    else:
+                        raise
                 
                 if isinstance(llm_analysis, dict):
                     llm_analysis['specific_peg_analysis'] = {
@@ -1683,6 +1421,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         # 분석 섹션에 LLM 결과 + 차트/가정/원본 메타 포함
         analysis_section = {
             **(llm_analysis if isinstance(llm_analysis, dict) else {"summary": str(llm_analysis)}),
+            "chart_overall_base64": charts_base64.get("overall"),
             "assumptions": {"same_environment": True},
             "source_metadata": {
                 "db_config": db,
@@ -1693,19 +1432,10 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             }
         }
 
-        # 하이브리드 저장 전략: 요약/압축 원본 생성
-        results_overview = build_results_overview(llm_analysis)
-        analysis_raw_compact = compact_analysis_raw(
-            llm_analysis,
-            max_str=int(request.get('max_raw_str', DEFAULT_MAX_RAW_STR)),
-            max_array=int(request.get('max_raw_array', DEFAULT_MAX_RAW_ARRAY)),
-        )
-
-        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId)
+        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId, analysisType)
         result_payload = {
-            # 서버 Pydantic 모델은 by_alias=False로 저장하므로 snake_case 보장
-            "analysis_type": "llm_analysis",
-            "analysisDate": datetime.datetime.now(tz=_get_default_tzinfo()).isoformat(),
+            "analysisType": "llm_analysis",
+            "analysisDate": n_end.isoformat(),
             "neId": ne_id_repr,
             "cellId": cell_id_repr,
             "status": "success",
@@ -1713,18 +1443,8 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             "results": [],
             "stats": stats_records,
             "analysis": analysis_section,
-            "resultsOverview": results_overview,
-            "analysisRawCompact": analysis_raw_compact,
             "request_params": request_params
         }
-        try:
-            import json as _json
-            payload_size = len(_json.dumps(result_payload, ensure_ascii=False).encode('utf-8'))
-            logging.info("백엔드 전송 payload 크기: %dB, stats_rows=%d", payload_size, len(result_payload.get("stats", [])))
-            if payload_size > 1 * 1024 * 1024:
-                logging.warning("payload 크기 1MB 초과: %dB", payload_size)
-        except Exception as _e:
-            logging.warning("payload 크기 계산 실패: %s", _e)
         logging.info("payload 준비 완료: stats_rows=%d", len(result_payload.get("stats", [])))
 
         backend_response = None

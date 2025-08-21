@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, HTTPException, status, Query, Depends
 from typing import List, Optional
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from bson import BSON
 
 from ..db import get_analysis_collection
 from ..models.analysis import (
@@ -44,6 +45,26 @@ router = APIRouter(
         500: {"description": "Internal Server Error"}
     }
 )
+
+
+def _normalize_legacy_keys(doc: dict) -> dict:
+    """레거시 camelCase 문서를 snake_case 우선 형태로 정규화합니다."""
+    if not isinstance(doc, dict):
+        return doc
+    mapping = {
+        "analysisDate": "analysis_date",
+        "neId": "ne_id",
+        "cellId": "cell_id",
+        "analysisType": "analysis_type",
+        "resultsOverview": "results_overview",
+        "analysisRawCompact": "analysis_raw_compact",
+        "reportPath": "report_path",
+        "requestParams": "request_params",
+    }
+    for old_key, new_key in mapping.items():
+        if new_key not in doc and old_key in doc:
+            doc[new_key] = doc[old_key]
+    return doc
 
 
 @router.post(
@@ -89,6 +110,22 @@ async def create_analysis_result(
         # 데이터 준비: DB에는 snake_case 필드명으로 저장 (v2 표준 키)
         # by_alias=False로 덤프하여 camelCase alias가 아닌 원 필드명으로 저장한다
         result_dict = result.model_dump(by_alias=False, exclude_unset=True)
+
+        # MongoDB 문서 크기(16MB) 체크
+        try:
+            encoded = BSON.encode(result_dict)
+            doc_size = len(encoded)
+            max_size = 16 * 1024 * 1024
+            warn_size = 12 * 1024 * 1024
+            if doc_size > max_size:
+                logger.error(f"문서 크기 초과: size={doc_size}B > 16MB")
+                raise InvalidAnalysisDataException(
+                    f"Document too large to store ({doc_size} bytes). Please reduce payload."
+                )
+            if doc_size > warn_size:
+                logger.warning(f"문서 크기 경고: size={doc_size}B > 12MB, 축약 필요 가능")
+        except Exception as e:
+            logger.warning(f"문서 크기 체크 실패(계속 진행): {e}")
         
         # metadata 업데이트
         if "metadata" in result_dict:
@@ -206,6 +243,9 @@ async def list_analysis_results(
             "results": 1,
             "analysis_type": 1,
             "analysisType": 1,
+            # include overview by default, exclude raw compact
+            "results_overview": 1,
+            "resultsOverview": 1,
         }
         
         cursor = collection.find(filter_dict, projection)
@@ -233,7 +273,8 @@ async def list_analysis_results(
                 "cellId": cell_id_val,
                 "status": doc.get("status"),
                 "results_count": results_count,
-                "analysis_type": analysis_type_val
+                "analysis_type": analysis_type_val,
+                "results_overview": doc.get("results_overview") or doc.get("resultsOverview"),
             }
             
             items.append(item_dict)
@@ -263,7 +304,7 @@ async def list_analysis_results(
     summary="분석 결과 상세 조회",
     description="특정 ID의 분석 결과를 상세 조회합니다."
 )
-async def get_analysis_result(result_id: PyObjectId):
+async def get_analysis_result(result_id: PyObjectId, includeRaw: bool = Query(False, description="압축 원본(analysis_raw_compact) 포함 여부")):
     """
     특정 ID의 분석 결과를 상세 조회합니다.
     
@@ -279,6 +320,14 @@ async def get_analysis_result(result_id: PyObjectId):
         
         if not document:
             raise AnalysisResultNotFoundException(str(result_id))
+        
+        # 레거시 키 정규화 (camelCase → snake_case 우선)
+        document = _normalize_legacy_keys(document)
+
+        # includeRaw=false인 경우 압축 원본 제외하여 경량 응답 (두 케이스 모두 제거)
+        if not includeRaw:
+            document.pop("analysis_raw_compact", None)
+            document.pop("analysisRawCompact", None)
         
         # 응답 모델로 변환
         analysis_model = AnalysisResultModel.from_mongo(document)

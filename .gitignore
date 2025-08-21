@@ -24,12 +24,12 @@ node_modules/
 # OS specific
 .DS_Store
 
-# Task files
-# tasks.json
-# tasks/ 
-
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Task files
+# tasks.json
+# tasks/ 

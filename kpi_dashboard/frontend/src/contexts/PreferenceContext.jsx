@@ -198,24 +198,16 @@ export const PreferenceProvider = ({ children }) => {
       dispatch({ type: 'SET_LOADING', payload: true })
       logInfo('사용자 설정 로드 시작')
 
-      // TODO: API 수정되면 실제 API 호출로 변경
-      // const response = await apiClient.get('/api/preference/settings', {
-      //   params: { user_id: state.userId }
-      // })
-
-      // Mock 데이터 사용 (API 수정될 때까지 임시)
-      logInfo('Mock 데이터 사용 (API 문제로 인한 임시 조치)')
-      
-      const mockSettings = {
-        ...defaultSettings
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500)) // 로딩 시뮬레이션
+      // 실제 API 호출로 전환
+      const response = await apiClient.get('/api/preferences/self', {
+        params: { user_id: state.userId }
+      })
 
       if (!mountedRef.current) return
 
-      dispatch({ type: 'SET_SETTINGS', payload: mockSettings })
-      logInfo('사용자 설정 로드 완료', mockSettings)
+      const serverSettings = response?.data?.config || defaultSettings
+      dispatch({ type: 'SET_SETTINGS', payload: serverSettings })
+      logInfo('사용자 설정 로드 완료', serverSettings)
 
       if (state.settings.notificationSettings?.enableToasts) {
         toast.success('설정을 불러왔습니다')
@@ -245,14 +237,11 @@ export const PreferenceProvider = ({ children }) => {
       dispatch({ type: 'SET_SAVING', payload: true })
       logInfo('사용자 설정 저장 시작', settings)
 
-      // TODO: API 수정되면 실제 API 호출로 변경
-      // const response = await apiClient.put('/api/preference/settings', {
-      //   user_id: state.userId,
-      //   settings: settings
-      // })
-
-      // Mock 저장 시뮬레이션
-      await new Promise(resolve => setTimeout(resolve, 300))
+      // 실제 API 저장으로 전환
+      await apiClient.put('/api/preferences/self', {
+        user_id: state.userId,
+        config: settings
+      })
 
       if (!mountedRef.current) return
 
