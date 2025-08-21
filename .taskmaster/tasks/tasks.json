@@ -2,297 +2,169 @@
   "master": {
     "tasks": [
       {
-        "id": 55,
-        "title": "Finalize Payload Strategy & Document Schema",
-        "description": "Make the final decision on the payload strategy (C. Hybrid) and document the detailed MongoDB schema for AnalysisResultModel, including 'analysis_raw_compact' and 'results_overview'.",
-        "details": "Confirm the structure and fields for 'analysis_raw_compact' (e.g., top_k_segments, percentiles, notes) and 'results_overview' (e.g., summary, key_findings). This decision is critical for subsequent implementation.",
-        "testStrategy": "Review and approve the documented schema by relevant stakeholders.",
+        "id": 1,
+        "title": "Project Setup & Dependency Management",
+        "description": "Initialize the project environment, set up version control, define core dependencies, and establish a consistent development workflow for the new features.",
+        "details": "Create a new feature branch. Update `requirements.txt` or `pyproject.toml` to include necessary libraries such as `pymongo` for MongoDB interaction, `fastapi` or `flask` for API development, `pydantic` for data validation, and `langchain` or `llama_index` for LLM integration. Configure pre-commit hooks for code quality (e.g., Black, Flake8, isort). Set up a basic CI/CD pipeline for automated testing.",
+        "testStrategy": "Verify all dependencies are correctly installed and the project runs without basic import errors. Execute a simple 'hello world' endpoint if an API framework is used to confirm basic functionality.",
         "priority": "high",
         "dependencies": [],
-        "status": "done",
+        "status": "in-progress",
         "subtasks": []
       },
       {
-        "id": 56,
-        "title": "Define Initial Global Token/Payload Limits",
-        "description": "Establish initial values for global limits such as 'max_rows_global', 'max_chars_prompt', 'max_selected_pegs', and 'max_raw_bytes'. These values will serve as configurable parameters.",
-        "details": "Consider the MongoDB 16MB document size limit for 'max_raw_bytes' and LLM token limits for prompt-related values. Document these initial settings.",
-        "testStrategy": "Documented limits are reviewed and agreed upon by the team.",
-        "priority": "high",
-        "dependencies": [],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 57,
-        "title": "Update Pydantic Models for New Fields",
-        "description": "Modify the Pydantic models, specifically 'AnalysisResultCreate' and 'AnalysisResultModel', in FastAPI to include the new 'results_overview' and 'analysis_raw_compact' fields as optional.",
-        "details": "Ensure that Pydantic aliases for camelCase input are maintained for backward compatibility, while enforcing snake_case storage in the database.",
-        "testStrategy": "Unit tests for Pydantic model validation and serialization/deserialization with new fields and alias handling.",
+        "id": 2,
+        "title": "Extend Database Schema for Host & Relationships",
+        "description": "Modify the existing SQL database schema to include a `host` column in relevant tables and update the MongoDB payload structure to store `host_ids` and `primary_host` within `target_scope`.",
+        "details": "For SQL, add a `host_id` (e.g., UUID or string) or `host_name` column to tables like `analysis_results` and `network_elements` where host information is relevant. For MongoDB, update the `analysis_results` collection schema to include `host_ids` (array of strings/ObjectIDs) and `primary_host` (string/ObjectID) within the `target_scope` field. Ensure backward compatibility where possible.",
+        "testStrategy": "Create and execute database migration scripts. Insert sample data containing host information into both SQL and MongoDB, then query to confirm that the new host fields are correctly stored and retrievable.",
         "priority": "high",
         "dependencies": [
-          55
+          1
         ],
-        "status": "done",
+        "status": "To Do",
         "subtasks": []
       },
       {
-        "id": 58,
-        "title": "Implement Prompt Token Estimation Utility",
-        "description": "Create a utility function, e.g., 'estimate_prompt_tokens(text)', that provides a heuristic estimate of the token count for a given text string. This utility will be used before sending prompts to the LLM.",
-        "details": "The estimation can be based on character length or a more sophisticated method if a tokenization library is available for the specific LLM (Google gemini-2.5-flash).",
-        "testStrategy": "Unit tests for the utility function with various text lengths and content, verifying estimation accuracy against actual token counts (if possible) or expected heuristics.",
-        "priority": "high",
-        "dependencies": [],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 59,
-        "title": "Integrate Global Limits into LLM Prompt Generation",
-        "description": "Implement logic within 'analysis_llm.py' to apply the defined global limits ('max_rows_global', 'max_chars_prompt', 'max_selected_pegs') during the prompt construction phase.",
-        "details": "This involves checking the current prompt size/content against the limits and triggering truncation or sampling mechanisms if thresholds are exceeded.",
-        "testStrategy": "Integration tests verifying that prompts exceeding limits are correctly truncated/sampled and that the process is logged.",
+        "id": 3,
+        "title": "Implement NE/Cell ID Validation & Existing Logic Refinement",
+        "description": "Enhance existing NE ID and Cell ID validation logic, ensuring format adherence (e.g., 'nvgnb#10000' for NE) and verification against the database for existence and validity.",
+        "details": "Refactor the validation logic in `analysis_llm.py` (or relevant module) into a dedicated validation utility. Implement regex-based format checks for NE and Cell IDs. Integrate database lookups to confirm that the provided NE and Cell IDs actually exist and are active within the network inventory. Improve error messages to be specific and actionable for invalid IDs.",
+        "testStrategy": "Develop unit tests for `validate_ne_id` and `validate_cell_id` functions, covering valid, invalid format, and non-existent IDs. Conduct integration tests to ensure the validation correctly blocks API requests with invalid NE/Cell IDs.",
         "priority": "high",
         "dependencies": [
-          56,
-          58
+          1,
+          2
         ],
-        "status": "done",
+        "status": "To Do",
         "subtasks": []
       },
       {
-        "id": 60,
-        "title": "Develop Token-Aware Chunking for Table Data",
-        "description": "Implement a mechanism to summarize or sample large table datasets (e.g., KPI time series, PEG data) to reduce their token footprint when included in the LLM prompt.",
-        "details": "Focus on retaining critical information such as summary statistics, representative segments (max/min/outliers), and top-K KPIs/PEGs.",
-        "testStrategy": "Unit tests for the chunking logic, ensuring data reduction while preserving key insights. Integration tests with LLM calls to confirm token reduction.",
+        "id": 4,
+        "title": "Develop Host Filter Validation & Integration",
+        "description": "Implement new validation logic for Host identifiers (IP address, hostname) including format validation, existence checks against the database, and initial integration into the filtering mechanism.",
+        "details": "Create a `validate_host_id` function. Utilize Python's `ipaddress` module for robust IP address validation and regular expressions for hostname pattern matching. Query the network inventory database (SQL or MongoDB) to confirm the host's existence and operational status. Integrate this validation into the existing data filtering pipeline, specifically updating SQL WHERE conditions (e.g., `line 443-467`) to include host filtering.",
+        "testStrategy": "Write unit tests for `validate_host_id` covering valid IPs, invalid IPs, valid hostnames, invalid hostnames, and non-existent hosts. Perform integration tests to confirm that host filtering works correctly with valid inputs and rejects invalid ones at the API level.",
         "priority": "high",
         "dependencies": [
-          59
+          2,
+          3
         ],
-        "status": "done",
+        "status": "To Do",
         "subtasks": []
       },
       {
-        "id": 61,
-        "title": "Develop Token-Aware Chunking for Chart Base64",
-        "description": "Modify the chart generation process to include only the most essential chart (e.g., an overall summary chart) as Base64 directly in the LLM prompt.",
-        "details": "For detailed charts, provide links or file paths instead of embedding them directly to minimize token usage. This reduces the number of Base64 images sent to the LLM.",
-        "testStrategy": "Verify that only the designated 'overall' chart is embedded and that other charts are referenced by path. Confirm token reduction in LLM calls.",
+        "id": 5,
+        "title": "Implement Integrated NE-Cell-Host Relationship Validation",
+        "description": "Develop the `validate_ne_cell_host_filters()` function to perform comprehensive validation of NE, Cell ID, and Host filters, including their inter-relationships and coverage analysis.",
+        "details": "This function will orchestrate individual validations (from Tasks 3 & 4). It must verify that specified Cells are valid children of the given NEs, and that Hosts are logically/physically associated with the provided NEs/Cells. Implement database queries to establish and confirm these complex relationships. The function should return a structured result including individual target validation status, relationship mapping, coverage analysis, and any warnings or errors.",
+        "testStrategy": "Create extensive unit tests for `validate_ne_cell_host_filters()` with various combinations: valid, partially valid, completely invalid, and inconsistent relationships (e.g., Cell not belonging to NE, Host not associated with specified NE/Cell). Test edge cases such as empty filters or a large number of filters.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4
+        ],
+        "status": "To Do",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Enhance Error Handling for Target Validation",
+        "description": "Implement robust error handling mechanisms for target validation failures, including custom exceptions (`TargetValidationError`, `HostValidationError`) and a centralized handler (`handle_multi_target_validation_errors`).",
+        "details": "Define custom exception classes (e.g., `TargetValidationError`, `HostValidationError`) inheriting from a base application exception. Modify validation functions (Tasks 3, 4, 5) to raise these specific exceptions upon failure. Implement a global exception handler (e.g., using FastAPI's `ExceptionHandler` or Flask's `errorhandler`) to catch these exceptions and return standardized, informative JSON error responses to the client, including details on which specific target failed validation.",
+        "testStrategy": "Functional tests to trigger various validation errors (e.g., invalid NE format, non-existent Cell, unassociated Host). Verify that the API returns the correct HTTP status code (e.g., 400 Bad Request) and a well-structured, informative error message that clearly indicates the validation failure.",
         "priority": "medium",
         "dependencies": [
-          59
+          5
         ],
-        "status": "cancelled",
+        "status": "To Do",
         "subtasks": []
       },
       {
-        "id": 62,
-        "title": "Refine LLM Prompt Templates",
-        "description": "Review and optimize existing prompt templates to remove redundant instructions, duplicate metadata, and verbose fixed text sections to minimize overall token usage.",
-        "details": "Focus on conciseness, clarity, and avoiding unnecessary repetition in the prompt structure.",
-        "testStrategy": "Manual review of updated prompt templates. Compare token counts of old vs. new templates with similar data inputs.",
-        "priority": "medium",
-        "dependencies": [],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 63,
-        "title": "Add Detailed LLM Process Logging",
-        "description": "Implement comprehensive logging in 'analysis_llm.py' to record key metrics at various stages of prompt generation and LLM interaction.",
-        "details": "Log input row counts, applied truncation/sampling rules, estimated token counts, and final prompt length. Use INFO/WARN levels as appropriate for monitoring and debugging.",
-        "testStrategy": "Review logs during development and testing to ensure all required information is captured accurately.",
-        "priority": "high",
-        "dependencies": [
-          58,
-          59,
-          60,
-          61,
-          62
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 64,
-        "title": "Implement 'results_overview' Generation Logic",
-        "description": "Develop the logic within 'analysis_llm.py' to parse the LLM's raw output and extract key findings, summaries, and alerts, structuring them into the 'results_overview' field.",
-        "details": "This field should provide a concise, human-readable summary suitable for quick display in dashboards.",
-        "testStrategy": "Unit tests for the parsing and summarization logic. Integration tests to verify 'results_overview' is correctly populated after LLM calls.",
-        "priority": "high",
-        "dependencies": [
-          57
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 65,
-        "title": "Implement 'analysis_raw_compact' Generation Logic",
-        "description": "Develop the logic to process and store a compact or summarized version of the raw analysis data (e.g., top-k segments, percentiles, notes) into the 'analysis_raw_compact' field.",
-        "details": "Ensure this field adheres to the defined size limits ('max_raw_bytes') and contains sufficient information for forensic analysis without being excessively large.",
-        "testStrategy": "Unit tests for the compaction logic. Integration tests to verify 'analysis_raw_compact' is correctly populated and within size limits.",
-        "priority": "high",
-        "dependencies": [
-          57,
-          56
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 66,
-        "title": "Enhance '_to_stats()' Function",
-        "description": "Modify the '_to_stats()' function to optionally include additional statistical measures like 'count', 'std' (standard deviation), 'min', and 'max' alongside 'avg' for KPIs.",
-        "details": "This enhancement provides richer statistical context for the 'stats' array stored in the database.",
-        "testStrategy": "Unit tests for '_to_stats()' to confirm correct calculation and inclusion of new statistical measures.",
-        "priority": "medium",
-        "dependencies": [],
-        "status": "todo",
-        "subtasks": []
-      },
-      {
-        "id": 67,
-        "title": "Update POST /api/analysis/results Endpoint",
-        "description": "Ensure the FastAPI endpoint for creating analysis results correctly receives and processes the new 'results_overview' and 'analysis_raw_compact' fields from the incoming payload.",
-        "details": "Verify Pydantic validation and correct mapping of these fields to the MongoDB schema during the save operation.",
-        "testStrategy": "API integration tests for POST requests, verifying that new fields are correctly stored in MongoDB.",
-        "priority": "high",
-        "dependencies": [
-          57,
-          64,
-          65
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 68,
-        "title": "Update GET /api/analysis/results (List) Endpoint",
-        "description": "Modify the FastAPI router for the analysis results list view to include 'results_overview' in the default projection and explicitly exclude 'analysis_raw_compact' to keep responses lightweight.",
-        "details": "Optimize query performance for list retrieval by only fetching essential fields.",
-        "testStrategy": "API integration tests for GET list requests, verifying the response structure and performance. Ensure 'analysis_raw_compact' is not present by default.",
-        "priority": "high",
-        "dependencies": [
-          57
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 69,
-        "title": "Update GET /api/analysis/results/{id} (Detail) Endpoint",
-        "description": "Implement support for a query parameter (e.g., '?includeRaw=true') to optionally include the 'analysis_raw_compact' field in the detailed response for a specific analysis result.",
-        "details": "The default response for the detail endpoint should exclude 'analysis_raw_compact' to maintain performance.",
-        "testStrategy": "API integration tests for GET detail requests, verifying both default behavior and behavior with '?includeRaw=true' parameter.",
-        "priority": "high",
-        "dependencies": [
-          57
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 70,
-        "title": "Implement MongoDB Document Size Check",
-        "description": "Add a check before saving documents to MongoDB to ensure they do not exceed the 16MB document size limit. Log warnings if the document size approaches or exceeds this limit.",
-        "details": "Consider implementing compression or partial storage strategies if documents consistently hit the limit, though initial focus is on logging.",
-        "testStrategy": "Unit tests for the size check logic. Integration tests simulating large documents to trigger warning logs.",
-        "priority": "high",
-        "dependencies": [
-          67
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 71,
-        "title": "Develop A/B Testing Framework",
-        "description": "Create a framework to run 'analysis_llm.py' with both old and new configurations (token stabilization, payload strategy) using identical inputs.",
-        "details": "The framework should capture and compare key metrics such as LLM token usage, processing time, and generated payload size for both paths.",
-        "testStrategy": "Verify the framework can execute both old and new paths and collect the required metrics accurately.",
-        "priority": "high",
-        "dependencies": [
-          63,
-          67
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 72,
-        "title": "Conduct A/B Testing & Analyze Results",
-        "description": "Execute the A/B tests using the developed framework and analyze the collected data to compare performance, token efficiency, and payload size between the old and new paths.",
-        "details": "Generate a report summarizing findings, identifying improvements and any regressions.",
-        "testStrategy": "Review the A/B test report and confirm that the acceptance criteria for token usage and payload size are met.",
-        "priority": "high",
-        "dependencies": [
-          71
-        ],
-        "status": "todo",
-        "subtasks": []
-      },
-      {
-        "id": 73,
-        "title": "Implement End-to-End Integration Test",
-        "description": "Develop an E2E test case that simulates the full analysis flow: triggering LLM analysis ('/api/analysis/trigger-llm-analysis'), MongoDB storage, and subsequent API retrieval ('GET /api/analysis/results' list and detail views).",
-        "details": "Verify data integrity, correct API responses, and overall system functionality.",
-        "testStrategy": "Execute the E2E test successfully, ensuring all components interact as expected and data is consistent.",
-        "priority": "high",
-        "dependencies": [
-          67,
-          68,
-          69
-        ],
-        "status": "todo",
-        "subtasks": []
-      },
-      {
-        "id": 74,
-        "title": "Verify Legacy Document Compatibility",
-        "description": "Ensure that existing documents in MongoDB (potentially with camelCase keys or older structures) can still be correctly retrieved and processed by the updated backend.",
-        "details": "Test with a representative sample of legacy data. Document any necessary migration steps or long-term compatibility plans if full backward compatibility is not feasible.",
-        "testStrategy": "Run API queries against a database containing legacy documents and verify correct data retrieval and parsing.",
-        "priority": "high",
-        "dependencies": [
-          68,
-          69
-        ],
-        "status": "todo",
-        "subtasks": []
-      },
-      {
-        "id": 75,
-        "title": "Set Up Backend Monitoring for Response/Document Size",
-        "description": "Integrate metrics collection for backend API response sizes and MongoDB stored document sizes into the existing monitoring system.",
-        "details": "Configure alerts for defined warning thresholds to proactively identify potential issues with payload bloat.",
-        "testStrategy": "Verify that metrics are being collected and displayed in the monitoring dashboard, and that alerts trigger correctly when thresholds are met.",
+        "id": 7,
+        "title": "Extend MongoDB Schema for Comprehensive Host Metadata",
+        "description": "Further expand the MongoDB payload structure to include detailed Host metadata, such as `target_combinations` (NE-Cell-Host tuples), `filter_metadata` with Host coverage, and `relationship_coverage`.",
+        "details": "Update the MongoDB schema definition (e.g., using Pydantic models for data validation before saving). Add `target_combinations` as an array of embedded documents (e.g., `[{'ne_id': '...', 'cell_id': '...', 'host_id': '...'}]`). Extend `filter_metadata` to include `host_coverage_info` (e.g., percentage of hosts covered). Add `relationship_coverage` to store the detailed results of the NE-Cell-Host association validation.",
+        "testStrategy": "Develop unit tests for the updated MongoDB schema definition. Conduct integration tests to save analysis results with the extended payload and verify that all new fields are correctly populated, stored, and retrievable in MongoDB.",
         "priority": "medium",
         "dependencies": [
-          70
+          2,
+          5
         ],
-        "status": "todo",
+        "status": "To Do",
         "subtasks": []
       },
       {
-        "id": 76,
-        "title": "Implement Enhanced Error Logging for LLM Failures",
-        "description": "Improve error logging for LLM call failures to include relevant context such as partial prompts, applied upper limits, and summaries of sampling results.",
-        "details": "This will significantly aid in debugging 'max token exceed' errors or other LLM-related issues by providing more insight into the state at the time of failure.",
-        "testStrategy": "Simulate LLM failures and verify that detailed context is captured in the logs.",
+        "id": 8,
+        "title": "Optimize MongoDB Indexing for Host-based Queries",
+        "description": "Create and optimize MongoDB indexes to support efficient querying based on Host IDs, including compound indexes with NE/Cell IDs and array indexing for `target_combinations`.",
+        "details": "Analyze anticipated query patterns for the new API endpoints (Task 10). Create compound indexes on fields like `(ne_id, cell_id, host_id)` or `(host_id, ne_id, cell_id)` to optimize multi-field searches. Implement array indexing on the `target_combinations` field to enable efficient lookups within the embedded documents. Use `db.collection.explain()` to verify index usage and query performance.",
+        "testStrategy": "Perform performance tests using `db.collection.find().explain()` to confirm index utilization for various query types. Benchmark queries with and without the new indexes to demonstrate measurable performance improvements for host-based and multi-target searches.",
         "priority": "medium",
         "dependencies": [
-          63
+          7
         ],
-        "status": "todo",
+        "status": "To Do",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Enhance POST API Endpoint for Multi-Target Payload Validation",
+        "description": "Improve the `/api/analysis/results/` POST endpoint to validate the structure and content of the incoming analysis result payload, specifically for multi-target (NE/Cell/Host) metadata and data consistency.",
+        "details": "Integrate the `validate_ne_cell_host_filters()` function (from Task 5) into the POST endpoint's request processing pipeline. Utilize a data validation library like Pydantic to define and enforce the expected payload schema, ensuring all required fields (including new Host-related ones) are present and correctly typed. Add logic to verify consistency between the `ne/cellid/host` metadata provided and the actual `stats` data within the payload.",
+        "testStrategy": "Conduct API integration tests by sending valid and various types of invalid payloads (e.g., missing required fields, incorrect data types, inconsistent metadata) to the POST endpoint. Verify correct data persistence for valid payloads and appropriate, informative error responses for invalid ones.",
+        "priority": "medium",
+        "dependencies": [
+          5,
+          7
+        ],
+        "status": "To Do",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement New Query API Endpoints for Host & Multi-Target Search",
+        "description": "Develop new GET API endpoints to support flexible querying of analysis results by NE, Cell, and Host combinations, including host-specific performance summaries and retrieval of the latest results per combination.",
+        "details": "Create new RESTful endpoints, such as `/api/analysis/results/by-target`, that accept query parameters for `ne_id`, `cell_id`, and `host_id`. Implement logic to construct efficient MongoDB queries leveraging the new indexes (Task 8). Add a dedicated endpoint for `host_performance_summary` that aggregates relevant host metrics. Ensure support for retrieving the 'latest' analysis result for a given target combination (NE+Cell+Host).",
+        "testStrategy": "Perform comprehensive API integration tests for all new query endpoints. Test with single filters, multiple filters, and various combinations. Verify that the correct and complete data is returned and that query performance meets the specified SLA (e.g., < 800ms).",
+        "priority": "medium",
+        "dependencies": [
+          8,
+          9
+        ],
+        "status": "To Do",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Develop Host-Specific Prompt Templates & Context Integration",
+        "description": "Create and integrate prompt templates for the LLM that are specifically tailored for analyzing data related to a particular NE, Cell, and Host combination, incorporating their unique characteristics.",
+        "details": "Design dynamic prompt templates that inject specific contextual information about the target NE (e.g., location, capacity, frequency), Cell (e.g., sector, coverage, adjacent cells), and Host (e.g., hardware specifications, current load, connectivity status). Implement a data retrieval mechanism to gather this detailed metadata from the database before constructing the prompt. Utilize a templating engine (e.g., Jinja2) or an LLM framework's built-in prompt templating capabilities (e.g., LangChain's `PromptTemplate`).",
+        "testStrategy": "Develop unit tests for prompt generation with various NE/Cell/Host inputs, verifying that the generated prompt includes all relevant contextual information. Conduct manual review of LLM outputs to assess the relevance and accuracy of the analysis based on the new, enriched prompts.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "To Do",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Extend LLM Result Interpretation & Multi-Dimensional Analysis",
+        "description": "Enhance the LLM's output structure and post-processing to include detailed Host performance analysis, integration analysis (NE-Cell synergy, Host infrastructure impact), and multi-dimensional ranking.",
+        "details": "Define a new, expanded output schema for the LLM analysis results. This schema should include dedicated fields such as `host_performance` (e.g., resource utilization, infrastructure health, bottleneck analysis), `integration_analysis` (e.g., NE-Cell synergy insights, Host infrastructure impact on network performance), and `multi_dimensional_ranking` (e.g., individual scores for NE, Cell, Host, and a combined overall score). Implement post-processing logic to parse the LLM's raw text output into this structured JSON format and perform any necessary calculations for ranking or aggregation.",
+        "testStrategy": "Perform integration tests where the LLM is invoked with the new prompts, and its output is then parsed. Verify that the structured output contains all expected Host-related analysis, integration insights, and ranking metrics. Conduct manual review of the quality and accuracy of the LLM's generated insights.",
+        "priority": "medium",
+        "dependencies": [
+          11
+        ],
+        "status": "To Do",
         "subtasks": []
       }
     ],
     "metadata": {
-      "created": "2025-08-08T16:22:51.535Z",
-      "updated": "2025-08-21T14:37:05.334Z",
+      "created": "2025-08-21T16:41:39.547Z",
+      "updated": "2025-08-21T16:42:27.597Z",
       "description": "Tasks for master context"
     }
   }

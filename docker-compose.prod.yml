@@ -1,0 +1,235 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: kpi-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    networks:
+      - kpi-network
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./kpi_dashboard/backend/postgres-init:/docker-entrypoint-initdb.d:ro
+    # 프로덕션에서는 포트 노출하지 않음 (보안)
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mongo:
+    image: mongo:7
+    container_name: kpi-mongo-prod
+    restart: unless-stopped
+    networks:
+      - kpi-network
+    volumes:
+      - mongodata_prod:/data/db
+    # 프로덕션에서는 포트 노출하지 않음 (보안)
+    # ports:
+    #   - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  backend:
+    build:
+      context: ./kpi_dashboard/backend
+      target: production
+    image: kpi-backend:prod
+    container_name: kpi-backend-prod
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      # 환경 설정
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+      ENABLE_JSON_LOGS: "true"
+      
+      # 데이터베이스 설정
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-kpi_prod}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      
+      # 보안 설정
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET: ${JWT_SECRET:-}
+      
+      # API 키들 (선택적)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      
+      # 성능 설정
+      WORKERS: ${WORKERS:-4}
+      MAX_CONNECTIONS: ${MAX_CONNECTIONS:-100}
+      
+    networks:
+      - kpi-network
+    volumes:
+      - backend_logs:/app/logs
+      - backend_data:/app/data
+    # 내부 네트워크만 사용 (reverse proxy 뒤에서 실행)
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  frontend:
+    build:
+      context: ./kpi_dashboard/frontend
+      target: production
+      args:
+        VITE_API_BASE_URL: ${FRONTEND_API_URL:-https://api.yourdomain.com}
+    image: kpi-frontend:prod
+    container_name: kpi-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # 런타임 환경 설정
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://backend:8000}
+      NODE_ENV: production
+    networks:
+      - kpi-network
+    volumes:
+      - frontend_logs:/var/log/nginx
+    # 내부 네트워크만 사용 (reverse proxy 뒤에서 실행)
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # Reverse Proxy (Nginx)
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: kpi-nginx-prod
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - kpi-network
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 모니터링 (선택적)
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: kpi-prometheus
+    restart: unless-stopped
+    networks:
+      - kpi-network
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    expose:
+      - "9090"
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: kpi-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    networks:
+      - kpi-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    expose:
+      - "3000"
+    profiles:
+      - monitoring
+
+networks:
+  kpi-network:
+    driver: bridge
+    name: kpi-network
+
+volumes:
+  mongodata_prod:
+    name: kpi_mongodata_prod
+  pgdata_prod:
+    name: kpi_pgdata_prod
+  backend_logs:
+    name: kpi_backend_logs
+  backend_data:
+    name: kpi_backend_data
+  frontend_logs:
+    name: kpi_frontend_logs
+  nginx_logs:
+    name: kpi_nginx_logs
+  prometheus_data:
+    name: kpi_prometheus_data
+  grafana_data:
+    name: kpi_grafana_data
