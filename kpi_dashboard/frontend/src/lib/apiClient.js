@@ -95,4 +95,163 @@ export const testDatabaseConnection = async (dbConfig) => {
   }
 }
 
+// === 사용자 설정 동기화 API 함수들 ===
+
+/**
+ * 서버에서 사용자 설정을 조회합니다 (GET /api/preference/settings)
+ * @param {string} userId - 사용자 ID
+ * @returns {Promise} 사용자 설정 데이터
+ */
+export const getUserPreferences = async (userId = 'default') => {
+  console.log('📥 사용자 설정 조회:', { userId })
+  
+  try {
+    const response = await apiClient.get('/api/preference/settings', {
+      params: { user_id: userId }
+    })
+    
+    console.log('✅ 사용자 설정 조회 성공')
+    return { success: true, data: response.data }
+  } catch (error) {
+    // 404는 정상적인 경우 (처음 사용자)
+    if (error?.response?.status === 404) {
+      console.log('ℹ️ 사용자 설정이 없음 (신규 사용자)')
+      return { success: true, data: null, isNew: true }
+    }
+    
+    console.error('❌ 사용자 설정 조회 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to get preferences' 
+    }
+  }
+}
+
+/**
+ * 서버에 사용자 설정을 저장합니다 (PUT /api/preference/settings)
+ * @param {string} userId - 사용자 ID
+ * @param {Object} preferenceData - 저장할 설정 데이터
+ * @returns {Promise} 저장 결과
+ */
+export const saveUserPreferences = async (userId = 'default', preferenceData) => {
+  console.log('📤 사용자 설정 저장:', { userId, hasData: !!preferenceData })
+  
+  try {
+    const response = await apiClient.put('/api/preference/settings', preferenceData, {
+      params: { user_id: userId }
+    })
+    
+    console.log('✅ 사용자 설정 저장 성공')
+    return { success: true, data: response.data }
+  } catch (error) {
+    console.error('❌ 사용자 설정 저장 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to save preferences' 
+    }
+  }
+}
+
+/**
+ * 서버에 새로운 사용자 설정을 생성합니다 (POST /api/preference/settings)
+ * @param {Object} preferenceData - 생성할 설정 데이터 (user_id 포함)
+ * @returns {Promise} 생성 결과
+ */
+export const createUserPreferences = async (preferenceData) => {
+  console.log('🆕 사용자 설정 생성:', { userId: preferenceData.user_id || preferenceData.userId })
+  
+  try {
+    const response = await apiClient.post('/api/preference/settings', preferenceData)
+    
+    console.log('✅ 사용자 설정 생성 성공')
+    return { success: true, data: response.data }
+  } catch (error) {
+    console.error('❌ 사용자 설정 생성 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to create preferences' 
+    }
+  }
+}
+
+/**
+ * 서버에서 사용자 설정을 삭제합니다 (DELETE /api/preference/settings)
+ * @param {string} userId - 사용자 ID
+ * @returns {Promise} 삭제 결과
+ */
+export const deleteUserPreferences = async (userId = 'default') => {
+  console.log('🗑️ 사용자 설정 삭제:', { userId })
+  
+  try {
+    await apiClient.delete('/api/preference/settings', {
+      params: { user_id: userId }
+    })
+    
+    console.log('✅ 사용자 설정 삭제 성공')
+    return { success: true }
+  } catch (error) {
+    console.error('❌ 사용자 설정 삭제 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to delete preferences' 
+    }
+  }
+}
+
+/**
+ * 설정 내보내기 (GET /api/preference/export)
+ * @param {string} userId - 사용자 ID
+ * @returns {Promise} 내보내기 결과
+ */
+export const exportUserPreferences = async (userId = 'default') => {
+  console.log('📦 사용자 설정 내보내기:', { userId })
+  
+  try {
+    const response = await apiClient.get('/api/preference/export', {
+      params: { user_id: userId }
+    })
+    
+    console.log('✅ 사용자 설정 내보내기 성공')
+    return { success: true, data: response.data }
+  } catch (error) {
+    console.error('❌ 사용자 설정 내보내기 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to export preferences' 
+    }
+  }
+}
+
+/**
+ * 설정 가져오기 (POST /api/preference/import)
+ * @param {string} userId - 사용자 ID
+ * @param {File} file - 가져올 설정 파일
+ * @param {boolean} overwrite - 기존 설정 덮어쓰기 여부
+ * @returns {Promise} 가져오기 결과
+ */
+export const importUserPreferences = async (userId = 'default', file, overwrite = false) => {
+  console.log('📥 사용자 설정 가져오기:', { userId, fileName: file.name, overwrite })
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await apiClient.post('/api/preference/import', formData, {
+      params: { user_id: userId, overwrite },
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    
+    console.log('✅ 사용자 설정 가져오기 성공')
+    return { success: true, data: response.data }
+  } catch (error) {
+    console.error('❌ 사용자 설정 가져오기 실패:', error)
+    return { 
+      success: false, 
+      error: error?.response?.data?.detail || error?.message || 'Failed to import preferences' 
+    }
+  }
+}
+
 
