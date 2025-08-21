@@ -27,6 +27,8 @@ Cell 성능 LLM 분석기 (시간범위 입력 + PostgreSQL 집계 + 통합 분�
 }
 """
 
+from __future__ import annotations
+
 import os
 import io
 import json
