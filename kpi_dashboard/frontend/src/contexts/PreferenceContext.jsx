@@ -45,6 +45,7 @@ import {
 import {
   logInfo as logInfoUtil,
   logError as logErrorUtil,
+  logDebug,
   logSyncStart,
   logSyncSuccess,
   logSyncError
