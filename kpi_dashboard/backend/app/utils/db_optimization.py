@@ -92,6 +92,40 @@ async def create_preference_indexes(db: AsyncIOMotorDatabase):
     """
     collection = db.user_preferences
     
+    # 인덱스 생성 전에 중복 데이터 정리
+    try:
+        # user_id가 null인 중복 데이터 확인 및 정리
+        null_user_docs = await collection.find({"user_id": None}).to_list(length=None)
+        if len(null_user_docs) > 1:
+            logger.warning(f"user_id가 null인 중복 데이터 {len(null_user_docs)}개 발견, 첫 번째만 유지하고 나머지 삭제")
+            # 첫 번째 문서만 유지하고 나머지 삭제
+            docs_to_delete = null_user_docs[1:]
+            for doc in docs_to_delete:
+                await collection.delete_one({"_id": doc["_id"]})
+            logger.info(f"중복 데이터 {len(docs_to_delete)}개 삭제 완료")
+        
+        # user_id가 null이 아닌 중복 데이터도 확인
+        pipeline = [
+            {"$match": {"user_id": {"$ne": None}}},
+            {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "docs": {"$push": "$_id"}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        
+        duplicates = await collection.aggregate(pipeline).to_list(length=None)
+        for dup in duplicates:
+            user_id = dup["_id"]
+            doc_ids = dup["docs"]
+            logger.warning(f"user_id '{user_id}'의 중복 데이터 {len(doc_ids)}개 발견, 첫 번째만 유지하고 나머지 삭제")
+            # 첫 번째 문서만 유지하고 나머지 삭제
+            docs_to_delete = doc_ids[1:]
+            for doc_id in docs_to_delete:
+                await collection.delete_one({"_id": doc_id})
+            logger.info(f"user_id '{user_id}'의 중복 데이터 {len(docs_to_delete)}개 삭제 완료")
+            
+    except Exception as e:
+        logger.error(f"중복 데이터 정리 중 오류 발생: {e}")
+        # 중복 데이터 정리 실패해도 인덱스 생성은 시도
+    
     indexes = [
         # 1. 사용자 ID 기본 인덱스 (유니크)
         IndexModel([("user_id", ASCENDING)], unique=True, name="idx_user_id_unique"),
