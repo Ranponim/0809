@@ -88,6 +88,12 @@ export const usePreference = () => {
 
   const validateSettings = useCallback((settings, section = null) => {
     const errors = {}
+    
+    // section이 지정되었지만 해당 규칙이 없으면 검증을 건너뜀
+    if (section && !validationRules[section]) {
+      return errors
+    }
+    
     const rulesToCheck = section ? { [section]: validationRules[section] } : validationRules
 
     Object.entries(rulesToCheck).forEach(([sectionKey, sectionRules]) => {
@@ -179,7 +185,7 @@ export const usePreference = () => {
         }
       : { ...context.settings, ...newSettings }
 
-    // 유효성 검증
+    // 유효성 검증 (section이 지정된 경우 해당 섹션만 검증)
     const validationErrors = validateSettings(settingsToValidate, section)
     validationErrorsRef.current = validationErrors
 
@@ -347,11 +353,11 @@ export const usePreference = () => {
     exportSettings,
     importSettings,
     
-    // 빠른 접근을 위한 별칭들
-    dashboardSettings: context.settings.dashboardSettings,
-    statisticsSettings: context.settings.statisticsSettings,
-    notificationSettings: context.settings.notificationSettings,
-    generalSettings: context.settings.generalSettings
+    // 빠른 접근을 위한 별칭들 - PRD 호환 구조에서 추출
+    dashboardSettings: context.settings.preferences?.dashboard || context.settings.dashboardSettings || {},
+    statisticsSettings: context.settings.preferences?.charts || context.settings.statisticsSettings || {},
+    notificationSettings: context.settings.notificationSettings || {},
+    generalSettings: context.settings.generalSettings || {}
   }
 }
 
@@ -364,13 +370,31 @@ export const usePreference = () => {
  */
 export const useDashboardSettings = () => {
   const {
-    dashboardSettings,
+    dashboardSettings: rawDashboardSettings,
     updateSettings,
     saving,
     error,
     validationErrors,
     logInfo
   } = usePreference()
+
+  // 디버깅: rawDashboardSettings 값 확인
+  console.log('[useDashboardSettings] rawDashboardSettings:', rawDashboardSettings)
+
+  // dashboardSettings가 undefined일 때 기본값 제공
+  const dashboardSettings = {
+    selectedPegs: [],
+    defaultNe: '',
+    defaultCellId: '',
+    autoRefreshInterval: 30,
+    chartStyle: 'line',
+    showLegend: true,
+    showGrid: true,
+    ...rawDashboardSettings
+  }
+
+  // 디버깅: 최종 dashboardSettings 값 확인
+  console.log('[useDashboardSettings] final dashboardSettings:', dashboardSettings)
 
   const updateDashboardSettings = useCallback((newSettings) => {
     logInfo('Dashboard 설정 업데이트', newSettings)

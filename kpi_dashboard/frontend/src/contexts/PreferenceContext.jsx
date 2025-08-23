@@ -45,6 +45,7 @@ import {
 import {
   logInfo as logInfoUtil,
   logError as logErrorUtil,
+  logDebug,
   logSyncStart,
   logSyncSuccess,
   logSyncError
@@ -836,12 +837,14 @@ export const PreferenceProvider = ({ children }) => {
 
       // 2. 서버에도 저장 시도
       try {
-        await apiClient.put('/api/preferences/self', {
-          user_id: state.userId,
-          config: {
-            ...settings,
-            lastModified: new Date().toISOString()
-          }
+
+        await apiClient.put(`/api/preference/settings?userId=${state.userId}`, {
+          dashboardSettings: settings.dashboardSettings || {},
+          statisticsSettings: settings.statisticsSettings || {},
+          databaseSettings: settings.databaseSettings || {},
+          notificationSettings: settings.notificationSettings || {},
+          theme: settings.theme || 'light',
+          language: settings.language || 'ko'
         })
 
         if (!mountedRef.current) return
@@ -1910,7 +1913,7 @@ export const useDashboardSettings = () => {
   }, [settings.dashboardSettings, updateSettings])
   
   return {
-    dashboardSettings: settings.dashboardSettings,
+    dashboardSettings: settings.dashboardSettings || {},
     updateDashboardSettings,
     saving,
     error

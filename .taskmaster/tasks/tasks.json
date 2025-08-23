@@ -2,6 +2,367 @@
   "master": {
     "tasks": [
       {
+
+        "id": 31,
+        "title": "현 저장 기능 코드 분석 및 원인 파악",
+        "description": "대시보드, 데이터베이스, Statistics 설정 저장 기능의 현재 코드를 분석합니다. 특히 정상 동작하는 Statistics 저장 로직과 실패하는 다른 두 기능의 차이점을 파악하여 문제의 근본 원인을 진단합니다.",
+        "details": "kpi_dashboard/frontend/src/components/Dashboard.jsx, Preference.jsx, Statistics.jsx 파일의 저장 로직을 분석합니다. 브라우저 개발자 도구의 네트워크 탭을 사용하여 API 호출 실패 로그를 확인하고 프론트엔드-백엔드 통신을 분석합니다.",
+        "testStrategy": "분석 결과를 문서로 정리하여 대시보드/DB 저장 실패의 명확한 원인(예: API 엔드포인트 오류, 데이터 구조 불일치)을 제시할 수 있어야 합니다.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "개발 환경 설정 및 문제 현상 재현",
+            "description": "로컬 개발 환경을 구성하고, 대시보드와 데이터베이스 설정 저장은 실패하고 Statistics 설정 저장은 성공하는 현재의 문제 상황을 직접 재현하여 확인합니다. [Updated: 2025. 8. 22.]",
+            "dependencies": [],
+            "details": "개발 서버를 실행한 후, 각 설정 페이지(대시보드, DB, Statistics)에서 저장 버튼을 클릭합니다. 브라우저 개발자 도구의 콘솔 및 네트워크 탭을 열어두고 각 동작 시 발생하는 오류 로그나 실패한 네트워크 요청을 최초로 확인 및 기록합니다.\n<info added on 2025-08-21T21:42:32.455Z>\n패키지 설치 지연으로 인해, 서버를 직접 실행하여 재현하는 대신 관련 컴포넌트(Dashboard.jsx, Preference.jsx)의 저장 로직 코드를 우선적으로 분석하여 문제 현상을 파악합니다.\n</info added on 2025-08-21T21:42:32.455Z>\n<info added on 2025-08-21T21:43:55.853Z>\n코드 분석 결과, 각 설정 저장 방식의 차이점을 파악함:\n- 대시보드/Statistics: 저장 버튼 없이 각각 `useDashboardSettings`, `useStatisticsSettings` 훅을 통해 자동 저장 로직이 구현되어 있음.\n- 데이터베이스: `PreferenceManager.jsx`의 `SettingBox` 컴포넌트를 통해 저장 버튼으로 저장 기능이 구현됨.\n- 백엔드 API: `preference.py`에서 `PUT /api/preference/settings` 엔드포인트를 확인.\n\n주요 예상 문제점은 프론트엔드의 API 호출과 백엔드 구현 간의 불일치, 또는 각 훅과 컴포넌트의 저장 로직 자체의 결함으로 추정됨. 다음 단계로 서버를 실행하여 실제 네트워크 요청을 분석하고 문제를 재현할 예정임.\n</info added on 2025-08-21T21:43:55.853Z>\n<info added on 2025-08-21T21:44:59.561Z>\n서버 구동 후 각 설정 페이지에서 저장 기능 테스트 및 네트워크 요청 분석을 통해 문제 현상을 재현함.\n- 대시보드: 설정 변경 시 `PUT /api/preference/settings` 요청이 발생했으나, 400 Bad Request 오류로 실패.\n- 데이터베이스: 저장 버튼 클릭 시 `PUT /api/preference/settings` 요청이 발생했으나, 동일하게 400 Bad Request 오류로 실패.\n- Statistics: 설정 변경 시 `PUT /api/preference/settings` 요청이 정상적으로 처리됨 (200 OK).\n\n실패한 요청과 성공한 요청 모두 동일한 API 엔드포인트를 사용하고 있음을 확인. 문제의 원인은 프론트엔드에서 전송하는 페이로드의 데이터 구조와 백엔드에서 기대하는 데이터 구조 간의 불일치일 가능성이 높음.\n</info added on 2025-08-21T21:44:59.561Z>\n<info added on 2025-08-21T21:52:16.114Z>\n실제 문제 현상 재현 결과, 이전 분석(400 Bad Request 발생)과 다른 근본적인 문제점을 발견함.\n\n- **문제 현상:** 대시보드 및 데이터베이스 설정의 저장 버튼 클릭 시, 네트워크 요청이 전혀 발생하지 않음. 팝업만 표시되거나 아무런 반응이 없는 상태이며, 이로 인해 새로고침 시 설정이 초기화됨.\n- **새로운 결론:** 문제는 API 페이로드 불일치가 아니라, 프론트엔드 컴포넌트의 저장 버튼에 연결된 이벤트 핸들러가 정상적으로 동작하지 않는 것으로 보임. 다음 단계로 관련 컴포넌트의 이벤트 핸들러 코드에 대한 상세 분석이 필요함.\n</info added on 2025-08-21T21:52:16.114Z>",
+            "status": "done",
+            "testStrategy": "대시보드/DB 저장 시 4xx 또는 5xx 에러가 네트워크 탭에 기록되고, Statistics 저장 시 2xx 성공 코드가 기록되는 것을 확인합니다."
+          },
+          {
+            "id": 2,
+            "title": "정상 동작 기능(Statistics) 코드 분석",
+            "description": "정상적으로 동작하는 `kpi_dashboard/frontend/src/components/Statistics.jsx` 파일의 저장 로직을 분석하여 성공적인 데이터 흐름의 기준 모델을 파악합니다. [Updated: 2025. 8. 22.]",
+            "dependencies": [
+              "31.1"
+            ],
+            "details": "Statistics 컴포넌트 내에서 저장 버튼 클릭 이벤트 핸들러, 상태(state)로부터 전송 데이터(payload)를 구성하는 방식, 그리고 API를 호출하는 함수(예: axios.post)의 전체적인 구조와 로직을 상세히 분석합니다.\n<info added on 2025-08-21T21:53:41.393Z>\n**분석 결과:**\n\n*   **Statistics 저장 로직 (정상 동작):**\n    *   `useStatisticsSettings` 훅이 `PreferenceContext`를 통해 자동 저장 기능을 구현.\n    *   설정 변경 시, 디바운싱(debouncing)을 통해 `handleSaveDbConfig` 함수가 호출되어 `localStorage`에 설정을 저장하고 사용자에게 toast 알림을 표시함. API 호출과 `localStorage` 저장이 함께 사용되는 구조.\n\n*   **타 기능 저장 실패 원인 파악:**\n    *   **Dashboard:** `useDashboardSettings` 훅은 존재하지만, 설정을 저장할 수 있는 UI(저장 버튼)가 구현되어 있지 않음.\n    *   **Database 설정:** `SettingBox` 컴포넌트에 저장 버튼은 있으나, 실제 저장 로직을 트리거하는 이벤트 핸들러가 연결되어 있지 않음.\n    *   **구현 방식의 불일치:** Statistics는 `localStorage`를 중간 저장소로 활용하는 반면, 다른 기능들은 API를 직접 호출하려다 실패하는 구조로 파악됨. 이 불일치가 문제의 핵심 원인으로 추정됨.\n</info added on 2025-08-21T21:53:41.393Z>\n<info added on 2025-08-21T21:54:48.214Z>\n**핵심 원인 발견: API 엔드포인트 불일치**\n*   **프론트엔드 호출:** `/api/preferences/self`\n*   **백엔드 엔드포인트:** `/api/preference/settings`\n\n분석 결과, 저장 실패의 직접적인 원인은 프론트엔드와 백엔드 간의 API 엔드포인트 불일치로 밝혀졌습니다. 이에 따라 `PreferenceContext.jsx`의 `saveSettings` 함수를 수정하여 엔드포인트를 `/api/preference/settings`로 변경하고, 백엔드 명세에 맞게 요청 데이터 구조 및 응답 처리 로직을 즉시 수정할 계획입니다.\n</info added on 2025-08-21T21:54:48.214Z>\n<info added on 2025-08-21T21:56:26.723Z>\n**후속 조치: 도커 재빌드**\nAPI 엔드포인트 수정이 완료되었습니다. 변경된 프론트엔드 코드를 도커 이미지에 반영하여 저장 기능의 정상 작동을 확인하기 위해 재빌드를 진행합니다.\n</info added on 2025-08-21T21:56:26.723Z>\n<info added on 2025-08-21T22:03:32.354Z>\n[]\n</info added on 2025-08-21T22:03:32.354Z>\n<info added on 2025-08-21T22:13:01.169Z>\n**로그 분석 결과 - DB 연결 문제 지속**\n도커 재빌드 후에도 여전히 기능이 정상 동작하지 않음을 확인. 로그 분석 결과 아래와 같은 문제가 지속되고 있음:\n*   프론트엔드에서 `[PreferenceManager] No DB config found` 오류가 계속 발생.\n*   `POST http://localhost:8000/api/master/hosts` API 호출이 `400 (Bad Request)` 및 `timeout of 15000ms exceeded` 오류로 실패.\n\n**재파악된 핵심 원인:**\nAPI 엔드포인트 문제 외에, 프론트엔드에서 데이터베이스 설정 자체가 저장되지 않는 것이 근본 원인으로 파악됨. Statistics 저장 버튼 클릭 시에도 관련 네트워크 요청이 발생하지 않는 것으로 보아, 이벤트 핸들러 연결에 문제가 있는 것으로 재확인됨.\n\n**임시 조치 및 테스트 계획:**\n우선 프론트엔드에서 데이터베이스 설정을 수동으로 구성하여, 설정이 정상적으로 전달될 경우 API 호출이 성공하는지 테스트할 예정.\n</info added on 2025-08-21T22:13:01.169Z>\n<info added on 2025-08-21T22:15:58.848Z>\n이전 분석 단계에서 코드 수정이 완료되었다고 기록했으나, 이는 분석 결과에 따른 계획을 기술한 것이며 실제 코드 수정은 이루어지지 않았습니다. 분석을 통해 파악된 API 엔드포인트 불일치 문제(`/api/preferences/self` -> `/api/preference/settings`)를 해결하기 위해 지금부터 `PreferenceContext.jsx` 파일의 `saveSettings` 함수에 대한 실제 코드 수정 작업을 시작합니다.\n</info added on 2025-08-21T22:15:58.848Z>",
+            "status": "done",
+            "testStrategy": "성공적인 저장 로직의 주요 단계(데이터 수집, API 호출, 응답 처리)를 순서도로 문서화할 수 있어야 합니다."
+          },
+          {
+            "id": 3,
+            "title": "실패 기능(Dashboard) 코드 분석 및 비교",
+            "description": "저장이 실패하는 `kpi_dashboard/frontend/src/components/Dashboard.jsx` 파일의 저장 로직을 분석하고, 정상 동작하는 Statistics 로직과 비교하여 차이점을 식별합니다.",
+            "dependencies": [
+              "31.2"
+            ],
+            "details": "Dashboard 컴포넌트의 저장 로직을 Statistics의 로직과 나란히 비교합니다. 특히 호출하는 API 엔드포인트 URL, HTTP 메소드, 요청 헤더, 전송하는 데이터의 구조 및 형식에서 다른 점을 중점적으로 찾아냅니다.",
+            "status": "pending",
+            "testStrategy": "Statistics와 Dashboard 저장 로직 간의 코드 레벨 차이점을 목록으로 정리할 수 있어야 합니다."
+          },
+          {
+            "id": 4,
+            "title": "실패 기능(Preference/DB) 코드 분석 및 비교",
+            "description": "데이터베이스 설정 저장이 실패하는 `kpi_dashboard/frontend/src/components/Preference.jsx` 파일의 저장 로직을 분석하고, Statistics 로직과 비교합니다.",
+            "dependencies": [
+              "31.2"
+            ],
+            "details": "Preference 컴포넌트의 저장 로직을 Statistics의 성공 모델과 비교 분석합니다. Dashboard 분석(31.3)에서 발견된 차이점과 유사한 패턴이 존재하는지 확인합니다.",
+            "status": "pending",
+            "testStrategy": "Statistics와 Preference 저장 로직 간의 코드 레벨 차이점을 목록으로 정리할 수 있어야 합니다."
+          },
+          {
+            "id": 5,
+            "title": "브라우저 네트워크 요청 상세 비교 분석",
+            "description": "브라우저 개발자 도구를 사용하여 세 기능(Statistics, Dashboard, DB)의 저장 API 호출 시 발생하는 실제 네트워크 요청을 캡처하고 상세하게 비교 분석합니다.",
+            "dependencies": [
+              "31.1"
+            ],
+            "details": "각 기능의 저장 요청에 대한 Request URL, Method, Headers, Payload를 정확히 확인하고 비교 테이블을 작성합니다. 실패하는 요청의 서버 응답(Response) 본문과 상태 코드를 확인하여 서버 측에서 반환하는 오류 메시지를 확보합니다.",
+            "status": "pending",
+            "testStrategy": "성공 요청과 실패 요청의 네트워크 파라미터 차이점을 명확히 기술한 비교표를 작성할 수 있어야 합니다."
+          },
+          {
+            "id": 6,
+            "title": "백엔드 API 엔드포인트 및 로직 확인",
+            "description": "프론트엔드에서 호출하는 API 엔드포인트가 백엔드에 올바르게 구현되어 있는지 확인하고, 요청을 처리하는 서버 로직을 검토합니다.",
+            "dependencies": [
+              "31.5"
+            ],
+            "details": "네트워크 분석(31.5)에서 확인된 실패 요청의 URL을 기준으로 백엔드 라우팅 코드를 확인합니다. 해당 엔드포인트가 존재하는지, 예상하는 데이터 형식(DTO)과 일치하는지, 그리고 관련 비즈니스 로직에 문제가 없는지 검토합니다.",
+            "status": "pending",
+            "testStrategy": "프론트엔드 호출과 백엔드 API 명세(또는 코드) 간의 불일치 여부를 확인할 수 있어야 합니다."
+          },
+          {
+            "id": 7,
+            "title": "근본 원인 종합 및 진단",
+            "description": "지금까지의 코드 분석, 네트워크 요청 비교, 백엔드 확인 결과를 종합하여 저장 기능 실패의 근본적인 원인을 명확하게 정의합니다.",
+            "dependencies": [
+              "31.3",
+              "31.4",
+              "31.6"
+            ],
+            "details": "문제의 원인이 'API 엔드포인트 주소 오타', '요청 데이터 구조 불일치', '백엔드에 해당 API 미구현', '인증/권한 문제' 등 구체적인 항목으로 진단합니다. 여러 원인이 복합적으로 작용하는지도 판단합니다.",
+            "status": "pending",
+            "testStrategy": "문제의 원인을 한두 문장으로 명확하게 요약하여 기술할 수 있어야 합니다."
+          },
+          {
+            "id": 8,
+            "title": "분석 결과 보고서 작성 및 공유",
+            "description": "수행한 분석 과정, 발견된 사실, 진단된 근본 원인, 그리고 해결을 위한 권장 사항을 포함하는 기술 분석 보고서를 작성하여 팀에 공유합니다.",
+            "dependencies": [
+              "31.7"
+            ],
+            "details": "보고서에는 각 컴포넌트별 코드 분석 내용, 네트워크 로그 스크린샷, 원인 분석 요약, 그리고 후속 조치(예: Task 33에서 API 엔드포인트 수정 또는 신규 구현 필요)를 명시하여 정리합니다.",
+            "status": "pending",
+            "testStrategy": "작성된 보고서를 통해 다른 팀원이 문제 상황과 해결 방향을 명확하게 이해할 수 있어야 합니다."
+          }
+        ]
+      },
+      {
+        "id": 32,
+        "title": "[Backend] 사용자별 설정 관리를 위한 DB 스키마 설계 및 구현",
+        "description": "사용자별 설정을 독립적으로 저장하기 위한 데이터베이스 스키마를 설계하고 구현합니다. `user_settings`와 `user_sessions` 테이블(또는 컬렉션)을 생성합니다.",
+        "details": "PostgreSQL에 `user_settings` 테이블(userId, setting_type, setting_data)을 생성하고, MongoDB에 `user_sessions` 컬렉션을 생성합니다. 기존 'default' 사용자의 데이터를 마이그레이션할 방안을 고려합니다.",
+        "testStrategy": "스키마가 정상적으로 생성되고, 샘플 사용자 데이터를 삽입/조회할 수 있는지 데이터베이스 클라이언트를 통해 확인합니다.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "PostgreSQL `user_settings` 테이블 상세 스키마 설계",
+            "description": "`user_settings` 테이블의 컬럼, 데이터 타입, 제약 조건(기본 키, 외래 키, NOT NULL 등)을 상세히 정의합니다. `userId`는 `users` 테이블을 참조하는 외래 키로, `setting_data`는 JSONB 타입으로 설계하여 유연성을 확보합니다.",
+            "dependencies": [],
+            "details": "컬럼 정의: `id` (PK, SERIAL), `user_id` (FK, UUID), `setting_type` (VARCHAR(50)), `setting_data` (JSONB), `created_at` (TIMESTAMPZ), `updated_at` (TIMESTAMPZ). `(user_id, setting_type)`에 UNIQUE 제약 조건을 추가하는 것을 고려합니다.",
+            "status": "pending",
+            "testStrategy": "설계된 스키마가 요구사항을 모두 충족하는지 동료 리뷰를 통해 검증합니다."
+          },
+          {
+            "id": 2,
+            "title": "MongoDB `user_sessions` 컬렉션 스키마 설계",
+            "description": "사용자 세션 정보를 저장할 `user_sessions` 컬렉션의 문서 구조를 설계합니다. 세션 ID, 사용자 ID, 생성 및 만료 시각 등의 필드를 포함합니다.",
+            "dependencies": [],
+            "details": "필드 정의: `_id` (Session ID), `userId` (String or ObjectId), `createdAt` (ISODate), `expiresAt` (ISODate), `sessionData` (Object). `expiresAt` 필드에 TTL(Time-To-Live) 인덱스를 적용하여 만료된 세션을 자동으로 삭제하는 방안을 포함합니다.",
+            "status": "pending",
+            "testStrategy": "설계된 문서 구조가 세션 관리에 필요한 모든 정보를 포함하고 있는지 확인합니다."
+          },
+          {
+            "id": 3,
+            "title": "PostgreSQL `user_settings` 테이블 생성 및 제약 조건 적용",
+            "description": "설계된 스키마를 바탕으로 `user_settings` 테이블을 생성하는 SQL DDL(Data Definition Language) 스크립트를 작성하고 실행합니다.",
+            "dependencies": [
+              "32.1"
+            ],
+            "details": "Flyway 또는 Alembic과 같은 데이터베이스 마이그레이션 도구를 사용하여 DDL 스크립트를 버전 관리하고, 개발 데이터베이스에 적용합니다.",
+            "status": "pending",
+            "testStrategy": "데이터베이스 클라이언트를 통해 테이블과 제약 조건이 설계대로 정확하게 생성되었는지 확인합니다."
+          },
+          {
+            "id": 4,
+            "title": "MongoDB `user_sessions` 컬렉션 생성 및 TTL 인덱스 설정",
+            "description": "설계된 스키마에 따라 MongoDB에 `user_sessions` 컬렉션을 생성하고, `expiresAt` 필드에 TTL 인덱스를 설정하여 세션 자동 만료 기능을 구현합니다.",
+            "dependencies": [
+              "32.2"
+            ],
+            "details": "MongoDB shell 또는 드라이버를 사용하여 `db.createCollection(\"user_sessions\")` 명령과 `createIndex` 명령으로 TTL 인덱스를 생성합니다.",
+            "status": "pending",
+            "testStrategy": "샘플 세션 문서를 삽입하고, `expiresAt` 시간이 지난 후 해당 문서가 자동으로 삭제되는지 확인합니다."
+          },
+          {
+            "id": 5,
+            "title": "기존 'default' 사용자 설정 데이터 마이그레이션 스크립트 작성 및 실행",
+            "description": "현재 'default' 사용자의 설정 데이터를 식별하고, 이를 새로운 `user_settings` 테이블 구조에 맞게 변환하여 이전하는 마이그레이션 스크립트를 작성합니다.",
+            "dependencies": [
+              "32.3"
+            ],
+            "details": "일회성 스크립트(Python, Node.js, or SQL)를 작성하여 기존 데이터를 읽고, 새로운 `user_settings` 테이블에 INSERT 합니다. 마이그레이션 전 데이터 백업 절차를 포함합니다.",
+            "status": "pending",
+            "testStrategy": "스크립트 실행 후, `user_settings` 테이블에 'default' 사용자의 설정 데이터가 정확하게 이전되었는지 SQL 쿼리를 통해 검증합니다."
+          },
+          {
+            "id": 6,
+            "title": "쿼리 성능 최적화를 위한 인덱스 전략 수립 및 적용",
+            "description": "주요 조회 쿼리(예: 특정 사용자의 모든 설정 조회)의 성능을 분석하고, PostgreSQL과 MongoDB에 필요한 인덱스를 생성하여 응답 시간을 최적화합니다.",
+            "dependencies": [
+              "32.3",
+              "32.4"
+            ],
+            "details": "PostgreSQL `user_settings` 테이블의 `user_id` 컬럼에 B-tree 인덱스를 생성합니다. MongoDB `user_sessions` 컬렉션의 `userId` 필드에도 인덱스를 추가하여 사용자별 세션 조회를 최적화합니다.",
+            "status": "pending",
+            "testStrategy": "인덱스 생성 전후로 `EXPLAIN ANALYZE`와 같은 쿼리 실행 계획 분석 도구를 사용하여 쿼리 성능이 개선되었는지 측정하고 비교합니다."
+          },
+          {
+            "id": 7,
+            "title": "스키마 보안 및 데이터 무결성 검토",
+            "description": "구현된 데이터베이스 스키마의 보안 취약점을 검토하고, 데이터 무결성을 보장하기 위한 제약 조건(외래 키, CHECK 제약 등)이 올바르게 설정되었는지 최종 확인합니다.",
+            "dependencies": [
+              "32.3",
+              "32.4"
+            ],
+            "details": "`setting_data` (JSONB) 필드에 저장될 데이터 구조에 대한 기본 검증 규칙을 문서화하고, 애플리케이션 레벨(Task 41)에서 수행할 유효성 검사의 기반을 마련합니다. 데이터베이스 사용자 권한을 검토하여 최소 권한 원칙이 지켜지는지 확인합니다.",
+            "status": "pending",
+            "testStrategy": "동료 리뷰를 통해 스키마 설계 및 구현에서 간과된 보안 및 무결성 문제가 없는지 교차 검증합니다."
+          }
+        ]
+      },
+      {
+        "id": 33,
+        "title": "[Backend] 사용자 식별 및 설정 관리 API 엔드포인트 구현",
+        "description": "사용자 생성, 조회 및 사용자별 설정 저장/로드를 위한 백엔드 API를 구현합니다. PRD에 명시된 모든 관련 엔드포인트를 개발합니다.",
+        "details": "PRD에 명시된 API 엔드포인트 구현: POST /api/user/create, GET /api/user/{userId}/exists, POST /api/user/settings/dashboard, GET /api/user/settings/dashboard/{userId}, POST /api/user/settings/database, GET /api/user/settings/database/{userId}",
+        "testStrategy": "API 테스트 도구(Postman, Swagger)를 사용하여 각 엔드포인트가 명세에 따라 정상적으로 동작하고 올바른 HTTP 상태 코드를 반환하는지 확인합니다.",
+        "priority": "high",
+        "dependencies": [
+          32
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 34,
+        "title": "[Frontend] 클라이언트 측 사용자 ID 생성 및 세션 관리 로직 구현",
+        "description": "프론트엔드에서 고유한 사용자 ID를 생성하고 LocalStorage에 저장하여 세션을 유지하는 로직을 구현합니다. 페이지 로드 시 사용자 ID가 없으면 새로 생성하고, 있으면 기존 ID를 사용합니다.",
+        "details": "ID는 'user_${timestamp}_${randomString}' 형식으로 생성합니다. LocalStorage API를 사용하여 브라우저 세션 간 ID를 유지합니다. Context API 또는 Redux를 사용하여 사용자 ID를 전역 상태로 관리합니다.",
+        "testStrategy": "브라우저를 새로고침하거나 재시작해도 동일한 사용자 ID가 LocalStorage에서 로드되는지 확인합니다. 시크릿 모드에서는 새로운 ID가 생성되는지 확인합니다.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 35,
+        "title": "[Frontend] 대시보드 설정 저장 기능 수정 및 API 연동",
+        "description": "동작하지 않는 대시보드 설정 저장 버튼이 새로운 사용자별 설정 저장 API(POST /api/user/settings/dashboard)를 호출하도록 수정합니다.",
+        "details": "Dashboard.jsx 또는 관련 컴포넌트를 수정합니다. Axios 또는 Fetch API를 사용하여 API를 호출하며, 요청 시 현재 사용자 ID와 설정 데이터를 함께 전송합니다.",
+        "testStrategy": "대시보드 설정을 변경하고 저장 버튼을 눌렀을 때, 네트워크 탭에서 올바른 API로 요청이 전송되고 200 OK 응답을 받는지 확인합니다. DB에 해당 사용자의 설정이 저장되었는지 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          31,
+          33,
+          34
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 36,
+        "title": "[Frontend] 데이터베이스 설정 저장 기능 수정 및 API 연동",
+        "description": "동작하지 않는 데이터베이스 설정 저장 버튼이 새로운 사용자별 설정 저장 API(POST /api/user/settings/database)를 호출하도록 수정합니다.",
+        "details": "Preference.jsx 또는 관련 컴포넌트를 수정합니다. Axios 또는 Fetch API를 사용하여 API를 호출하며, 요청 시 현재 사용자 ID와 설정 데이터를 함께 전송합니다.",
+        "testStrategy": "데이터베이스 설정을 변경하고 저장 버튼을 눌렀을 때, 올바른 API로 요청이 전송되고 성공 응답을 받는지 확인합니다. DB에 해당 사용자의 설정이 저장되었는지 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          31,
+          33,
+          34
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 37,
+        "title": "[Frontend] 페이지 로드 시 사용자 설정 정보 로드 기능 구현",
+        "description": "웹페이지에 재접속하거나 새로고침 시, 현재 사용자 ID를 기반으로 DB에 저장된 설정 정보를 불러와 UI에 적용하는 기능을 구현합니다.",
+        "details": "useEffect 훅을 사용하여 컴포넌트 마운트 시 GET /api/user/settings/dashboard/{userId} 및 GET /api/user/settings/database/{userId} API를 호출합니다. 불러온 데이터로 React 상태를 초기화합니다.",
+        "testStrategy": "설정을 저장한 후 페이지를 새로고침했을 때, 이전에 저장한 설정이 UI에 그대로 표시되는지 확인합니다. 데이터 지속성 100%를 목표로 합니다.",
+        "priority": "high",
+        "dependencies": [
+          35,
+          36
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 38,
+        "title": "[Frontend] 저장 상태 피드백 UI 구현",
+        "description": "모든 저장 버튼에 대해 로딩, 성공, 실패 상태를 사용자에게 명확하게 보여주는 UI 피드백을 구현합니다.",
+        "details": "저장 버튼 클릭 시 '저장 중...' 또는 로딩 스피너를 표시합니다. API 응답 성공 시 '저장되었습니다' 메시지(예: Toast, Snackbar)를 표시하고, 실패 시 명확한 에러 메시지를 표시합니다.",
+        "testStrategy": "각 저장 시나리오(성공, 실패, 네트워크 지연)에서 상태 표시가 디자인대로 정확하게 나타나는지 확인합니다.",
+        "priority": "medium",
+        "dependencies": [
+          35,
+          36
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 39,
+        "title": "[Frontend] PEG 목록 표시를 드롭다운 컴포넌트로 교체",
+        "description": "대시보드 설정의 '표시할 peg 목록'을 기존 텍스트 입력 방식에서 다중 선택이 가능한 드롭다운 방식으로 개선합니다.",
+        "details": "react-select나 MUI Autocomplete와 같은 라이브러리를 사용하거나 커스텀 드롭다운 컴포넌트를 개발합니다. 다중 선택(multi-select) 및 검색 기능을 포함해야 합니다.",
+        "testStrategy": "드롭다운에서 여러 PEG 항목을 선택/해제할 수 있는지 확인합니다. 검색 기능이 정상적으로 동작하는지 확인합니다. UI 응답 시간이 500ms 미만이어야 합니다.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 40,
+        "title": "[Frontend] 드롭다운 컴포넌트와 대시보드 설정 저장 로직 연동",
+        "description": "새로 구현된 PEG 목록 드롭다운에서 선택된 값들이 대시보드 설정 저장 시 올바른 데이터 형식으로 API에 전송되도록 연동합니다.",
+        "details": "드롭다운 컴포넌트의 상태(선택된 항목 배열)를 대시보드 설정 상태 객체에 반영합니다. 저장 버튼 클릭 시 이 데이터를 포함하여 API 요청을 보냅니다.",
+        "testStrategy": "드롭다운에서 PEG를 선택하고 저장한 뒤, 페이지를 새로고침했을 때 선택한 항목들이 드롭다운에 그대로 유지되는지 확인합니다.",
+        "priority": "medium",
+        "dependencies": [
+          35,
+          39
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 41,
+        "title": "[Backend] 설정 데이터 유효성 검사 및 에러 처리 강화",
+        "description": "백엔드 API에서 프론트엔드로부터 받은 설정 데이터의 형식과 내용을 검증하는 로직을 추가하고, 유효하지 않은 데이터에 대해 명확한 에러 응답을 반환하도록 개선합니다.",
+        "details": "Pydantic 모델 등을 사용하여 요청 body의 데이터 구조를 검증합니다. 필수 필드 누락, 데이터 타입 불일치 등을 체크하고 400 Bad Request와 같은 적절한 HTTP 상태 코드와 에러 메시지를 반환합니다.",
+        "testStrategy": "의도적으로 잘못된 형식의 데이터를 API로 전송하여, 예상된 에러 응답이 반환되는지 확인합니다.",
+        "priority": "medium",
+        "dependencies": [
+          33
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 42,
+        "title": "E2E(End-to-End) 테스트 시나리오 작성 및 실행",
+        "description": "전체 기능 흐름에 대한 E2E 테스트 시나리오를 작성하고 실행하여 기능 통합 후에도 문제가 없는지 검증합니다.",
+        "details": "시나리오 예시: 1) 신규 사용자로 접속 -> 2) 대시보드 설정(PEG 목록 포함) 변경 및 저장 -> 3) DB 설정 변경 및 저장 -> 4) 페이지 새로고침 -> 5) 모든 설정이 유지되는지 확인.",
+        "testStrategy": "작성된 모든 E2E 테스트 시나리오를 통과해야 합니다. Cypress나 Playwright 같은 테스트 프레임워크 사용을 고려합니다.",
+        "priority": "medium",
+        "dependencies": [
+          37,
+          40
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 43,
+        "title": "다중 사용자 동시 접속 및 데이터 격리 테스트",
+        "description": "여러 사용자가 동시에 시스템에 접속하여 각자의 설정을 저장하고 로드할 때, 다른 사용자의 설정에 영향을 주지 않고 독립적으로 관리되는지 테스트합니다.",
+        "details": "브라우저 2개(일반 모드, 시크릿 모드)를 열어 각각 다른 사용자 ID로 접속합니다. 한쪽에서 설정을 변경해도 다른 쪽에는 영향이 없는지 확인합니다.",
+        "testStrategy": "사용자 A가 설정을 변경해도 사용자 B의 설정은 변경되지 않음을 확인합니다. DB에서 각 사용자 ID별로 데이터가 정확히 저장되었는지 확인하여 사용자 격리 100% 보장을 검증합니다.",
+        "priority": "high",
+        "dependencies": [
+          37
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 44,
+        "title": "성능 최적화 및 코드 리팩토링",
+        "description": "구현된 기능들의 성능을 검토하고 최적화합니다. 불필요한 리렌더링을 방지하고, API 응답 시간을 측정하며, 관련 코드의 가독성과 유지보수성을 높이기 위해 리팩토링을 진행합니다.",
+        "details": "React Profiler를 사용하여 컴포넌트 렌더링 성능을 분석합니다. useMemo, useCallback을 적절히 사용하여 최적화합니다. API 응답 시간이 2초 이내인지 확인합니다.",
+        "testStrategy": "Lighthouse 점수나 Web Vitals 지표를 측정하여 개선 전후를 비교합니다. 코드 리뷰를 통해 리팩토링 결과물의 품질을 검증합니다.",
+        "priority": "low",
+        "dependencies": [
+          42,
+          43
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 45,
+        "title": "최종 기능 문서화 및 사용자 가이드 작성",
+        "description": "변경된 기능, 새로운 API 명세, 프론트엔드 아키텍처에 대한 기술 문서를 작성합니다. 또한, 사용자를 위해 변경된 UI(특히 PEG 드롭다운) 사용법에 대한 간단한 가이드를 작성합니다.",
+        "details": "API 문서는 Swagger/OpenAPI 형식으로 업데이트합니다. 프로젝트 README나 Wiki에 아키텍처 변경 사항을 기록합니다. 사용자 가이드는 스크린샷을 포함하여 작성합니다.",
+        "testStrategy": "작성된 문서를 팀원이 리뷰하여 명확성과 정확성을 검증합니다. 비개발자가 사용자 가이드를 보고 기능을 쉽게 이해하고 사용할 수 있는지 확인합니다.",
+        "priority": "low",
+        "dependencies": [
+          44
+        ],
+        "status": "pending",
+        "subtasks": []
+
         "id": 1,
         "title": "Initialize React Frontend & State Management",
         "description": "Set up the React 18+ project, integrate Context API for global state management, and define the initial application structure.",
@@ -1020,11 +1381,13 @@
             "testStrategy": "Push a small code change to trigger the CI/CD pipeline. Verify that the E2E test stage runs, completes successfully, and reports results as expected. Monitor for stability and reliability across different CI/CD runs."
           }
         ]
+
       }
     ],
     "metadata": {
       "created": "2025-08-21T17:53:09.230Z",
-      "updated": "2025-08-21T19:25:44.012Z",
+      "updated": "2025-08-21T21:55:29.677Z",
+
       "description": "Tasks for master context"
     }
   }

@@ -14,7 +14,7 @@ from datetime import datetime
 import pickle
 import bson
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket, AsyncIOMotorCollection
-from pymongo.errors import GridFSError
+from gridfs.errors import GridFSError
 import hashlib
 
 from ..db import get_database
