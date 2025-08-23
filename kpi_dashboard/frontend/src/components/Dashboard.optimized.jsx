@@ -207,12 +207,15 @@ const Dashboard = () => {
   
   // 현재 설정에서 값 추출 (기본값 포함) - 메모이제이션
   const settings = useMemo(() => {
-    // selectedPegs가 없거나 빈 배열이면 기본값 사용 -> 이제는 dashboardSettings의 값을 그대로 사용
-    const selectedPegs = dashboardSettings?.selectedPegs || []
+    // selectedPegs가 없거나 빈 배열이면 기본값 사용
+    const selectedPegs = dashboardSettings?.selectedPegs && dashboardSettings.selectedPegs.length > 0 
+      ? dashboardSettings.selectedPegs 
+      : defaultKpiKeys
     
     console.log('[Dashboard.optimized] settings 생성:', {
       dashboardSelectedPegs: dashboardSettings?.selectedPegs,
       finalSelectedPegs: selectedPegs,
+      defaultKpiKeys
     })
     
     return {
@@ -224,7 +227,7 @@ const Dashboard = () => {
       showLegend: dashboardSettings?.showLegend !== false,
       showGrid: dashboardSettings?.showGrid !== false
     }
-  }, [dashboardSettings])
+  }, [dashboardSettings, defaultKpiKeys])
 
   // 제목 매핑을 메모이제이션
   const titleMap = useMemo(() => ({
