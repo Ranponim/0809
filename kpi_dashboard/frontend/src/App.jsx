@@ -9,6 +9,7 @@ import {
 } from './components/LazyComponents.jsx'
 import Preference from './components/Preference.jsx'
 import PreferenceTest from './components/PreferenceTest.jsx'
+import UserSettingsTest from './components/UserSettingsTest.jsx'
 import { PreferenceProvider } from './contexts/PreferenceContext.jsx'
 import './App.css'
 
@@ -29,6 +30,8 @@ function App() {
         return <Preference />
       case 'preference-test':
         return <PreferenceTest />
+      case 'user-settings-test':
+        return <UserSettingsTest />
       case 'llm-analysis':
         return <LLMAnalysisManager />
       default:

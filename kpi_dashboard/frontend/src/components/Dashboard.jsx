@@ -25,18 +25,18 @@ const Dashboard = () => {
     error: settingsError
   } = useDashboardSettings()
 
-  // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용
-  const selectedPegs = Array.isArray(dashboardSettings.selectedPegs) ? dashboardSettings.selectedPegs : []
+  // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용 - 안전한 접근
+  const selectedPegs = Array.isArray(dashboardSettings?.selectedPegs) ? dashboardSettings.selectedPegs : []
   // Preference > Statistics의 데이터 선택 반영
   const { settings: pref } = usePreference()
   const statisticsSel = pref?.statisticsSettings || {}
   const selectedNEs = Array.isArray(statisticsSel.selectedNEs) ? statisticsSel.selectedNEs : []
   const selectedCellIds = Array.isArray(statisticsSel.selectedCellIds) ? statisticsSel.selectedCellIds : []
-  const autoRefreshInterval = dashboardSettings.autoRefreshInterval || 30
-  const chartStyle = dashboardSettings.chartStyle || 'line'
-  const chartLayout = dashboardSettings.chartLayout || 'byPeg'
-  const showLegend = dashboardSettings.showLegend !== false
-  const showGrid = dashboardSettings.showGrid !== false
+  const autoRefreshInterval = dashboardSettings?.autoRefreshInterval || 30
+  const chartStyle = dashboardSettings?.chartStyle || 'line'
+  const chartLayout = dashboardSettings?.chartLayout || 'byPeg'
+  const showLegend = dashboardSettings?.showLegend !== false
+  const showGrid = dashboardSettings?.showGrid !== false
 
   const titleFor = (key) => key
 
@@ -74,7 +74,7 @@ const Dashboard = () => {
 
       // 기간: 기본 1시간 (설정 저장 가능하도록 dashboardSettings에 저장/사용)
       const end = new Date()
-      const start = new Date(end.getTime() - (dashboardSettings.defaultHours || 1) * 60 * 60 * 1000)
+      const start = new Date(end.getTime() - (dashboardSettings?.defaultHours || 1) * 60 * 60 * 1000)
 
       const response = await apiClient.post('/api/kpi/timeseries', {
         kpi_types: selectedPegs,
@@ -146,7 +146,7 @@ const Dashboard = () => {
   // 설정 변경 시 데이터 다시 로드
   useEffect(() => {
     fetchKPIData()
-  }, [selectedPegs, statisticsSel.selectedNEs, statisticsSel.selectedCellIds, dashboardSettings.defaultHours])
+  }, [selectedPegs, statisticsSel.selectedNEs, statisticsSel.selectedCellIds, dashboardSettings?.defaultHours])
 
   // 수동 새로고침
   const handleManualRefresh = () => {

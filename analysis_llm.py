@@ -215,12 +215,13 @@ def _get_default_tzinfo() -> datetime.tzinfo:
 
 def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datetime]:
     """
-    "YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM" 또는 단일 날짜 "YYYY-MM-DD"를 받아
+    "YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM" 또는 "YYYY-MM-DD-HH:MM~YYYY-MM-DD-HH:MM" 또는 단일 날짜 "YYYY-MM-DD"를 받아
     (start_dt, end_dt) (둘 다 tz-aware) 튜플을 반환합니다.
 
-    - 범위 형식: 주어진 시각 범위를 그대로 사용(엄격 포맷).
+    - 범위 형식: 주어진 시각 범위를 그대로 사용(유연한 포맷: _ 또는 - 구분자 허용).
     - 단일 날짜: 해당 날짜의 00:00:00 ~ 23:59:59 로 확장.
 
+    입력에서 _와 - 모두 허용하지만, 내부적으로는 표준 _ 포맷으로 변환하여 처리합니다.
     형식/값/논리/타입 오류를 세분화하여 명확한 예외 메시지를 제공합니다.
     """
     logging.info("parse_time_range() 호출: 입력 문자열 파싱 시작: %s", range_text)
@@ -242,17 +243,17 @@ def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datet
             "code": "FORMAT_ERROR",
             "message": "빈 문자열은 허용되지 않습니다",
             "input": range_text,
-            "hint": "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08"
+            "hint": "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08-15:00~2025-08-08-19:00 또는 2025-08-08"
         }
         logging.error("parse_time_range() 형식 오류: %s", msg)
         raise ValueError(json.dumps(msg, ensure_ascii=False))
 
     tzinfo = _get_default_tzinfo()
 
-    # 정규식 패턴 (엄격 포맷)
+    # 정규식 패턴 (유연한 포맷: _ 또는 - 구분자 허용)
     date_pat = r"\d{4}-\d{2}-\d{2}"
     time_pat = r"\d{2}:\d{2}"
-    dt_pat = rf"{date_pat}_{time_pat}"
+    dt_pat_flexible = rf"{date_pat}[_-]{time_pat}"  # _ 또는 - 허용
 
     # 범위 구분자 허용: ~ 앞뒤 공백 허용. 다른 구분자 사용은 오류 처리
     if "~" in text:
@@ -262,7 +263,7 @@ def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datet
                 "code": "FORMAT_ERROR",
                 "message": "범위 구분자 '~'가 없거나 잘못되었습니다",
                 "input": text,
-                "hint": "예: 2025-08-08_15:00~2025-08-08_19:00"
+                "hint": "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08-15:00~2025-08-08-19:00"
             }
             logging.error("parse_time_range() 형식 오류: %s", msg)
             raise ValueError(json.dumps(msg, ensure_ascii=False))
@@ -280,39 +281,45 @@ def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datet
 
         left, right = parts[0], parts[1]
 
-        # 잘못된 구분자 사용 가이드 (예: '-' 범위 구분)
-        if re.search(rf"^{dt_pat}-{dt_pat}$", text.replace(" ", "")):
+        # 각 토큰 형식 검증 (유연한 패턴 사용)
+        if not re.fullmatch(dt_pat_flexible, left):
             msg = {
                 "code": "FORMAT_ERROR",
-                "message": "범위 구분자는 '~'만 허용됩니다",
-                "input": text,
-                "hint": "예: 2025-08-08_15:00~2025-08-08_19:00"
-            }
-            logging.error("parse_time_range() 형식 오류: %s", msg)
-            raise ValueError(json.dumps(msg, ensure_ascii=False))
-
-        # 각 토큰 형식 검증
-        if not re.fullmatch(dt_pat, left):
-            msg = {
-                "code": "FORMAT_ERROR",
-                "message": "왼쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM)",
+                "message": "왼쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM 또는 YYYY-MM-DD-HH:MM)",
                 "input": left
             }
             logging.error("parse_time_range() 형식 오류: %s", msg)
             raise ValueError(json.dumps(msg, ensure_ascii=False))
-        if not re.fullmatch(dt_pat, right):
+        if not re.fullmatch(dt_pat_flexible, right):
             msg = {
                 "code": "FORMAT_ERROR",
-                "message": "오른쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM)",
+                "message": "오른쪽 시각 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM 또는 YYYY-MM-DD-HH:MM)",
                 "input": right
             }
             logging.error("parse_time_range() 형식 오류: %s", msg)
             raise ValueError(json.dumps(msg, ensure_ascii=False))
 
+        # 내부 처리를 위해 표준 _ 포맷으로 변환
+        def normalize_datetime_format(dt_str: str) -> str:
+            """날짜-시간 구분자를 표준 '_' 포맷으로 변환"""
+            # YYYY-MM-DD-HH:MM 형태를 YYYY-MM-DD_HH:MM로 변환
+            # 마지막 '-'만 '_'로 바꾸기 위해 rsplit 사용
+            if '-' in dt_str and dt_str.count('-') >= 3:
+                # 날짜 부분(처음 3개 '-')과 시간 부분을 분리
+                parts = dt_str.rsplit('-', 1)
+                if len(parts) == 2 and ':' in parts[1]:
+                    return f"{parts[0]}_{parts[1]}"
+            return dt_str
+
+        left_normalized = normalize_datetime_format(left)
+        right_normalized = normalize_datetime_format(right)
+        
+        logging.info("입력 정규화: %s → %s, %s → %s", left, left_normalized, right, right_normalized)
+
         # 값 검증 (존재하지 않는 날짜/시간 등)
         try:
-            start_dt = datetime.datetime.strptime(left, "%Y-%m-%d_%H:%M")
-            end_dt = datetime.datetime.strptime(right, "%Y-%m-%d_%H:%M")
+            start_dt = datetime.datetime.strptime(left_normalized, "%Y-%m-%d_%H:%M")
+            end_dt = datetime.datetime.strptime(right_normalized, "%Y-%m-%d_%H:%M")
         except Exception as e:
             msg = {
                 "code": "VALUE_ERROR",
@@ -369,21 +376,18 @@ def parse_time_range(range_text: str) -> Tuple[datetime.datetime, datetime.datet
 
     # 여기까지 오면 형식 오류
     # 흔한 오타 케이스 힌트 제공
-    uses_dash_range = re.search(rf"^{dt_pat}-{dt_pat}$", text.replace(" ", "")) is not None
-    uses_space_instead_underscore = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", text) is not None
-    time_with_dash = re.search(r"\d{2}-\d{2}", text) is not None
+    uses_space_instead_separator = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", text) is not None
+    time_with_dash = re.search(r"\d{2}-\d{2}", text) is not None and not re.search(dt_pat_flexible, text)
 
-    hint = "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08"
-    if uses_dash_range:
-        hint = "범위 구분자는 '-'가 아니라 '~'를 사용하세요"
-    elif uses_space_instead_underscore:
-        hint = "날짜와 시간은 공백이 아니라 '_'로 구분하세요"
+    hint = "예: 2025-08-08_15:00~2025-08-08_19:00 또는 2025-08-08-15:00~2025-08-08-19:00 또는 2025-08-08"
+    if uses_space_instead_separator:
+        hint = "날짜와 시간은 공백이 아니라 '_' 또는 '-'로 구분하세요"
     elif time_with_dash:
         hint = "시간은 '15-00'이 아니라 '15:00' 형식이어야 합니다"
 
     msg = {
         "code": "FORMAT_ERROR",
-        "message": "입력 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM 또는 YYYY-MM-DD)",
+        "message": "입력 형식이 올바르지 않습니다 (YYYY-MM-DD_HH:MM~YYYY-MM-DD_HH:MM 또는 YYYY-MM-DD-HH:MM~YYYY-MM-DD-HH:MM 또는 YYYY-MM-DD)",
         "input": text,
         "hint": hint
     }
@@ -426,6 +430,7 @@ def fetch_cell_averages_for_period(
     period_label: str,
     ne_filters: Optional[list] = None,
     cellid_filters: Optional[list] = None,
+    host_filters: Optional[list] = None,
 ) -> pd.DataFrame:
     """
     주어진 기간에 대해 PEG 단위 평균값을 집계합니다.
@@ -464,12 +469,24 @@ def fetch_cell_averages_for_period(
             sql += f" AND {cell_col} IN ({placeholders})"
             params.extend(cid_vals)
 
+    # 선택적 필터: host (신규 추가)
+    if host_filters:
+        host_col = columns.get("host", "host")
+        host_vals = [str(x).strip() for x in (host_filters or []) if str(x).strip()]
+        if len(host_vals) == 1:
+            sql += f" AND {host_col} = %s"
+            params.append(host_vals[0])
+        elif len(host_vals) > 1:
+            placeholders = ",".join(["%s"] * len(host_vals))
+            sql += f" AND {host_col} IN ({placeholders})"
+            params.extend(host_vals)
+
     sql += f" GROUP BY {peg_col}"
     try:
         # 동적 테이블/컬럼 구성이므로 실행 전에 구성값을 로그로 남겨 디버깅을 돕는다
         logging.info(
-            "집계 SQL 실행: table=%s, time_col=%s, peg_col=%s, value_col=%s, ne_col=%s, cell_col=%s",
-            table, time_col, peg_col, value_col, ne_col, cell_col,
+            "집계 SQL 실행: table=%s, time_col=%s, peg_col=%s, value_col=%s, ne_col=%s, cell_col=%s, host_col=%s",
+            table, time_col, peg_col, value_col, ne_col, cell_col, columns.get("host", "host"),
         )
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(sql, tuple(params))
@@ -1420,6 +1437,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
       - columns: {time: 'datetime', peg_name: 'peg_name', value: 'value'}
       - ne: 문자열 또는 배열. 예: "nvgnb#10000" 또는 ["nvgnb#10000","nvgnb#20000"]
       - cellid|cell: 문자열(쉼표 구분) 또는 배열. 예: "2010,2011" 또는 [2010,2011]
+      - host: 문자열 또는 배열. 예: "192.168.1.1" 또는 ["host01","192.168.1.10"]
         → 제공 시 DB 집계에서 해당 조건으로 필터링하여 PEG 평균을 계산
       - preference: 쉼표 구분 문자열 또는 배열. 정확한 peg_name만 인식하여 '특정 peg 분석' 대상 선정
       - selected_pegs: 배열. 명시적 선택 목록이 있으면 우선 사용
@@ -1457,10 +1475,11 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         # DB 조회
         conn = get_db_connection(db)
         try:
-            # 선택적 입력 필터 수집: ne, cellid
-            # request 예시: { "ne": "nvgnb#10000" } 또는 { "ne": ["nvgnb#10000","nvgnb#20000"], "cellid": "2010,2011" }
+            # 선택적 입력 필터 수집: ne, cellid, host
+            # request 예시: { "ne": "nvgnb#10000" } 또는 { "ne": ["nvgnb#10000","nvgnb#20000"], "cellid": "2010,2011", "host": "192.168.1.1" }
             ne_raw = request.get('ne')
             cell_raw = request.get('cellid') or request.get('cell')
+            host_raw = request.get('host')
 
             def to_list(raw):
                 if raw is None:
@@ -1473,11 +1492,12 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
 
             ne_filters = to_list(ne_raw)
             cellid_filters = to_list(cell_raw)
+            host_filters = to_list(host_raw)
 
-            logging.info("입력 필터: ne=%s, cellid=%s", ne_filters, cellid_filters)
+            logging.info("입력 필터: ne=%s, cellid=%s, host=%s", ne_filters, cellid_filters, host_filters)
 
-            n1_df = fetch_cell_averages_for_period(conn, table, columns, n1_start, n1_end, "N-1", ne_filters=ne_filters, cellid_filters=cellid_filters)
-            n_df = fetch_cell_averages_for_period(conn, table, columns, n_start, n_end, "N", ne_filters=ne_filters, cellid_filters=cellid_filters)
+            n1_df = fetch_cell_averages_for_period(conn, table, columns, n1_start, n1_end, "N-1", ne_filters=ne_filters, cellid_filters=cellid_filters, host_filters=host_filters)
+            n_df = fetch_cell_averages_for_period(conn, table, columns, n_start, n_end, "N", ne_filters=ne_filters, cellid_filters=cellid_filters, host_filters=host_filters)
         finally:
             conn.close()
             logging.info("DB 연결 종료")
