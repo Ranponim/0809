@@ -837,6 +837,7 @@ export const PreferenceProvider = ({ children }) => {
 
       // 2. 서버에도 저장 시도
       try {
+
         await apiClient.put(`/api/preference/settings?userId=${state.userId}`, {
           dashboardSettings: settings.dashboardSettings || {},
           statisticsSettings: settings.statisticsSettings || {},

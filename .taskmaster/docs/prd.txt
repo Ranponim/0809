@@ -204,3 +204,190 @@ KPI 대시보드 프론트엔드의 설정 저장 기능을 개선하여 모든 
 - kpi_dashboard/backend/app/routers/preference.py
 - kpi_dashboard/backend/app/models/preference.py
 - kpi_dashboard/backend/app/db.py
+
+# KPI 대시보드 프론트엔드 사용자 경험 개선 PRD
+
+<context>
+# Overview  
+KPI 대시보드 프론트엔드의 사용자 경험을 개선하여 설정 관리의 편의성과 사용성을 향상시킵니다. 현재 사용자들이 겪고 있는 설정 초기화 문제와 복잡한 설정 순서 의존성 문제를 해결하여, 더 직관적이고 사용하기 편한 대시보드를 제공합니다.
+
+# 현재 문제점
+- 브라우저 새로고침 또는 재접속 시 저장한 설정이 초기화됨
+- PostgreSQL DB 연동 후 PEG와 Statistics 설정 순서에 의존성이 있어 사용자가 혼란스러워함
+- 설정 백업/복원 기능은 있지만 전체 설정을 초기화하는 기능이 없음
+
+# Core Features  
+
+## 1. 지속적인 설정 저장 (Persistent Settings)
+- **기능**: 사용자의 모든 설정을 브라우저 재접속 후에도 유지
+- **중요성**: 사용자가 매번 설정을 다시 입력할 필요가 없어 생산성 향상
+- **구현 방식**: LocalStorage + 서버 동기화를 통한 하이브리드 저장 방식
+
+## 2. 설정 순서 의존성 제거 (Order-Independent Configuration)
+- **기능**: PEG와 Statistics 설정을 어떤 순서로 저장하든 정상 동작
+- **중요성**: 사용자의 혼란을 줄이고 더 유연한 설정 관리 제공
+- **구현 방식**: 스마트 검증 시스템과 자동 의존성 해결
+
+## 3. 향상된 백업/복원 시스템 (Enhanced Backup/Restore)
+- **기능**: 기존 백업/복원 + 전체 설정 초기화 기능 추가
+- **중요성**: 사용자가 설정을 완전히 새로 시작하고 싶을 때 편의성 제공
+- **구현 방식**: 확인 대화상자가 포함된 안전한 초기화 기능
+
+# User Experience  
+
+## 사용자 페르소나
+- **주 사용자**: 네트워크 엔지니어, 시스템 관리자
+- **사용 빈도**: 일일 모니터링 및 주기적 설정 조정
+- **기술 수준**: 중급 (기술적 이해도는 있지만 복잡한 UI는 선호하지 않음)
+
+## 핵심 사용자 플로우
+1. **설정 지속성 플로우**: 로그인 → 설정 → 재접속 → 설정 유지됨
+2. **유연한 설정 플로우**: PostgreSQL 연결 → PEG/Statistics 어느 것부터든 설정 가능
+3. **설정 관리 플로우**: 백업 생성 → 설정 변경 → 복원 또는 초기화
+
+## UI/UX 고려사항
+- 설정 저장 상태를 명확히 표시 (저장됨/저장 중/오류)
+- 설정 순서와 관계없이 직관적인 안내 메시지 제공
+- 초기화 기능에 안전장치 (확인 대화상자) 포함
+</context>
+
+<PRD>
+# Technical Architecture  
+
+## 시스템 컴포넌트
+- **프론트엔드**: React 기반 SPA (현재 구조 유지)
+- **상태 관리**: Context API + LocalStorage 하이브리드
+- **백엔드 API**: 기존 FastAPI 엔드포인트 확장
+- **데이터베이스**: PostgreSQL (기존 구조 활용)
+
+## 데이터 모델
+```json
+{
+  "userSettings": {
+    "id": "uuid",
+    "userId": "string",
+    "preferences": {
+      "dashboard": { ... },
+      "charts": { ... },
+      "filters": { ... }
+    },
+    "pegConfigurations": [...],
+    "statisticsConfigurations": [...],
+    "lastModified": "timestamp",
+    "version": "number"
+  }
+}
+```
+
+## API 확장 요구사항
+- `/api/settings/save` - 설정 저장
+- `/api/settings/load` - 설정 로드  
+- `/api/settings/reset` - 설정 초기화
+- `/api/settings/validate` - 설정 검증
+
+## 인프라 요구사항
+- LocalStorage 용량 관리 (5MB 제한 고려)
+- 오프라인 모드 대응
+- 설정 동기화 실패 시 복구 메커니즘
+
+# Development Roadmap  
+
+## Phase 1: 기본 설정 지속성 구현
+- LocalStorage 기반 설정 저장 시스템 구축
+- 페이지 새로고침 시 설정 복원 기능
+- 설정 저장 상태 UI 표시
+- 기본적인 오류 처리
+
+## Phase 2: 서버 연동 및 동기화
+- 백엔드 설정 저장 API 개발
+- 클라이언트-서버 설정 동기화 로직
+- 충돌 해결 메커니즘 (로컬 vs 서버 설정)
+- 사용자별 설정 관리
+
+## Phase 3: 설정 순서 의존성 제거
+- PEG/Statistics 설정 검증 로직 개선
+- 스마트 의존성 해결 시스템
+- 사용자 친화적 안내 메시지
+- 부분 설정 저장 지원
+
+## Phase 4: 향상된 백업/복원 시스템
+- 전체 설정 초기화 기능 구현
+- 향상된 백업/복원 UI
+- 설정 버전 관리
+- 안전장치 및 확인 대화상자
+
+# Logical Dependency Chain
+
+## 개발 순서
+1. **Foundation (Phase 1)**: LocalStorage 기반 설정 저장
+   - 가장 빠르게 사용자에게 보이는 개선사항
+   - 다른 기능들의 기반이 되는 핵심 기능
+
+2. **Enhancement (Phase 2)**: 서버 동기화
+   - Phase 1의 기능을 확장하여 더 안정적인 저장
+   - 멀티 디바이스 지원의 기반
+
+3. **UX Improvement (Phase 3)**: 순서 의존성 제거
+   - 사용자 경험 크게 개선
+   - 독립적으로 개발 가능하지만 Phase 1-2의 안정성 필요
+
+4. **Final Polish (Phase 4)**: 완전한 설정 관리
+   - 모든 기능이 안정화된 후 추가
+   - 사용자 요청이 많은 편의 기능
+
+## 각 단계별 MVP 정의
+- **Phase 1 MVP**: 새로고침 후 기본 설정 유지
+- **Phase 2 MVP**: 재접속 후 모든 설정 유지  
+- **Phase 3 MVP**: PEG/Statistics 순서 무관하게 저장 가능
+- **Phase 4 MVP**: 원클릭 전체 초기화 기능
+
+# Risks and Mitigations  
+
+## 기술적 도전과제
+**리스크**: LocalStorage 용량 제한 및 브라우저 호환성
+**완화방안**: 
+- 설정 데이터 압축 및 최적화
+- IndexedDB 폴백 메커니즘
+- 핵심 설정 우선순위 저장
+
+**리스크**: 클라이언트-서버 설정 동기화 충돌
+**완화방안**:
+- 타임스탬프 기반 충돌 해결
+- 사용자 선택 옵션 제공
+- 안전한 백업 생성
+
+## MVP 범위 정의
+**핵심 MVP**: 
+- LocalStorage 기반 설정 저장 (Phase 1)
+- 기본적인 PEG/Statistics 순서 독립성 (Phase 3 일부)
+
+**확장 기능**: 
+- 서버 동기화 (Phase 2)
+- 고급 백업/복원 (Phase 4)
+
+## 자원 제약사항
+**리스크**: 기존 시스템에 영향을 줄 수 있는 대규모 변경
+**완화방안**:
+- 점진적 개발 및 배포
+- 기존 기능과의 호환성 유지
+- 철저한 테스트 및 롤백 계획
+
+# Appendix  
+
+## 기술 스펙
+- **프론트엔드**: React 18+, Context API, LocalStorage API
+- **백엔드**: FastAPI, PostgreSQL
+- **테스팅**: Jest, React Testing Library, Playwright
+- **배포**: Docker, 기존 CI/CD 파이프라인 활용
+
+## 성능 요구사항
+- 설정 저장: 100ms 이내
+- 설정 로드: 50ms 이내
+- 페이지 새로고침 후 복원: 200ms 이내
+
+## 보안 고려사항
+- 사용자별 설정 격리
+- 설정 데이터 검증
+- XSS 방지를 위한 데이터 새니타이징
+</PRD>
+
