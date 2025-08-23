@@ -47,8 +47,7 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 FROM nginx:1.27-alpine AS production
 
 # 보안 강화를 위한 비루트 사용자
-RUN addgroup -g 1001 -S nginx && \
-    adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+RUN if ! getent group nginx > /dev/null; then addgroup -g 1001 -S nginx; fi &&     if ! getent passwd nginx > /dev/null; then adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx; fi
 
 # 프로덕션용 nginx 설정
 COPY nginx/nginx.prod.conf /etc/nginx/nginx.conf

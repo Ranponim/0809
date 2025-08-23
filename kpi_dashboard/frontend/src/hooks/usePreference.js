@@ -336,6 +336,22 @@ export const usePreference = () => {
   // 반환 값 정의
   // ================================
 
+  const dashboardSettings = useMemo(() => {
+    return context.settings.preferences?.dashboard || context.settings.dashboardSettings || {}
+  }, [context.settings.preferences?.dashboard, context.settings.dashboardSettings])
+
+  const statisticsSettings = useMemo(() => {
+    return context.settings.preferences?.charts || context.settings.statisticsSettings || {}
+  }, [context.settings.preferences?.charts, context.settings.statisticsSettings])
+
+  const notificationSettings = useMemo(() => {
+    return context.settings.notificationSettings || {}
+  }, [context.settings.notificationSettings])
+
+  const generalSettings = useMemo(() => {
+    return context.settings.generalSettings || {}
+  }, [context.settings.generalSettings])
+
   return {
     // 기본 상태와 설정
     ...context,
@@ -354,10 +370,10 @@ export const usePreference = () => {
     importSettings,
     
     // 빠른 접근을 위한 별칭들 - PRD 호환 구조에서 추출
-    dashboardSettings: context.settings.preferences?.dashboard || context.settings.dashboardSettings || {},
-    statisticsSettings: context.settings.preferences?.charts || context.settings.statisticsSettings || {},
-    notificationSettings: context.settings.notificationSettings || {},
-    generalSettings: context.settings.generalSettings || {}
+    dashboardSettings,
+    statisticsSettings,
+    notificationSettings,
+    generalSettings
   }
 }
 
@@ -378,11 +394,7 @@ export const useDashboardSettings = () => {
     logInfo
   } = usePreference()
 
-  // 디버깅: rawDashboardSettings 값 확인
-  console.log('[useDashboardSettings] rawDashboardSettings:', rawDashboardSettings)
-
-  // dashboardSettings가 undefined일 때 기본값 제공
-  const dashboardSettings = {
+  const dashboardSettings = useMemo(() => ({
     selectedPegs: [],
     defaultNe: '',
     defaultCellId: '',
@@ -391,10 +403,7 @@ export const useDashboardSettings = () => {
     showLegend: true,
     showGrid: true,
     ...rawDashboardSettings
-  }
-
-  // 디버깅: 최종 dashboardSettings 값 확인
-  console.log('[useDashboardSettings] final dashboardSettings:', dashboardSettings)
+  }), [rawDashboardSettings])
 
   const updateDashboardSettings = useCallback((newSettings) => {
     logInfo('Dashboard 설정 업데이트', newSettings)

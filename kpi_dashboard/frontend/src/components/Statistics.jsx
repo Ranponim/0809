@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
-import { usePreference } from '@/contexts/PreferenceContext.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -12,7 +11,7 @@ import AdvancedChart from './AdvancedChart.jsx'
 import BasicComparison from './BasicComparison.jsx'
 import apiClient from '@/lib/apiClient.js'
 import { toast } from 'sonner'
-import { useStatisticsSettings } from '@/hooks/usePreference.js'
+import { usePreference, useStatisticsSettings } from '@/hooks/usePreference.js'
 
 const Statistics = () => {
   // usePreference 훅 사용

@@ -197,26 +197,20 @@ const Dashboard = () => {
     error: settingsError
   } = useDashboardSettings()
 
-  // 디버깅: dashboardSettings 값 확인
-  console.log('[Dashboard.optimized] dashboardSettings:', dashboardSettings)
-
   // 상수들을 메모이제이션
   const defaultKpiKeys = useMemo(() => [
     'availability','rrc','erab','sar','mobility_intra','cqi'
   ], [])
   
+  // useDashboardSettings 훅에서 반환하는 객체의 참조가 불안정하여 무한 루프를 유발할 수 있으므로,
+  // 의존성 배열에 원시값과 배열의 직렬화된 값을 사용하여 settings 객체의 불필요한 재생성을 방지합니다.
+  const selectedPegsKey = JSON.stringify(dashboardSettings?.selectedPegs)
+
   // 현재 설정에서 값 추출 (기본값 포함) - 메모이제이션
   const settings = useMemo(() => {
-    // selectedPegs가 없거나 빈 배열이면 기본값 사용
     const selectedPegs = dashboardSettings?.selectedPegs && dashboardSettings.selectedPegs.length > 0 
       ? dashboardSettings.selectedPegs 
       : defaultKpiKeys
-    
-    console.log('[Dashboard.optimized] settings 생성:', {
-      dashboardSelectedPegs: dashboardSettings?.selectedPegs,
-      finalSelectedPegs: selectedPegs,
-      defaultKpiKeys
-    })
     
     return {
       selectedPegs,
@@ -227,7 +221,16 @@ const Dashboard = () => {
       showLegend: dashboardSettings?.showLegend !== false,
       showGrid: dashboardSettings?.showGrid !== false
     }
-  }, [dashboardSettings, defaultKpiKeys])
+  }, [
+    selectedPegsKey,
+    dashboardSettings?.defaultNe,
+    dashboardSettings?.defaultCellId,
+    dashboardSettings?.autoRefreshInterval,
+    dashboardSettings?.chartStyle,
+    dashboardSettings?.showLegend,
+    dashboardSettings?.showGrid,
+    defaultKpiKeys
+  ])
 
   // 제목 매핑을 메모이제이션
   const titleMap = useMemo(() => ({

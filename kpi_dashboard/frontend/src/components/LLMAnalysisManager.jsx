@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 
 import { triggerLLMAnalysis, getLLMAnalysisResult, testDatabaseConnection } from '@/lib/apiClient'
-import { usePreference } from '@/contexts/PreferenceContext.jsx'
+import { usePreference } from '@/hooks/usePreference.js'
 
 const LLMAnalysisManager = () => {
   // Preference에서 DB 설정 사용 (공통)
