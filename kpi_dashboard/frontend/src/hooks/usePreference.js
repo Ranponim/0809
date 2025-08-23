@@ -382,14 +382,15 @@ export const useDashboardSettings = () => {
   console.log('[useDashboardSettings] rawDashboardSettings:', rawDashboardSettings)
 
   // dashboardSettings가 undefined일 때 기본값 제공
-  const dashboardSettings = rawDashboardSettings || {
+  const dashboardSettings = {
     selectedPegs: [],
     defaultNe: '',
     defaultCellId: '',
     autoRefreshInterval: 30,
     chartStyle: 'line',
     showLegend: true,
-    showGrid: true
+    showGrid: true,
+    ...rawDashboardSettings
   }
 
   // 디버깅: 최종 dashboardSettings 값 확인
