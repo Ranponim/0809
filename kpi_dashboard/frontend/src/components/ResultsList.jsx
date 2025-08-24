@@ -9,8 +9,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
+
 import { Badge } from '@/components/ui/badge.jsx'
 import { 
   Table, 
@@ -138,11 +137,7 @@ const ResultsList = () => {
     })
   }, [logInfo])
 
-  // === 필터 핸들러 ===
-  const handleFilterChange = useCallback((newFilters) => {
-    updateFilters(newFilters)
-    logInfo('필터 변경', newFilters)
-  }, [updateFilters, logInfo])
+  
 
   // === 선택 핸들러 ===
   const handleSelectResult = useCallback((resultId) => {

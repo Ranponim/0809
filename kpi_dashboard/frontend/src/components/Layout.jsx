@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect } from 'react'
 import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { BarChart3, FileText, Settings, TrendingUp, Database, Brain } from 'lucide-react'
+import { BarChart3, Settings, TrendingUp, Database, Brain } from 'lucide-react'
 import { 
   preloadDashboard, 
   preloadStatistics, 
   preloadPreferenceManager, 
   preloadResultsList, 
-  preloadSummaryReport,
   preloadLLMAnalysisManager,
   preloadBasedOnNetworkSpeed 
 } from './LazyComponents.jsx'

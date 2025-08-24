@@ -5,7 +5,7 @@
  * Task 41: Frontend LLM 분석 결과 필터링 기능 구현
  */
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { 
   X, 
-  Search, 
   Calendar,
   Building,
   Radio,

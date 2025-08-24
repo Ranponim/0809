@@ -16,7 +16,7 @@
  * ```
  */
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { usePreference as usePreferenceContext } from '@/contexts/PreferenceContext.jsx'
 import { toast } from 'sonner'
 
@@ -80,7 +80,7 @@ const validationRules = {
 
 export const usePreference = () => {
   const context = usePreferenceContext()
-  const validationErrorsRef = useRef({})
+  const [validationErrors, setValidationErrors] = useState({})
 
   // ================================
   // 유효성 검증 함수
@@ -187,7 +187,7 @@ export const usePreference = () => {
 
     // 유효성 검증 (section이 지정된 경우 해당 섹션만 검증)
     const validationErrors = validateSettings(settingsToValidate, section)
-    validationErrorsRef.current = validationErrors
+    setValidationErrors(validationErrors)
 
     // 검증 오류가 있으면 알림 표시 후 반환
     if (Object.keys(validationErrors).length > 0) {
@@ -322,7 +322,7 @@ export const usePreference = () => {
   // 계산된 값들
   // ================================
 
-  const validationErrors = useMemo(() => validationErrorsRef.current, [validationErrorsRef.current])
+  
   
   const hasValidationErrors = useMemo(() => {
     return Object.keys(validationErrors).length > 0
@@ -394,16 +394,28 @@ export const useDashboardSettings = () => {
     logInfo
   } = usePreference()
 
-  const dashboardSettings = useMemo(() => ({
-    selectedPegs: [],
-    defaultNe: '',
-    defaultCellId: '',
-    autoRefreshInterval: 30,
-    chartStyle: 'line',
-    showLegend: true,
-    showGrid: true,
-    ...rawDashboardSettings
-  }), [rawDashboardSettings])
+  const dashboardSettings = useMemo(() => {
+    const defaults = {
+      selectedPegs: [],
+      defaultNe: '',
+      defaultCellId: '',
+      autoRefreshInterval: 30,
+      chartStyle: 'line',
+      showLegend: true,
+      showGrid: true,
+    }
+
+    const settings = { ...defaults, ...rawDashboardSettings }
+
+    // selectedPegs가 null, undefined 또는 빈 배열이 아닌 유효한 배열인지 확인
+    if (Array.isArray(rawDashboardSettings?.selectedPegs) && rawDashboardSettings.selectedPegs.length > 0) {
+      settings.selectedPegs = rawDashboardSettings.selectedPegs
+    } else {
+      settings.selectedPegs = defaults.selectedPegs
+    }
+
+    return settings
+  }, [rawDashboardSettings])
 
   const updateDashboardSettings = useCallback((newSettings) => {
     logInfo('Dashboard 설정 업데이트', newSettings)

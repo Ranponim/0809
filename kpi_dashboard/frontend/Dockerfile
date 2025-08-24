@@ -67,8 +67,8 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
 # 프로덕션용 헬스체크 엔드포인트 추가
 RUN echo '<!DOCTYPE html><html><head><title>Health Check</title></head><body><h1>OK</h1></body></html>' > /usr/share/nginx/html/health.html
 
-# 비루트 사용자로 실행
-USER nginx
+# root 사용자로 실행 (권한 문제 해결)
+# USER nginx
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

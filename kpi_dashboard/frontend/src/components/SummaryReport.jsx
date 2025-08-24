@@ -26,7 +26,7 @@ const SummaryReport = () => {
           }
           setReports([synthetic])
           setSelectedReport(synthetic)
-        } catch (_) {
+        } catch {
           const response = await apiClient.get('/api/reports/summary')
           setReports(response.data.reports || [])
           if (response.data.reports && response.data.reports.length > 0) {

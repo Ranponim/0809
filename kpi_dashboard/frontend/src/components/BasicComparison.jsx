@@ -20,7 +20,7 @@ import {
 } from 'recharts'
 import { 
   Play, RefreshCw, TrendingUp, TrendingDown, Minus, AlertTriangle, 
-  CheckCircle, Info, BarChart3, Eye, Settings, Download, Upload
+  CheckCircle, BarChart3, Eye, Settings, Download
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -33,16 +33,13 @@ const BasicComparison = () => {
   // Preference 설정 훅
   const {
     settings: statisticsSettings,
-    updateSettings: updateStatisticsSettings,
-    saving,
-    error: settingsError
+    updateSettings: updateStatisticsSettings
   } = useStatisticsSettings()
   
   // 전역 Preference 훅 (Dashboard 설정 업데이트용)
   const {
     preferences,
     updatePreference,
-    isLoading: preferenceLoading,
     isSaving: preferenceSaving
   } = usePreference()
 

@@ -46,16 +46,7 @@ const AdvancedChart = memo(() => {
     return kpiOptions
   }, [useDbPegs, dbPegOptions, kpiOptions])
 
-  // 차트 데이터 키 계산
-  const getDataKeys = useMemo(() => {
-    if (chartData.length === 0) return { primary: [], secondary: [] }
-    
-    const allKeys = Object.keys(chartData[0]).filter(key => key !== 'time')
-    const primary = allKeys.filter(key => key.endsWith('_period1') || key.endsWith('_period2'))
-    const secondary = allKeys.filter(key => key.endsWith('_secondary'))
-    
-    return { primary, secondary }
-  }, [chartData])
+  
 
   // DB에서 실제 PEG 목록 가져오기
   const fetchDbPegs = useCallback(async () => {
@@ -68,7 +59,9 @@ const AdvancedChart = memo(() => {
       try {
         const rawDb = localStorage.getItem('dbConfig')
         if (rawDb) dbConfig = JSON.parse(rawDb)
-      } catch {}
+      } catch (e) {
+        console.error('Error parsing dbConfig from localStorage', e)
+      }
 
       if (!dbConfig.host) {
         console.warn('[AdvancedChart] No DB config found')
@@ -196,13 +189,7 @@ const AdvancedChart = memo(() => {
     }
   }, [chartConfig, useDbPegs, formatAdvancedChartData])
 
-  // DB PEG 토글 핸들러
-  const handleToggleDbPegs = useCallback((value) => {
-    setUseDbPegs(value)
-    if (value && dbPegOptions.length === 0) {
-      fetchDbPegs()
-    }
-  }, [dbPegOptions.length, fetchDbPegs])
+  
 
   // 초기 KPI 옵션 로드
   useEffect(() => {
@@ -235,7 +222,7 @@ const AdvancedChart = memo(() => {
     }
   }, [useDbPegs, dbPegOptions.length, fetchDbPegs])
 
-  const { primary: primaryKeys, secondary: secondaryKeys } = getDataKeys
+  
 
   return (
     <div className="space-y-6">
@@ -254,7 +241,6 @@ const AdvancedChart = memo(() => {
             loading={loading}
             onGenerate={generateChart}
             useDbPegs={useDbPegs}
-            onToggleDbPegs={handleToggleDbPegs}
             pegOptionsLoading={pegOptionsLoading}
             dbPegOptions={dbPegOptions}
           />

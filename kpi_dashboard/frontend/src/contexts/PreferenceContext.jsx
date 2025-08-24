@@ -19,13 +19,11 @@ import apiClient, {
 import { 
   saveSettingsToLocalStorage,
   loadSettingsFromLocalStorage,
-  clearSettingsFromLocalStorage,
-  checkLocalStorageAvailability
+  clearSettingsFromLocalStorage
 } from '@/utils/localStorageUtils'
 import {
   mapUserSettingsToBackend,
-  mapBackendToUserSettings,
-  compareTimestamps
+  mapBackendToUserSettings
 } from '@/utils/preferenceModelMapper.js'
 import {
   analyzeSettingsConflict,
@@ -38,9 +36,7 @@ import {
   comprehensiveLWW,
   strictTimestampLWW,
   fieldLevelLWW,
-  smartMergeStrategy,
-  LWW_STRATEGIES,
-  CONFIDENCE_LEVELS
+  smartMergeStrategy
 } from '@/utils/lastWriteWinsUtils.js'
 import {
   logInfo as logInfoUtil,
@@ -52,10 +48,14 @@ import {
 } from '@/utils/loggingUtils.js'
 import {
   createBackgroundSync,
-  SYNC_STRATEGIES,
-  SYNC_STATES,
   getNetworkInfo
 } from '@/utils/backgroundSyncUtils.js'
+import { 
+  SYNC_STRATEGIES, 
+  SYNC_STATES,
+  LWW_STRATEGIES,
+  CONFIDENCE_LEVELS
+} from '@/utils/constants.js'
 
 // ================================
 // 초기 상태 정의 (런타임 환경변수 주입)
@@ -421,12 +421,21 @@ export const PreferenceProvider = ({ children }) => {
       }
 
       if (result.settings) {
-        // UserSettings를 기존 설정 구조로 변환
+        // UserSettings를 기존 설정 구조로 변환 (버그 수정)
         const convertedSettings = {
-          dashboardSettings: result.settings.preferences?.dashboard || {},
-          statisticsSettings: result.settings.preferences?.dashboard || {},
-          databaseSettings: state.settings.databaseSettings || {},
-          notificationSettings: state.settings.notificationSettings || {},
+          ...defaultSettings, // 먼저 기본값으로 전체 구조를 보장
+          dashboardSettings: result.settings.preferences?.dashboard || defaultSettings.dashboardSettings,
+          statisticsSettings: result.settings.preferences?.charts || defaultSettings.statisticsSettings,
+          databaseSettings: result.settings.databaseSettings || defaultSettings.databaseSettings,
+          notificationSettings: result.settings.notificationSettings || defaultSettings.notificationSettings,
+          generalSettings: result.settings.preferences?.filters 
+            ? { // filters 객체를 generalSettings로 매핑
+                language: result.settings.preferences.filters.language || 'ko',
+                timezone: result.settings.preferences.filters.timezone || 'Asia/Seoul',
+                dateFormat: result.settings.preferences.filters.dateFormat || 'YYYY-MM-DD',
+                numberFormat: result.settings.preferences.filters.numberFormat || 'comma'
+              }
+            : defaultSettings.generalSettings,
           pegConfigurations: result.settings.pegConfigurations || [],
           statisticsConfigurations: result.settings.statisticsConfigurations || []
         }
@@ -442,7 +451,7 @@ export const PreferenceProvider = ({ children }) => {
       logError('LocalStorage 설정 로드 중 예외 발생', error)
       return null
     }
-  }, [logInfo, logError, state.settings])
+  }, [logInfo, logError])
 
   /**
    * LocalStorage에 설정 저장 (새로운 유틸리티 사용)
@@ -529,108 +538,48 @@ export const PreferenceProvider = ({ children }) => {
 
     try {
       dispatch({ type: 'SET_LOADING', payload: true })
-      logInfo('하이브리드 설정 로드 시작')
+      logInfo('설정 로드 시작 (로컬 우선)')
 
-      // Task 8.1: Server-First Sync - 서버 우선 초기 로드 구현
-      
-      // 1. 먼저 서버에서 설정 로드 시도 (Server-First Strategy)
-      logInfo('서버 우선 설정 로드 시작')
-      
-      const serverResponse = await getUserPreferences(state.userId)
-      
-      if (serverResponse.success && !serverResponse.isNew) {
-        // 서버에 설정이 있는 경우
-        const serverUserSettings = mapBackendToUserSettings(serverResponse.data)
-        
-        // 2. LocalStorage에서도 설정 확인
-        const localSettings = loadFromLocalStorage()
-        
-        if (localSettings) {
-          // 두 설정 모두 있으면 타임스탬프 비교
-          const comparison = compareTimestamps(
-            localSettings?.metadata?.lastModified,
-            serverUserSettings?.metadata?.lastModified
-          )
-          
-          if (comparison > 0) {
-            // 로컬이 더 최신
-            logInfo('로컬 설정이 더 최신 - 로컬 설정 적용 후 서버 동기화')
-            dispatch({ type: 'SET_SETTINGS', payload: localSettings })
-            
-            // 백그라운드에서 서버에 업로드
-            setTimeout(() => syncWithServer(localSettings), 100)
-            
-            if (localSettings.notificationSettings?.enableToasts) {
-              toast.success('저장된 설정을 복원했습니다')
-            }
-          } else {
-            // 서버가 더 최신 또는 같음
-            logInfo('서버 설정이 최신 - 서버 설정 적용')
-            dispatch({ type: 'SET_SETTINGS', payload: serverUserSettings })
-            saveToLocalStorage(serverUserSettings)
-            
-            if (serverUserSettings.notificationSettings?.enableToasts) {
-              toast.success('서버에서 최신 설정을 불러왔습니다')
-            }
-          }
-        } else {
-          // 로컬 설정 없음 - 서버 설정 적용
-          logInfo('로컬 설정 없음 - 서버 설정 적용')
-          dispatch({ type: 'SET_SETTINGS', payload: serverUserSettings })
-          saveToLocalStorage(serverUserSettings)
-          
-          if (serverUserSettings.notificationSettings?.enableToasts) {
-            toast.success('설정을 불러왔습니다')
-          }
-        }
-        
-        return
-      }
-      
-      // 3. 서버에 설정이 없는 경우 (신규 사용자)
-      logInfo('신규 사용자 - LocalStorage 또는 기본 설정 사용')
-      
+      // 1. LocalStorage에서 설정 로드
       const localSettings = loadFromLocalStorage()
       
       if (localSettings) {
-        // LocalStorage에 설정이 있으면 사용하고 서버에 업로드
-        logInfo('LocalStorage 설정 복원 후 서버 업로드')
+        // 로컬 설정이 있으면 즉시 적용
+        logInfo('LocalStorage에서 설정 로드 성공. 로컬 설정을 적용합니다.')
         dispatch({ type: 'SET_SETTINGS', payload: localSettings })
-        
-        // 백그라운드에서 서버에 업로드
-        setTimeout(() => syncWithServer(localSettings), 100)
         
         if (localSettings.notificationSettings?.enableToasts) {
           toast.success('저장된 설정을 복원했습니다')
         }
       } else {
-        // 완전히 새로운 사용자 - 기본 설정 사용
-        logInfo('완전히 새로운 사용자 - 기본 설정 사용')
+        // 로컬 설정이 없으면 기본 설정 사용
+        logInfo('LocalStorage에 저장된 설정이 없습니다. 기본 설정을 사용합니다.')
         dispatch({ type: 'SET_SETTINGS', payload: defaultSettings })
-        saveToLocalStorage(defaultSettings)
-        
-        // 기본 설정을 서버에도 저장
-        setTimeout(() => syncWithServer(defaultSettings), 100)
+        saveToLocalStorage(defaultSettings) // 기본 설정을 로컬에 저장
         
         if (defaultSettings.notificationSettings?.enableToasts) {
           toast.info('기본 설정으로 시작합니다')
         }
       }
 
+      // 2. 백그라운드에서 서버와 조용히 동기화 (UI에 영향 X)
+      setTimeout(() => {
+        logInfo('백그라운드 서버 동기화를 시작합니다.')
+        syncWithServer(localSettings || defaultSettings)
+      }, 500)
+
     } catch (error) {
-      logError('설정 로드 실패, 기본값 사용', error)
-      
-      // 서버 로드 실패 시 기본 설정 사용
+      logError('설정 로드 중 심각한 오류 발생. 기본값으로 복구합니다.', error)
       dispatch({ type: 'SET_SETTINGS', payload: defaultSettings })
       saveToLocalStorage(defaultSettings)
       
       if (defaultSettings.notificationSettings?.enableToasts) {
-        toast.warning('서버 연결 실패로 기본 설정을 사용합니다')
+        toast.error('설정 로드에 실패하여 기본값으로 복구합니다.')
       }
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false })
     }
-  }, [state.userId, loadFromLocalStorage, saveToLocalStorage, logInfo, logError])
+  }, [loadFromLocalStorage, saveToLocalStorage, syncWithServer, logInfo, logError])
 
   /**
    * 서버와 동기화 (백그라운드)

@@ -29,12 +29,7 @@ const ChartDisplay = memo(({
     return { primary, secondary }
   }, [chartData])
 
-  const getCurrentKpiOptions = useMemo(() => {
-    if (useDbPegs && dbPegOptions.length > 0) {
-      return dbPegOptions
-    }
-    return kpiOptions
-  }, [useDbPegs, dbPegOptions, kpiOptions])
+  
 
   const { primary: primaryKeys, secondary: secondaryKeys } = getDataKeys
 

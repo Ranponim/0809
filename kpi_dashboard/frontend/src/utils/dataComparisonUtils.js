@@ -7,29 +7,7 @@
 
 import { logInfo, logDebug, logWarning } from './loggingUtils.js'
 import { compareTimestamps } from './preferenceModelMapper.js'
-
-/**
- * 충돌 유형 상수
- */
-export const CONFLICT_TYPES = {
-  NO_CONFLICT: 'no_conflict',
-  TIMESTAMP_CONFLICT: 'timestamp_conflict',
-  DATA_MISMATCH: 'data_mismatch',
-  MISSING_DATA: 'missing_data',
-  VERSION_MISMATCH: 'version_mismatch',
-  CORRUPTION_DETECTED: 'corruption_detected'
-}
-
-/**
- * 충돌 심각도 상수
- */
-export const CONFLICT_SEVERITY = {
-  NONE: 0,
-  LOW: 1,      // 사소한 차이점 (예: UI 설정)
-  MEDIUM: 2,   // 중요한 차이점 (예: 대시보드 설정)
-  HIGH: 3,     // 중대한 차이점 (예: 데이터베이스 설정)
-  CRITICAL: 4  // 치명적 차이점 (예: 데이터 손상)
-}
+import { CONFLICT_TYPES, CONFLICT_SEVERITY } from './constants.js'
 
 /**
  * 설정 필드별 중요도 맵핑

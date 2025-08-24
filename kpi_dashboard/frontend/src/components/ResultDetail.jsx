@@ -200,135 +200,100 @@ const ResultDetail = ({
     })
   }, [processedResults, isCompareMode])
 
-  // === 단일 결과 개요 렌더링 ===
-  const renderSingleOverview = (result) => (
-    <div className="space-y-6">
-      {/* 기본 정보 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            분석 정보
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">분석 일시</div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                <span className="font-medium">{formatDate(result.analysisDate)}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">NE ID</div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.neId || result.results?.[0]?.analysis_info?.ne || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Cell ID</div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.cellId || result.results?.[0]?.analysis_info?.cellid || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">상태</div>
-              <Badge variant={getStatusBadgeVariant(result.status)}>
-                {result.status || 'unknown'}
-              </Badge>
-            </div>
+  // === 단일 결과 차트 데이터 처리 ===
+  const kpiChartData = useMemo(() => {
+    if (isCompareMode || !processedResults.length || !processedResults[0].stats) {
+      return {
+        kpiResults: [],
+        sortedKpiResults: [],
+        filteredResults: [],
+        dataWithTrends: [],
+        trendFilteredResults: [],
+        totalPages: 0,
+        paginatedResults: [],
+        data: [],
+        summaryStats: { improved: 0, declined: 0, stable: 0, avgChange: 0, weightedAvgChange: 0 }
+      };
+    }
 
-            {/* 실제 MongoDB 데이터 기반 필드들 */}
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Host</div>
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                <span className="font-medium">{result.request_params?.db?.host || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Version</div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {result.metadata?.version || '1.0'}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    const result = processedResults[0];
+    const statsData = result.stats || [];
 
-      {/* 분석 요약 - 실제 데이터 기반 지표 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>분석 요약</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {result.stats ? new Set(result.stats.map(s => s.kpi_name)).size : 0}
-              </div>
-              <div className="text-sm text-muted-foreground">포함된 PEG 개수</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {result.analysis?.recommended_actions?.length || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">권장사항 개수</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {result.analysis?.diagnostic_findings?.length || result.analysis?.key_findings?.length || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">주요 발견사항 개수</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">{result.stats?.length || 0}</div>
-              <div className="text-sm text-muted-foreground">데이터 포인트 수</div>
-            </div>
-          </div>
-          
-          {/* 분석 대상 기간 */}
-          {result.request_params?.time_ranges && (
-            <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-              <h4 className="font-medium mb-3">분석 대상 기간</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-muted-foreground">N-1 기간:</span>
-                  <div className="mt-1">
-                    {result.request_params.time_ranges.n_minus_1?.start && 
-                     new Date(result.request_params.time_ranges.n_minus_1.start).toLocaleString('ko-KR')} ~ 
-                    {result.request_params.time_ranges.n_minus_1?.end && 
-                     new Date(result.request_params.time_ranges.n_minus_1.end).toLocaleString('ko-KR')}
-                  </div>
-                </div>
-                <div>
-                  <span className="font-medium text-muted-foreground">N 기간:</span>
-                  <div className="mt-1">
-                    {result.request_params.time_ranges.n?.start && 
-                     new Date(result.request_params.time_ranges.n.start).toLocaleString('ko-KR')} ~ 
-                    {result.request_params.time_ranges.n?.end && 
-                     new Date(result.request_params.time_ranges.n.end).toLocaleString('ko-KR')}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
+    const pegComparison = {};
+    statsData.forEach(stat => {
+      const pegName = stat.kpi_name;
+      if (!pegComparison[pegName]) {
+        pegComparison[pegName] = { peg_name: pegName, weight: 5 };
+      }
+      if (stat.period === 'N-1') {
+        pegComparison[pegName]['N-1'] = stat.avg;
+      } else if (stat.period === 'N') {
+        pegComparison[pegName]['N'] = stat.avg;
+      }
+    });
 
-  // === KPI 결과 차트 렌더링 ===
-  const renderKpiChart = (results) => {
+    const weightData = result.request_params?.peg_definitions || {};
+    Object.keys(pegComparison).forEach(pegName => {
+      if (weightData[pegName]?.weight) {
+        pegComparison[pegName].weight = weightData[pegName].weight;
+      }
+    });
+
+    const kpiResults = Object.values(pegComparison).filter(peg => peg['N-1'] !== undefined && peg['N'] !== undefined);
+    const sortedKpiResults = [...kpiResults].sort((a, b) => (b.weight || 0) - (a.weight || 0));
+
+    const filteredResults = sortedKpiResults.filter(item => {
+      const matchesNameFilter = !pegFilter || item.peg_name.toLowerCase().includes(pegFilter.toLowerCase());
+      const weight = item.weight || 0;
+      let matchesWeightFilter = true;
+      if (weightFilter === 'high') matchesWeightFilter = weight >= 8;
+      else if (weightFilter === 'medium') matchesWeightFilter = weight >= 6 && weight < 8;
+      else if (weightFilter === 'low') matchesWeightFilter = weight < 6;
+      return matchesNameFilter && matchesWeightFilter;
+    });
+
+    const dataWithTrends = filteredResults.map(item => {
+      const n1Value = item['N-1'] || 0;
+      const nValue = item['N'] || 0;
+      const change = nValue - n1Value;
+      const changePercent = n1Value !== 0 ? (change / n1Value) * 100 : 0;
+      const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'stable';
+      return { ...item, change, changePercent, trend };
+    });
+
+    const trendFilteredResults = dataWithTrends.filter(item => {
+      if (trendFilter === 'all') return true;
+      return item.trend === trendFilter;
+    });
+
+    const totalPages = Math.ceil(trendFilteredResults.length / pegPageSize);
+    const paginatedResults = trendFilteredResults.slice(pegPage * pegPageSize, (pegPage + 1) * pegPageSize);
+
+    const data = paginatedResults.map(item => ({
+      name: item.peg_name,
+      'N-1': item['N-1'] || 0,
+      'N': item['N'] || 0,
+      change: item.change,
+      changePercent: item.changePercent,
+      trend: item.trend,
+      weight: item.weight,
+      unit: '%',
+      peg: item.weight || 0
+    }));
+
+    const improved = data.filter(item => item.trend === 'up').length;
+    const declined = data.filter(item => item.trend === 'down').length;
+    const stable = data.filter(item => item.trend === 'stable').length;
+    const avgChange = data.length > 0 ? data.reduce((sum, item) => sum + item.change, 0) / data.length : 0;
+    const weightedAvgChange = data.length > 0 ? data.reduce((sum, item) => sum + (item.change * item.weight), 0) / data.reduce((sum, item) => sum + item.weight, 0) : 0;
+    const summaryStats = { improved, declined, stable, avgChange, weightedAvgChange };
+
+    return { kpiResults, sortedKpiResults, filteredResults, dataWithTrends, trendFilteredResults, totalPages, paginatedResults, data, summaryStats };
+  }, [isCompareMode, processedResults, pegFilter, weightFilter, trendFilter, pegPage, pegPageSize]);
+
+  const renderKpiChart = () => {
+    const { kpiResults, trendFilteredResults, totalPages, data, summaryStats } = kpiChartData;
+
     if (isCompareMode) {
       return (
         <ResponsiveContainer width="100%" height={400}>
@@ -350,113 +315,9 @@ const ResultDetail = ({
       )
     }
 
-    // 단일 결과 차트 - 실제 stats 데이터 기반 N-1/N 비교 차트
-    const result = results[0]
-    const statsData = result?.stats || []
-    
-    if (!statsData.length) {
+    if (!kpiResults.length) {
       return <div className="text-center text-muted-foreground">PEG 비교 데이터가 없습니다.</div>
     }
-
-    // PEG별 N-1/N 데이터 정리
-    const pegComparison = {}
-    statsData.forEach(stat => {
-      const pegName = stat.kpi_name
-      if (!pegComparison[pegName]) {
-        pegComparison[pegName] = { peg_name: pegName, weight: 5 } // 기본 가중치
-      }
-      if (stat.period === 'N-1') {
-        pegComparison[pegName]['N-1'] = stat.avg
-      } else if (stat.period === 'N') {
-        pegComparison[pegName]['N'] = stat.avg
-      }
-    })
-
-    // 가중치 데이터 병합 (preference나 기본 가중치 사용)
-    const weightData = result?.request_params?.peg_definitions || {}
-    Object.keys(pegComparison).forEach(pegName => {
-      if (weightData[pegName]?.weight) {
-        pegComparison[pegName].weight = weightData[pegName].weight
-      }
-    })
-
-    const kpiResults = Object.values(pegComparison).filter(peg => 
-      peg['N-1'] !== undefined && peg['N'] !== undefined
-    )
-
-    // 가중치 순으로 정렬 (높은 순)
-    const sortedKpiResults = [...kpiResults].sort((a, b) => (b.weight || 0) - (a.weight || 0))
-
-    // 필터링 적용
-    const filteredResults = sortedKpiResults.filter((item) => {
-      // PEG 이름 필터
-      const matchesNameFilter = !pegFilter || 
-        item.peg_name.toLowerCase().includes(pegFilter.toLowerCase())
-      
-      // 가중치 필터
-      const weight = item.weight || 0
-      let matchesWeightFilter = true
-      if (weightFilter === 'high') matchesWeightFilter = weight >= 8
-      else if (weightFilter === 'medium') matchesWeightFilter = weight >= 6 && weight < 8
-      else if (weightFilter === 'low') matchesWeightFilter = weight < 6
-      
-      return matchesNameFilter && matchesWeightFilter
-    })
-    
-    // 데이터 변환 후 트렌드 필터 적용
-    const dataWithTrends = filteredResults.map((item) => {
-      const n1Value = item['N-1'] || 0
-      const nValue = item['N'] || 0
-      const change = nValue - n1Value
-      const changePercent = n1Value !== 0 ? ((change / n1Value) * 100) : 0
-      const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'stable'
-      
-      return {
-        ...item,
-        change,
-        changePercent,
-        trend
-      }
-    })
-    
-    // 트렌드 필터 적용
-    const trendFilteredResults = dataWithTrends.filter((item) => {
-      if (trendFilter === 'all') return true
-      return item.trend === trendFilter
-    })
-
-    // 페이지네이션 적용
-    const totalPages = Math.ceil(trendFilteredResults.length / pegPageSize)
-    const paginatedResults = trendFilteredResults.slice(
-      pegPage * pegPageSize,
-      (pegPage + 1) * pegPageSize
-    )
-
-    const data = paginatedResults.map((item) => ({
-      name: item.peg_name,
-      'N-1': item['N-1'] || 0,
-      'N': item['N'] || 0,
-      change: item.change,
-      changePercent: item.changePercent,
-      trend: item.trend,
-      weight: item.weight,
-      unit: '%', // 기본 단위
-      peg: item.weight || 0
-    }))
-
-    // 성능 요약 통계 계산
-    const summaryStats = useMemo(() => {
-      const improved = data.filter(item => item.trend === 'up').length
-      const declined = data.filter(item => item.trend === 'down').length
-      const stable = data.filter(item => item.trend === 'stable').length
-      const avgChange = data.length > 0 ? 
-        data.reduce((sum, item) => sum + item.change, 0) / data.length : 0
-      const weightedAvgChange = data.length > 0 ? 
-        data.reduce((sum, item) => sum + (item.change * item.weight), 0) / 
-        data.reduce((sum, item) => sum + item.weight, 0) : 0
-      
-      return { improved, declined, stable, avgChange, weightedAvgChange }
-    }, [data])
 
     return (
       <div className="space-y-4">
@@ -874,7 +735,7 @@ const ResultDetail = ({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {renderKpiChart(processedResults)}
+              {renderKpiChart()}
             </CardContent>
           </Card>
         </TabsContent>

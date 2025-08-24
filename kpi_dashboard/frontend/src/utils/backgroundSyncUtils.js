@@ -6,29 +6,7 @@
  */
 
 import { logInfo, logDebug, logError } from './loggingUtils.js'
-
-/**
- * 동기화 전략 타입
- */
-export const SYNC_STRATEGIES = {
-  PERIODIC_POLLING: 'periodic_polling',         // 주기적 폴링
-  VISIBILITY_BASED: 'visibility_based',         // 브라우저 포커스 기반
-  CHANGE_TRIGGERED: 'change_triggered',         // 변경 감지 기반
-  HYBRID: 'hybrid',                            // 하이브리드 전략
-  ON_DEMAND: 'on_demand'                       // 수동 요청
-}
-
-/**
- * 동기화 상태
- */
-export const SYNC_STATES = {
-  IDLE: 'idle',                                // 유휴 상태
-  POLLING: 'polling',                          // 폴링 중
-  SYNCING: 'syncing',                          // 동기화 중
-  WAITING: 'waiting',                          // 대기 중
-  OFFLINE: 'offline',                          // 오프라인
-  ERROR: 'error'                               // 오류 상태
-}
+import { SYNC_STRATEGIES, SYNC_STATES } from './constants.js'
 
 /**
  * 백그라운드 동기화 매니저 클래스

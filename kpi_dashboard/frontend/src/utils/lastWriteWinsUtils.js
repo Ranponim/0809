@@ -5,31 +5,10 @@
  * 타임스탬프 기반 충돌 해결을 위한 정교한 유틸리티 함수들
  */
 
-import { logInfo, logDebug, logWarn } from './loggingUtils.js'
+import { logInfo, logDebug, logWarning } from './loggingUtils.js'
 import { compareTimestamps } from './preferenceModelMapper.js'
 import { CONFLICT_SEVERITY } from './dataComparisonUtils.js'
-
-/**
- * Last Write Wins 전략 유형
- */
-export const LWW_STRATEGIES = {
-  STRICT_TIMESTAMP: 'strict_timestamp',           // 엄격한 타임스탬프 비교
-  HYBRID_METADATA: 'hybrid_metadata',             // 메타데이터 조합 분석
-  FIELD_LEVEL_LWW: 'field_level_lww',            // 필드별 Last Write Wins
-  CONFIDENCE_WEIGHTED: 'confidence_weighted',     // 신뢰도 가중치 적용
-  SMART_MERGE: 'smart_merge'                     // 스마트 병합
-}
-
-/**
- * 해결 신뢰도 레벨
- */
-export const CONFIDENCE_LEVELS = {
-  VERY_HIGH: 0.95,    // 매우 높음 - 자동 적용 권장
-  HIGH: 0.85,         // 높음 - 자동 적용 가능
-  MEDIUM: 0.65,       // 중간 - 조건부 자동 적용
-  LOW: 0.45,          // 낮음 - 사용자 확인 권장
-  VERY_LOW: 0.25      // 매우 낮음 - 반드시 사용자 개입
-}
+import { LWW_STRATEGIES, CONFIDENCE_LEVELS } from './constants.js'
 
 /**
  * 타임스탬프 분석 결과 인터페이스

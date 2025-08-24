@@ -119,7 +119,6 @@ KPIChart.displayName = 'KPIChart'
  * 최적화된 KPI 카드 컴포넌트
  */
 const KPICard = memo(({ 
-  kpiKey, 
   title, 
   chartData, 
   chartStyle, 
@@ -192,7 +191,6 @@ const Dashboard = () => {
   // usePreference 훅 사용
   const {
     settings: dashboardSettings,
-    updateSettings: updateDashboardSettings,
     saving,
     error: settingsError
   } = useDashboardSettings()
@@ -202,10 +200,6 @@ const Dashboard = () => {
     'availability','rrc','erab','sar','mobility_intra','cqi'
   ], [])
   
-  // useDashboardSettings 훅에서 반환하는 객체의 참조가 불안정하여 무한 루프를 유발할 수 있으므로,
-  // 의존성 배열에 원시값과 배열의 직렬화된 값을 사용하여 settings 객체의 불필요한 재생성을 방지합니다.
-  const selectedPegsKey = JSON.stringify(dashboardSettings?.selectedPegs)
-
   // 현재 설정에서 값 추출 (기본값 포함) - 메모이제이션
   const settings = useMemo(() => {
     const selectedPegs = dashboardSettings?.selectedPegs && dashboardSettings.selectedPegs.length > 0 
@@ -221,16 +215,7 @@ const Dashboard = () => {
       showLegend: dashboardSettings?.showLegend !== false,
       showGrid: dashboardSettings?.showGrid !== false
     }
-  }, [
-    selectedPegsKey,
-    dashboardSettings?.defaultNe,
-    dashboardSettings?.defaultCellId,
-    dashboardSettings?.autoRefreshInterval,
-    dashboardSettings?.chartStyle,
-    dashboardSettings?.showLegend,
-    dashboardSettings?.showGrid,
-    defaultKpiKeys
-  ])
+  }, [dashboardSettings, defaultKpiKeys])
 
   // 제목 매핑을 메모이제이션
   const titleMap = useMemo(() => ({
@@ -518,7 +503,6 @@ const Dashboard = () => {
         {settings.selectedPegs.map((key, idx) => (
           <KPICard
             key={key}
-            kpiKey={key}
             title={titleFor(key)}
             chartData={formattedKpiData[key] || []}
             chartStyle={settings.chartStyle}

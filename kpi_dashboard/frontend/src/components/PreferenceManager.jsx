@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label.jsx'
 import SettingBox from './SettingBox.jsx'
 import ImportExportBox from './ImportExportBox.jsx'
 import DerivedPegManager from './DerivedPegManager.jsx'
-import { usePreference, useDashboardSettings, useStatisticsSettings, useNotificationSettings } from '@/hooks/usePreference.js'
+import { usePreference } from '@/hooks/usePreference.js'
 import apiClient from '@/lib/apiClient.js'
-import { getCombinedPegOptions, formatPegOptionsForUI } from '@/lib/derivedPegUtils.js'
+import { formatPegOptionsForUI } from '@/lib/derivedPegUtils.js'
 
 const PreferenceManager = () => {
   const { settings, isLoading, isSaving, error, lastSaved, updateSettings, saveImmediately } = usePreference()
@@ -18,7 +18,7 @@ const PreferenceManager = () => {
   // DB PEG 관련 상태
   const [dbPegOptions, setDbPegOptions] = useState([])
   const [pegOptionsLoading, setPegOptionsLoading] = useState(false)
-  const [useDbPegs, setUseDbPegs] = useState(true)
+  const useDbPegs = true
   const [lastDbFetch, setLastDbFetch] = useState(null)
 
   // DB에서 실제 PEG 목록 가져오기
@@ -63,7 +63,7 @@ const PreferenceManager = () => {
     } finally {
       setPegOptionsLoading(false)
     }
-  }, [])
+  }, [settings?.databaseSettings])
 
   // 현재 사용할 PEG 옵션 결정 (Database Setting PEG + Derived PEG 통합)
   const getCurrentPegOptions = useCallback(() => {
