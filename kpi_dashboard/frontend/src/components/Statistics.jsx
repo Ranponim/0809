@@ -2,7 +2,6 @@ import React from 'react'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { BarChart3, TrendingUp } from 'lucide-react'
-import AdvancedChart from './AdvancedChart.jsx'
 import BasicComparison from './BasicComparison.jsx'
 import { useStatisticsSettings } from '@/hooks/usePreference.js'
 
@@ -69,17 +68,12 @@ const Statistics = () => {
       {/* 데이터 선택 UI는 Preference > Statistics 탭으로 이동됨 */}
       
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-1">
           <TabsTrigger value="basic">Basic Analysis</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced Analysis</TabsTrigger>
         </TabsList>
         
         <TabsContent value="basic" className="space-y-6">
           <BasicComparison />
-        </TabsContent>
-        
-        <TabsContent value="advanced" className="space-y-6">
-          <AdvancedChart />
         </TabsContent>
       </Tabs>
     </div>

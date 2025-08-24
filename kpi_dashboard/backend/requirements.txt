@@ -32,3 +32,9 @@ dnspython
 pytest
 pytest-asyncio
 
+# Celery
+celery
+redis
+
+
+

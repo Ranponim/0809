@@ -42,6 +42,10 @@ from .middleware.metrics_middleware import MetricsCollectionMiddleware
 from .utils.cache_manager import close_cache_manager
 from .utils.metrics_collector import get_metrics_collector, stop_metrics_collection
 
+# Celery 앱 임포트
+from .celery_app import celery_app
+from . import tasks # Celery tasks
+
 # 로깅 시스템 초기화
 setup_logging()
 logger = logging.getLogger("app.main")
@@ -89,6 +93,14 @@ async def lifespan(app: FastAPI):
         # 메트릭 수집 시작
         metrics_collector = get_metrics_collector()
         logger.info("메트릭 수집 시작")
+
+        # Celery worker 연결 확인
+        try:
+            celery_app.control.ping(timeout=1)
+            logger.info("Celery worker 연결 성공")
+        except Exception as e:
+            logger.warning(f"Celery worker 연결 실패: {e}")
+
     except Exception as e:
         logger.error(f"애플리케이션 초기화 실패: {e}")
         raise
@@ -114,6 +126,15 @@ async def lifespan(app: FastAPI):
     
     await close_mongo_connection()
     logger.info("애플리케이스 종료 완료")
+
+# Add a test endpoint for Celery
+@app.post("/api/test-celery-task", summary="테스트 Celery 작업 실행", tags=["Test"])
+async def test_celery_task():
+    """
+    간단한 Celery 작업을 비동기적으로 실행하고 작업 ID를 반환합니다.
+    """
+    task = tasks.add_together.delay(2, 3)
+    return {"message": "Celery 작업이 시작되었습니다.", "task_id": task.id}
 
 
 # FastAPI 애플리케이션 생성
