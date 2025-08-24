@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 
 # 내부 모듈 임포트
 from .db import connect_to_mongo, close_mongo_connection, get_db_stats
-from .routers import analysis, preference, kpi, statistics, master, llm_analysis
+from .routers import analysis, preference, kpi, statistics, master, llm_analysis, analysis_workflow, period_identification, statistical_comparison, anomaly_detection, integrated_analysis
+from .routers.statistical_comparison import analysis_router
 from .middleware.performance import performance_middleware, setup_mongo_monitoring, get_performance_stats
 from .exceptions import (
     BaseAPIException,
@@ -127,16 +128,6 @@ async def lifespan(app: FastAPI):
     await close_mongo_connection()
     logger.info("애플리케이스 종료 완료")
 
-# Add a test endpoint for Celery
-@app.post("/api/test-celery-task", summary="테스트 Celery 작업 실행", tags=["Test"])
-async def test_celery_task():
-    """
-    간단한 Celery 작업을 비동기적으로 실행하고 작업 ID를 반환합니다.
-    """
-    task = tasks.add_together.delay(2, 3)
-    return {"message": "Celery 작업이 시작되었습니다.", "task_id": task.id}
-
-
 # FastAPI 애플리케이션 생성
 app = FastAPI(
     title="3GPP KPI Management API",
@@ -221,6 +212,36 @@ app.include_router(kpi.router)
 app.include_router(statistics.router)   # Task 46 - Statistics 비교 분석 API
 app.include_router(master.router)       # Master 데이터 API (PEG, Cell 목록)
 app.include_router(llm_analysis.router) # LLM 분석 API
+app.include_router(analysis_workflow.router) # Analysis Workflow API
+app.include_router(period_identification.router) # Period Identification API
+app.include_router(statistical_comparison.router) # Statistical Comparison API
+app.include_router(analysis_router) # Analysis API
+app.include_router(anomaly_detection.router) # Anomaly Detection API
+app.include_router(integrated_analysis.router) # Integrated Analysis API
+
+# Add a test endpoint for Celery
+@app.post("/api/test-celery-task", summary="테스트 Celery 작업 실행", tags=["Test"])
+async def test_celery_task():
+    """
+    간단한 Celery 작업을 비동기적으로 실행하고 작업 ID를 반환합니다.
+    """
+    task = tasks.add_together.delay(2, 3)
+    return {"message": "Celery 작업이 시작되었습니다.", "task_id": task.id}
+
+# Add a simple test endpoint
+@app.post("/api/test-endpoint", summary="테스트 엔드포인트", tags=["Test"])
+async def test_endpoint():
+    """
+    간단한 테스트 엔드포인트
+    """
+    return {"message": "Test endpoint works!", "status": "success"}
+
+@app.get("/api/test-endpoint", summary="테스트 엔드포인트 GET", tags=["Test"])
+async def test_endpoint_get():
+    """
+    간단한 테스트 엔드포인트 (GET)
+    """
+    return {"message": "Test endpoint GET works!", "status": "success"}
 
 # 모니터링 라우터 추가
 from .routers import monitoring

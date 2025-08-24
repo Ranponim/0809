@@ -1453,7 +1453,7 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
         if not n1_text or not n_text:
             raise ValueError("'n_minus_1'와 'n' 시간 범위를 모두 제공해야 합니다.")
 
-        output_dir = request.get('output_dir', os.path.abspath('./analysis_output'))
+        output_dir = request.get('output_dir', os.path.abspath('/app/backend/analysis_output'))
         # 기본 백엔드 업로드 URL: 요청값 > 환경변수 > 로컬 기본값 (복수형 컬렉션 엔드포인트로 수정)
         backend_url = request.get('backend_url') or os.getenv('BACKEND_ANALYSIS_URL') or 'http://165.213.69.30:8000/api/analysis/results/'
 

@@ -1,0 +1,11 @@
+# Task ID: 5
+# Title: Backend: Implement ML Feature Engineering and LSTM Autoencoder
+# Status: todo
+# Dependencies: 2
+# Priority: medium
+# Description: Develop the initial machine learning model for anomaly detection using an LSTM Autoencoder.
+# Details:
+Implement the feature engineering pipeline described in PRD Section 3.3.1 to convert raw Multi-UE data into a structured multivariate time series (mean, std, skew, etc.). Build and pre-train a stacked LSTM Autoencoder model (using PyTorch or TensorFlow) on a 'golden' dataset as per PRD Section 3.3.2. The model should take a time-series window as input and output a reconstruction error, which serves as the anomaly score.
+
+# Test Strategy:
+Validate the feature engineering output for a sample input. Train the model and verify that the reconstruction error is low for normal data and significantly higher for known anomalous data. Save the trained model for inference.

@@ -1,0 +1,43 @@
+# Task ID: 6
+# Title: Backend: Implement Pass/Fail Logic and Integrate Full Analysis Workflow
+# Status: todo
+# Dependencies: 3, 5
+# Priority: high
+# Description: Create the final Pass/Fail determination engine and integrate all backend modules into a single, cohesive Celery task.
+# Details:
+Develop the configurable rules engine from PRD Section 3.4.1, which flags a peg/cell as 'Fail' based on Z-Score, RSD, and anomaly score thresholds. Update the Celery task to orchestrate the full workflow: 1) Identify periods (Task 2), 2) Run statistical analysis (Task 3), 3) Run anomaly detection (Task 5), 4) Apply Pass/Fail logic. The final output should be a structured JSON object containing all results for the frontend.
+
+# Test Strategy:
+Create integration tests for the Celery task. Provide input data and verify that the final JSON output is correctly structured and that the Pass/Fail logic is applied correctly based on the intermediate results and configured thresholds.
+
+# Subtasks:
+## 1. Design and Implement User Authentication Database Schema [pending]
+### Dependencies: None
+### Description: Create the necessary database tables and relationships to store user credentials, profiles, roles, and session information securely.
+### Details:
+Define a `users` table with columns for `id`, `username`, `email`, `password_hash`, `created_at`, and `updated_at`. Create a `password_resets` table to store temporary tokens. Use a database migration tool to script and apply the schema changes.
+
+## 2. Develop User Registration API Endpoint [pending]
+### Dependencies: None
+### Description: Create a public API endpoint (e.g., `POST /api/auth/register`) that allows new users to create an account.
+### Details:
+The endpoint should accept `username`, `email`, and `password`. Implement input validation for email format, password strength, and username uniqueness. Use a strong hashing algorithm like bcrypt to hash the password before storing it. Return a success message or user object upon successful registration.
+
+## 3. Develop User Login API Endpoint and JWT Generation [pending]
+### Dependencies: None
+### Description: Create an endpoint (e.g., `POST /api/auth/login`) for users to authenticate and receive a JSON Web Token (JWT) for session management.
+### Details:
+The endpoint should accept `email` and `password`. It must retrieve the user from the database and securely compare the provided password with the stored hash. If credentials are valid, generate a signed JWT containing user claims (e.g., user ID, roles) with a set expiration time. Implement rate limiting to prevent brute-force attacks.
+
+## 4. Implement Authentication Middleware for Protected Routes [pending]
+### Dependencies: None
+### Description: Create a middleware that intercepts requests to protected API endpoints, validates the user's JWT, and grants or denies access accordingly.
+### Details:
+The middleware should extract the JWT from the `Authorization: Bearer <token>` header. It must verify the token's signature and expiration. If valid, decode the payload and attach the user's identity to the request context. If invalid, it must return a 401 Unauthorized or 403 Forbidden response.
+
+## 5. Implement Secure Password Reset Flow [pending]
+### Dependencies: None
+### Description: Develop the API endpoints and logic to allow users to securely reset a forgotten password via an email link.
+### Details:
+Create a `POST /api/auth/forgot-password` endpoint that takes an email, generates a unique, single-use, time-limited token, and sends a reset link to the user's email. Create a `POST /api/auth/reset-password` endpoint that accepts the token and a new password, validates the token, and updates the user's password hash.
+

@@ -17,6 +17,7 @@ pandas
 numpy
 scipy
 matplotlib
+ruptures
 
 # HTTP 요청
 requests
@@ -35,6 +36,13 @@ pytest-asyncio
 # Celery
 celery
 redis
+
+# Machine Learning
+torch
+torchvision
+scikit-learn
+tensorflow
+keras
 
 
 
