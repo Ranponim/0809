@@ -259,7 +259,11 @@ const UserSettingsTest = () => {
             {JSON.stringify({
               pegConfigurations: settings.pegConfigurations || [],
               statisticsConfigurations: settings.statisticsConfigurations || [],
-              preferences: settings.preferences
+              dashboardSettings: settings.dashboardSettings || {},
+              statisticsSettings: settings.statisticsSettings || {},
+              databaseSettings: settings.databaseSettings || {},
+              notificationSettings: settings.notificationSettings || {},
+              generalSettings: settings.generalSettings || {}
             }, null, 2)}
           </pre>
         </CardContent>

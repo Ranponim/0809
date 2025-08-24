@@ -198,16 +198,20 @@ const AdvancedChart = memo(() => {
       if (raw) {
         const parsed = JSON.parse(raw)
         const opts = Array.isArray(parsed?.config?.availableKPIs) && parsed.config.availableKPIs.length > 0
-          ? parsed.config.availableKPIs.map(o => ({ value: String(o.value), label: String(o.label || o.value), threshold: Number(o.threshold ?? 0) }))
+          ? parsed.config.availableKPIs.map((item) => ({ 
+              value: String(item?.value || ''), 
+              label: String(item?.label || item?.value || ''), 
+              threshold: Number(item?.threshold ?? 0) 
+            }))
           : defaultKpiOptions
         setKpiOptions(opts)
         // 현재 선택된 KPI가 목록에 없으면 기본으로 보정
-        const values = opts.map(o => o.value)
+        const values = opts.map((item) => item.value)
         setChartConfig(prev => ({
           ...prev,
           primaryKPI: values.includes(prev.primaryKPI) ? prev.primaryKPI : (opts[0]?.value || 'availability'),
           secondaryKPI: values.includes(prev.secondaryKPI) ? prev.secondaryKPI : (opts[1]?.value || opts[0]?.value || 'rrc'),
-          thresholdValue: (opts.find(o=>o.value=== (values.includes(prev.primaryKPI)? prev.primaryKPI : (opts[0]?.value || 'availability')))?.threshold) ?? prev.thresholdValue
+          thresholdValue: (opts.find((item) => item.value === (values.includes(prev.primaryKPI) ? prev.primaryKPI : (opts[0]?.value || 'availability')))?.threshold) ?? prev.thresholdValue
         }))
       }
     } catch {

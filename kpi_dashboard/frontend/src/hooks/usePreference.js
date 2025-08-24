@@ -82,6 +82,55 @@ export const usePreference = () => {
   const context = usePreferenceContext()
   const [validationErrors, setValidationErrors] = useState({})
 
+  // 안전한 설정 접근
+  const settings = useMemo(() => {
+    return context?.state?.settings || {}
+  }, [context?.state?.settings])
+
+  // 안전한 함수들
+  const updateSettings = useCallback((newSettings) => {
+    if (context?.updateSetting) {
+      // 단순화된 updateSetting 사용
+      Object.entries(newSettings).forEach(([section, sectionSettings]) => {
+        if (typeof sectionSettings === 'object') {
+          Object.entries(sectionSettings).forEach(([key, value]) => {
+            context.updateSetting(section, key, value)
+          })
+        }
+      })
+    }
+  }, [context?.updateSetting])
+
+  const saveSettings = useCallback(async () => {
+    if (context?.saveSettings) {
+      return await context.saveSettings()
+    }
+    return false
+  }, [context?.saveSettings])
+
+  const loadSettings = useCallback(async () => {
+    if (context?.loadSettings) {
+      return await context.loadSettings()
+    }
+    return false
+  }, [context?.loadSettings])
+
+  const resetSettings = useCallback(async (sections) => {
+    if (context?.resetSettings) {
+      return await context.resetSettings(sections)
+    }
+    return { success: false, error: 'resetSettings 함수를 사용할 수 없습니다' }
+  }, [context?.resetSettings])
+
+  // 로깅 함수들 (단순화)
+  const logInfo = useCallback((message, data) => {
+    console.log(`[usePreference] ${message}`, data)
+  }, [])
+
+  const logError = useCallback((message, error) => {
+    console.error(`[usePreference] ${message}`, error)
+  }, [])
+
   // ================================
   // 유효성 검증 함수
   // ================================
@@ -172,18 +221,18 @@ export const usePreference = () => {
   // ================================
 
   const updateSettingsWithValidation = useCallback((newSettings, section = null) => {
-    context.logInfo('설정 업데이트 및 검증 시작', { newSettings, section })
+    logInfo('설정 업데이트 및 검증 시작', { newSettings, section })
 
     // 검증할 설정 결합
     const settingsToValidate = section 
       ? { 
-          ...context.settings,
+          ...settings,
           [section]: {
-            ...context.settings[section],
+            ...settings[section],
             ...newSettings[section]
           }
         }
-      : { ...context.settings, ...newSettings }
+      : { ...settings, ...newSettings }
 
     // 유효성 검증 (section이 지정된 경우 해당 섹션만 검증)
     const validationErrors = validateSettings(settingsToValidate, section)
@@ -191,10 +240,10 @@ export const usePreference = () => {
 
     // 검증 오류가 있으면 알림 표시 후 반환
     if (Object.keys(validationErrors).length > 0) {
-      context.logError('설정 유효성 검증 실패', validationErrors)
+      logError('설정 유효성 검증 실패', validationErrors)
       
       const firstError = Object.values(validationErrors)[0]
-      if (context.settings.notificationSettings?.errorNotification) {
+      if (settings.notificationSettings?.errorNotification) {
         toast.error(`설정 오류: ${firstError}`)
       }
       
@@ -202,11 +251,11 @@ export const usePreference = () => {
     }
 
     // 검증 통과 시 설정 업데이트
-    context.updateSettings(newSettings)
-    context.logInfo('설정 업데이트 완료')
+    updateSettings(newSettings)
+    logInfo('설정 업데이트 완료')
     
     return true
-  }, [context, validateSettings])
+  }, [settings, validateSettings, updateSettings, logInfo, logError])
 
   // ================================
   // Import/Export 기능
@@ -215,11 +264,11 @@ export const usePreference = () => {
   const exportSettings = useCallback((filename = null, partial = null) => {
     try {
       const dataToExport = {
-        settings: partial && Object.keys(partial).length > 0 ? { ...context.settings, ...partial } : context.settings,
+        settings: partial && Object.keys(partial).length > 0 ? { ...settings, ...partial } : settings,
         metadata: {
           exportedAt: new Date().toISOString(),
           version: '1.0.0',
-          userId: context.userId
+          userId: context?.state?.userId || 'default'
         }
       }
 
@@ -236,23 +285,23 @@ export const usePreference = () => {
       
       URL.revokeObjectURL(link.href)
       
-      context.logInfo('설정 내보내기 완료', { filename: link.download })
+      logInfo('설정 내보내기 완료', { filename: link.download })
       
-      if (context.settings.notificationSettings?.enableToasts) {
+      if (settings.notificationSettings?.enableToasts) {
         toast.success('설정이 파일로 내보내졌습니다')
       }
       
       return true
     } catch (error) {
-      context.logError('설정 내보내기 실패', error)
+      logError('설정 내보내기 실패', error)
       
-      if (context.settings.notificationSettings?.errorNotification) {
+      if (settings.notificationSettings?.errorNotification) {
         toast.error('설정 내보내기 실패: ' + error.message)
       }
       
       return false
     }
-  }, [context])
+  }, [settings, context?.state?.userId, logInfo, logError])
 
   const importSettings = useCallback((file) => {
     return new Promise((resolve, reject) => {
@@ -260,42 +309,26 @@ export const usePreference = () => {
       
       reader.onload = (e) => {
         try {
-          const importedData = JSON.parse(e.target.result)
+          const data = JSON.parse(e.target.result)
           
-          // 데이터 구조 검증
-          if (!importedData.settings) {
-            throw new Error('유효하지 않은 설정 파일 형식입니다.')
-          }
-          
-          // derivedPegSettings가 누락되지 않도록 기본값 병합
-          const mergedSettings = {
-            ...context.settings,
-            ...importedData.settings,
-            derivedPegSettings: importedData.settings.derivedPegSettings || context.settings.derivedPegSettings || { formulas: [], settings: {} }
-          }
-
-          // 설정 유효성 검증
-          const validationErrors = validateSettings(mergedSettings)
-          
-          if (Object.keys(validationErrors).length > 0) {
-            const errorMessage = Object.values(validationErrors).join(', ')
-            throw new Error(`설정 유효성 검증 실패: ${errorMessage}`)
+          if (!data.settings) {
+            throw new Error('유효하지 않은 설정 파일입니다.')
           }
           
           // 설정 업데이트
-          context.updateSettings(mergedSettings)
+          updateSettings(data.settings)
           
-          context.logInfo('설정 가져오기 완료', importedData.settings)
+          logInfo('설정 가져오기 완료', { filename: file.name })
           
-          if (context.settings.notificationSettings?.enableToasts) {
+          if (settings.notificationSettings?.enableToasts) {
             toast.success('설정이 성공적으로 가져와졌습니다')
           }
           
-          resolve(importedData.settings)
+          resolve(data)
         } catch (error) {
-          context.logError('설정 가져오기 실패', error)
+          logError('설정 가져오기 실패', error)
           
-          if (context.settings.notificationSettings?.errorNotification) {
+          if (settings.notificationSettings?.errorNotification) {
             toast.error('설정 가져오기 실패: ' + error.message)
           }
           
@@ -305,75 +338,49 @@ export const usePreference = () => {
       
       reader.onerror = () => {
         const error = new Error('파일 읽기 실패')
-        context.logError('파일 읽기 실패', error)
-        
-        if (context.settings.notificationSettings?.errorNotification) {
-          toast.error('파일을 읽을 수 없습니다')
-        }
-        
+        logError('설정 가져오기 실패', error)
         reject(error)
       }
       
       reader.readAsText(file)
     })
-  }, [context, validateSettings])
+  }, [settings, updateSettings, logInfo, logError])
 
   // ================================
-  // 계산된 값들
+  // 반환값
   // ================================
-
-  
-  
-  const hasValidationErrors = useMemo(() => {
-    return Object.keys(validationErrors).length > 0
-  }, [validationErrors])
-
-  const isValid = useMemo(() => {
-    return !hasValidationErrors
-  }, [hasValidationErrors])
-
-  // ================================
-  // 반환 값 정의
-  // ================================
-
-  const dashboardSettings = useMemo(() => {
-    return context.settings.preferences?.dashboard || context.settings.dashboardSettings || {}
-  }, [context.settings.preferences?.dashboard, context.settings.dashboardSettings])
-
-  const statisticsSettings = useMemo(() => {
-    return context.settings.preferences?.charts || context.settings.statisticsSettings || {}
-  }, [context.settings.preferences?.charts, context.settings.statisticsSettings])
-
-  const notificationSettings = useMemo(() => {
-    return context.settings.notificationSettings || {}
-  }, [context.settings.notificationSettings])
-
-  const generalSettings = useMemo(() => {
-    return context.settings.generalSettings || {}
-  }, [context.settings.generalSettings])
 
   return {
-    // 기본 상태와 설정
-    ...context,
+    // 설정 데이터
+    settings,
+    dashboardSettings: settings.dashboardSettings || {},
+    statisticsSettings: settings.statisticsSettings || {},
+    databaseSettings: settings.databaseSettings || {},
+    notificationSettings: settings.notificationSettings || {},
+    generalSettings: settings.generalSettings || {},
     
-    // 검증 관련
-    validationErrors,
-    hasValidationErrors,
-    isValid,
-    validateSettings,
+    // 상태
+    loading: context?.state?.loading || false,
+    saving: context?.state?.saving || false,
+    error: context?.state?.error || null,
+    initialized: context?.state?.initialized || false,
     
-    // 개선된 업데이트 함수
-    updateSettings: updateSettingsWithValidation,
-    
-    // Import/Export 기능
+    // 함수들
+    updateSettings,
+    updateSettingsWithValidation,
+    saveSettings,
+    loadSettings,
     exportSettings,
     importSettings,
+    resetSettings,
     
-    // 빠른 접근을 위한 별칭들 - PRD 호환 구조에서 추출
-    dashboardSettings,
-    statisticsSettings,
-    notificationSettings,
-    generalSettings
+    // 유효성 검증
+    validationErrors,
+    validateSettings,
+    
+    // 로깅
+    logInfo,
+    logError
   }
 }
 

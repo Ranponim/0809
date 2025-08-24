@@ -7,8 +7,7 @@
 
 import { logInfo, logDebug, logWarning } from './loggingUtils.js'
 import { compareTimestamps } from './preferenceModelMapper.js'
-import { CONFLICT_SEVERITY } from './dataComparisonUtils.js'
-import { LWW_STRATEGIES, CONFIDENCE_LEVELS } from './constants.js'
+import { LWW_STRATEGIES, CONFIDENCE_LEVELS, CONFLICT_SEVERITY } from './constants.js'
 
 /**
  * 타임스탬프 분석 결과 인터페이스
