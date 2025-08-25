@@ -1,18 +1,28 @@
 import React, { useEffect } from 'react'
 import { Button } from '@/components/ui/button.jsx'
-import { BarChart3, Settings, TrendingUp, Database, Brain } from 'lucide-react'
+import { BarChart3, Settings, TrendingUp, Database, Brain, Play, Target, GitCompare, Activity } from 'lucide-react'
 import { 
   preloadDashboard, 
   preloadStatistics, 
   preloadPreferenceManager, 
   preloadResultsList, 
   preloadLLMAnalysisManager,
-  preloadBasedOnNetworkSpeed 
+  preloadBasedOnNetworkSpeed,
+  // 실제 렌더링할 컴포넌트들 import
+  SuspenseDashboard,
+  SuspenseStatistics,
+  SuspensePreferenceManager,
+  SuspenseResultsList,
+  SuspenseLLMAnalysisManager
 } from './LazyComponents.jsx'
 
 const Layout = ({ children, activeMenu, setActiveMenu }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, preload: preloadDashboard },
+    { id: 'compare-result', label: 'Compare Result', icon: GitCompare, preload: null },
+    { id: 'detailed-analysis', label: 'Detailed Analysis', icon: Activity, preload: null },
+    { id: 'analysis-workflow', label: 'Analysis Workflow', icon: Play, preload: null },
+    { id: 'analysis-setup', label: '분석 설정', icon: Target, preload: null },
     { id: 'results', label: '분석 결과', icon: Database, preload: preloadResultsList },
     { id: 'statistics', label: 'Statistics', icon: TrendingUp, preload: preloadStatistics },
     { id: 'llm-analysis', label: 'LLM 분석', icon: Brain, preload: preloadLLMAnalysisManager },
@@ -34,51 +44,26 @@ const Layout = ({ children, activeMenu, setActiveMenu }) => {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">PVT  KPI Dashboard</h1>
-        </div>
-      </header>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-sm min-h-screen flex flex-col">
-          <nav className="p-4">
-            <div className="space-y-2">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeMenu === item.id ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setActiveMenu(item.id)}
-                    onMouseEnter={() => handleMenuHover(item)}
-                  >
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.label}
-                  </Button>
-                )
-              })}
-            </div>
-          </nav>
-          {/* Footer */}
-          <div className="mt-auto p-4 text-xs text-gray-400">
-            Powered by PVT AI Crew
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6">
-          {children}
-        </main>
-      </div>
-    </div>
-  )
-}
-
-export default Layout
-
+  // 실제 컴포넌트 렌더링 함수
+  const renderActiveComponent = () => {
+    console.log(`🔄 현재 활성 메뉴: ${activeMenu}`)
+    
+    switch (activeMenu) {
+      case 'dashboard':
+        return <SuspenseDashboard />
+      case 'statistics':
+        return <SuspenseStatistics />
+      case 'preference':
+        return <SuspensePreferenceManager />
+      case 'results':
+        return <SuspenseResultsList />
+      case 'llm-analysis':
+        return <SuspenseLLMAnalysisManager />
+      case 'compare-result':
+        return (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <GitCompare className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Compare Result</h3>
+              <p className="text-gray-500">비교 결과 페이지가 준비 중입니다.</p>
+ 
