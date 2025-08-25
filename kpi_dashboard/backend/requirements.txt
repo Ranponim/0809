@@ -38,11 +38,11 @@ celery
 redis
 
 # Machine Learning
-torch
-torchvision
+#torch
+#torchvision
 scikit-learn
-tensorflow
-keras
+#tensorflow
+#keras
 
 
 
