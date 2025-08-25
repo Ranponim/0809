@@ -5,7 +5,7 @@
  * 사용자가 두 날짜 구간을 선택하고 PEG 데이터를 비교 분석할 수 있습니다.
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
@@ -20,7 +20,7 @@ import {
 } from 'recharts'
 import { 
   Play, RefreshCw, TrendingUp, TrendingDown, Minus, AlertTriangle, 
-  CheckCircle, Info, BarChart3, Eye, Settings, Download, Upload
+  CheckCircle, BarChart3, Eye, Settings, Download, Database
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -28,21 +28,19 @@ import DateRangeSelector from './DateRangeSelector.jsx'
 import ComparisonChart from './ComparisonChart.jsx'
 import apiClient from '@/lib/apiClient.js'
 import { useStatisticsSettings, usePreference } from '@/hooks/usePreference.js'
+import { Checkbox } from '@/components/ui/checkbox.jsx'
 
 const BasicComparison = () => {
   // Preference 설정 훅
   const {
     settings: statisticsSettings,
-    updateSettings: updateStatisticsSettings,
-    saving,
-    error: settingsError
+    updateSettings: updateStatisticsSettings
   } = useStatisticsSettings()
   
   // 전역 Preference 훅 (Dashboard 설정 업데이트용)
   const {
     preferences,
     updatePreference,
-    isLoading: preferenceLoading,
     isSaving: preferenceSaving
   } = usePreference()
 
@@ -70,15 +68,22 @@ const BasicComparison = () => {
   const [selectedResults, setSelectedResults] = useState(new Set())
   
   // 사용 가능한 PEG 옵션 (Database Setting에서 동적으로 로드)
-  const [availablePegs, setAvailablePegs] = useState([])
-  const [pegOptionsLoading, setPegOptionsLoading] = useState(false)
-  const [pegOptionsError, setPegOptionsError] = useState(null)
-  
+  const availablePegOptions = useMemo(() => {
+    return statisticsSettings?.table ? [
+      { value: 'availability', label: 'Availability (%)' },
+      { value: 'rrc', label: 'RRC Success Rate (%)' },
+      { value: 'erab', label: 'ERAB Success Rate (%)' },
+      { value: 'sar', label: 'SAR' },
+      { value: 'mobility_intra', label: 'Mobility Intra (%)' },
+      { value: 'cqi', label: 'CQI' }
+    ] : []
+  }, [statisticsSettings?.table])
+
   // PEG 목록 로드 함수
   const fetchAvailablePegs = useCallback(async () => {
     console.log('🔍 Available PEGs 로드 시작')
-    setPegOptionsLoading(true)
-    setPegOptionsError(null)
+    // setPegOptionsLoading(true) // Removed as per new_code
+    // setPegOptionsError(null) // Removed as per new_code
     
     try {
       // Database 설정 확인
@@ -125,7 +130,7 @@ const BasicComparison = () => {
       }
       
       console.log('✅ PEG 목록 로드 완료:', pegOptions)
-      setAvailablePegs(pegOptions)
+      // setAvailablePegs(pegOptions) // Removed as per new_code
       
       // 기본 선택된 PEG 설정 (처음 3개)
       if (selectedPegs.length === 0 && pegOptions.length > 0) {
@@ -136,7 +141,7 @@ const BasicComparison = () => {
       
     } catch (err) {
       console.error('❌ PEG 목록 로드 실패:', err)
-      setPegOptionsError(err.message || 'PEG 목록을 불러오는데 실패했습니다')
+      // setPegOptionsError(err.message || 'PEG 목록을 불러오는데 실패했습니다') // Removed as per new_code
       
       // 에러 시 기본 목록 사용
       const fallbackPegs = [
@@ -144,10 +149,10 @@ const BasicComparison = () => {
         { value: 'rrc', label: 'RRC Success Rate (%)' },
         { value: 'erab', label: 'ERAB Success Rate (%)' }
       ]
-      setAvailablePegs(fallbackPegs)
+      // setAvailablePegs(fallbackPegs) // Removed as per new_code
       
     } finally {
-      setPegOptionsLoading(false)
+      // setPegOptionsLoading(false) // Removed as per new_code
     }
   }, [selectedPegs.length])
   
@@ -340,9 +345,9 @@ const BasicComparison = () => {
     try {
       console.log('💾 Dashboard에 저장할 PEG:', Array.from(selectedResults))
       
-      // 현재 Dashboard 설정 가져오기
-      const currentDashboardSettings = preferences?.dashboard || {}
-      const currentSelectedPegs = currentDashboardSettings.selectedPegs || []
+      // 현재 Dashboard 설정 가져오기 - 단순화된 구조 사용
+      const currentDashboardSettings = dashboardSettings || {}
+      const currentSelectedPegs = currentDashboardSettings?.selectedPegs || []
       
       // 새로 선택된 PEG 중 중복되지 않은 것들만 추가
       const newPegs = Array.from(selectedResults).filter(peg => !currentSelectedPegs.includes(peg))
@@ -353,7 +358,7 @@ const BasicComparison = () => {
       console.log('📈 업데이트된 PEG 목록:', updatedSelectedPegs)
       
       // Preference API를 통해 Dashboard 설정 업데이트
-      await updatePreference('dashboard', {
+      await updatePreference('dashboardSettings', {
         ...currentDashboardSettings,
         selectedPegs: updatedSelectedPegs
       })
@@ -496,55 +501,59 @@ const BasicComparison = () => {
             <div className="space-y-2">
               <Label className="text-sm font-medium flex items-center justify-between">
                 <span>분석할 PEG</span>
-                {pegOptionsLoading && (
+                {/* pegOptionsLoading && ( // Removed as per new_code
                   <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />
-                )}
+                ) */}
               </Label>
               
-              {pegOptionsError && (
+              {/* pegOptionsError && ( // Removed as per new_code
                 <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
                   <AlertTriangle className="h-3 w-3 inline mr-1" />
                   {pegOptionsError}
                 </div>
-              )}
+              ) */}
               
               <div className="space-y-2 max-h-32 overflow-y-auto">
-                {pegOptionsLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
-                    <span className="ml-2 text-sm text-muted-foreground">PEG 목록 로드 중...</span>
-                  </div>
-                ) : availablePegs.length > 0 ? (
-                  availablePegs.map((peg) => (
-                    <div
-                      key={peg.value}
-                      className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
-                        selectedPegs.includes(peg.value)
-                          ? 'bg-blue-50 border-blue-200'
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
-                      onClick={() => handlePegToggle(peg.value)}
-                    >
-                      <span className="text-sm">{peg.label}</span>
-                      {selectedPegs.includes(peg.value) && (
-                        <CheckCircle className="h-4 w-4 text-blue-500" />
-                      )}
+                  {availablePegOptions.length > 0 ? (
+                    availablePegOptions.map((peg) => (
+                      <div
+                        key={peg.value}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`peg-${peg.value}`}
+                          checked={selectedPegs.includes(peg.value)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedPegs(prev => [...prev, peg.value])
+                            } else {
+                              setSelectedPegs(prev => prev.filter(p => p !== peg.value))
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`peg-${peg.value}`}
+                          className="text-sm cursor-pointer flex-1"
+                        >
+                          {peg.label}
+                        </Label>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-muted-foreground py-4">
+                      <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">사용 가능한 PEG가 없습니다</p>
+                      <p className="text-xs">Database 설정을 확인해주세요</p>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <AlertTriangle className="h-4 w-4 mx-auto mb-1" />
-                    <p className="text-xs">사용 가능한 PEG가 없습니다</p>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
               
               <div className="flex items-center justify-between">
                 <Badge variant="outline" className="text-xs">
                   {selectedPegs.length}개 선택됨
                 </Badge>
                 
-                {!pegOptionsLoading && (
+                {/* {!pegOptionsLoading && ( // Removed as per new_code
                   <Button
                     variant="ghost"
                     size="sm"
@@ -554,7 +563,7 @@ const BasicComparison = () => {
                     <RefreshCw className="h-3 w-3 mr-1" />
                     새로고침
                   </Button>
-                )}
+                )} */}
               </div>
             </div>
             

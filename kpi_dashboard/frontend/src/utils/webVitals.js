@@ -40,9 +40,14 @@ export async function measureWebVitals() {
   console.log('🔍 Web Vitals 측정 시작...');
   
   try {
-    // 동적 임포트로 web-vitals 로드
+    // 동적 임포트로 web-vitals 로드 (타임아웃 설정)
     if (!webVitals) {
-      webVitals = await import('web-vitals');
+      webVitals = await Promise.race([
+        import('web-vitals'),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('web-vitals 로드 타임아웃')), 5000)
+        )
+      ]);
     }
     
     // 사용 가능한 함수들 확인 및 호출

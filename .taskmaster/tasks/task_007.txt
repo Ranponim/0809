@@ -1,0 +1,43 @@
+# Task ID: 7
+# Title: Frontend: Build Main Dashboard with Summary and Results Table
+# Status: todo
+# Dependencies: 4, 6
+# Priority: high
+# Description: Develop the main results dashboard to display the analysis summary and a detailed table of all pegs/cells.
+# Details:
+Following PRD Section 3.4.2, create the main UI view. At the top, display the summary cards: Overall Status, Failed Pegs, Failed Cells, and Analysis Periods. Below, implement a feature-rich table (e.g., using MUI X DataGrid) to display the results for all pegs/cells. The table must support pagination, sorting by any column (e.g., Z-Score), and filtering (e.g., to show only 'Fail' items).
+
+# Test Strategy:
+Develop the component using mock data that mirrors the final API response from Task 6. Verify that all summary cards display the correct aggregated data. Test all table functionalities: pagination, sorting (ascending/descending), and filtering.
+
+# Subtasks:
+## 1. Design and Implement User Database Schema [pending]
+### Dependencies: None
+### Description: Create the necessary database tables and migrations to store user information, including credentials and profile data.
+### Details:
+Define a 'users' table with columns for id, username, email, password_hash, created_at, and updated_at. Use a migration tool like Alembic or Flyway to manage schema versions.
+
+## 2. Implement User Registration Endpoint [pending]
+### Dependencies: None
+### Description: Create a public API endpoint (e.g., POST /api/register) that allows new users to create an account.
+### Details:
+The endpoint should accept username, email, and password. It must validate input, hash the password using bcrypt, and store the new user in the database. Return a 201 status on success.
+
+## 3. Implement User Login and JWT Generation [pending]
+### Dependencies: None
+### Description: Create an endpoint (e.g., POST /api/login) for users to authenticate and receive a JSON Web Token (JWT).
+### Details:
+The endpoint should verify the provided credentials against the stored password hash. Upon success, generate a signed JWT containing the user ID and an expiration claim.
+
+## 4. Create Authentication Middleware for Protected Routes [pending]
+### Dependencies: None
+### Description: Implement middleware to verify the JWT on incoming requests to secure endpoints.
+### Details:
+The middleware should extract the JWT from the 'Authorization: Bearer <token>' header, validate its signature and expiration, and attach the user's identity to the request context if valid. If invalid, it should return a 401 or 403 error.
+
+## 5. Implement Protected User Profile Endpoint [pending]
+### Dependencies: None
+### Description: Create a protected endpoint (e.g., GET /api/users/me) that returns the profile information for the authenticated user.
+### Details:
+This endpoint must use the authentication middleware. It will use the user ID from the request context (populated by the middleware) to fetch the user's data from the database, omitting sensitive fields like the password hash.
+

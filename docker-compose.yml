@@ -28,6 +28,7 @@ services:
     depends_on:
       - mongo
       - postgres
+      - redis
     environment:
       # FastAPI/분석 영구 저장용 Mongo URL 전달
       MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
@@ -41,14 +42,44 @@ services:
       # MCP 분석기 연동 (옵션)
       MCP_ANALYZER_URL: ${MCP_ANALYZER_URL:-}
       MCP_API_KEY: ${MCP_API_KEY:-}
+      # Celery
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
 
+  celery_worker:
+    build:
+      context: ./kpi_dashboard/backend
+    image: kpi-backend:latest
+    container_name: kpi-celery-worker
+    command: celery -A app.celery_app worker --loglevel=info
+    depends_on:
+      - backend
+      - redis
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-kpi}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-pass}
+      DB_NAME: ${DB_NAME:-netperf}
+
+  redis:
+    image: redis:7-alpine
+    container_name: kpi-redis
+    ports:
+      - "6379:6379"
+
   frontend:
     build:
       context: ./kpi_dashboard/frontend
+      target: runtime
       args:
         # 빌드 타임에 API 엔드포인트 주입 (Nginx 정적 배포)
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}

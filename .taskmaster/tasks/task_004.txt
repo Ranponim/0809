@@ -1,0 +1,11 @@
+# Task ID: 4
+# Title: Frontend: Build Analysis Setup and Period Selection UI
+# Status: todo
+# Dependencies: 1
+# Priority: high
+# Description: Create the user interface for initiating an analysis, including date range selection and manual override for test periods.
+# Details:
+Based on PRD Section 3.1.1, implement a React component with a date/time range picker and an 'Analyze' button. After the backend identifies test periods (from Task 2), populate two dropdown menus ('Baseline Period (n-1)' and 'Comparison Period (n)') with the results, defaulting to the two most recent periods. Allow the user to manually select any two periods from the dropdowns to re-run the analysis.
+
+# Test Strategy:
+UI testing: Verify the date picker works correctly. After clicking 'Analyze', confirm the loading indicator appears and the dropdowns are populated with data from a mock API response. Test the manual selection and re-analysis trigger.

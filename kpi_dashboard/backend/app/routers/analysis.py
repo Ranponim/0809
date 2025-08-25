@@ -10,6 +10,8 @@ from fastapi import APIRouter, Body, HTTPException, status, Query, Depends
 from typing import List, Optional
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from bson import BSON
+import bson
 
 from ..db import get_analysis_collection
 from ..models.analysis import (
@@ -31,7 +33,26 @@ from ..exceptions import (
 )
 
 # 로깅 설정
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.analysis")
+
+# 요청 추적 임포트
+from ..middleware.request_tracing import (
+    create_request_context_logger, 
+    log_business_event, 
+    log_data_event
+)
+from ..utils.validation import (
+    validate_analysis_filters,
+    validate_pagination_params,
+    validate_analysis_result_data,
+    ValidationError
+)
+from ..utils.data_optimization import (
+    optimize_analysis_result,
+    restore_analysis_result,
+    get_optimization_stats
+)
+from ..utils.cache_manager import get_cache_manager
 
 # 라우터 생성
 router = APIRouter(
@@ -44,6 +65,26 @@ router = APIRouter(
         500: {"description": "Internal Server Error"}
     }
 )
+
+
+def _normalize_legacy_keys(doc: dict) -> dict:
+    """레거시 camelCase 문서를 snake_case 우선 형태로 정규화합니다."""
+    if not isinstance(doc, dict):
+        return doc
+    mapping = {
+        "analysisDate": "analysis_date",
+        "neId": "ne_id",
+        "cellId": "cell_id",
+        "analysisType": "analysis_type",
+        "resultsOverview": "results_overview",
+        "analysisRawCompact": "analysis_raw_compact",
+        "reportPath": "report_path",
+        "requestParams": "request_params",
+    }
+    for old_key, new_key in mapping.items():
+        if new_key not in doc and old_key in doc:
+            doc[new_key] = doc[old_key]
+    return doc
 
 
 @router.post(
@@ -89,13 +130,45 @@ async def create_analysis_result(
         # 데이터 준비: DB에는 snake_case 필드명으로 저장 (v2 표준 키)
         # by_alias=False로 덤프하여 camelCase alias가 아닌 원 필드명으로 저장한다
         result_dict = result.model_dump(by_alias=False, exclude_unset=True)
+
+        # MongoDB 문서 크기(16MB) 체크
+        try:
+            encoded = BSON.encode(result_dict)
+            doc_size = len(encoded)
+            max_size = 16 * 1024 * 1024
+            warn_size = 12 * 1024 * 1024
+            if doc_size > max_size:
+                logger.error(f"문서 크기 초과: size={doc_size}B > 16MB")
+                raise InvalidAnalysisDataException(
+                    f"Document too large to store ({doc_size} bytes). Please reduce payload."
+                )
+            if doc_size > warn_size:
+                logger.warning(f"문서 크기 경고: size={doc_size}B > 12MB, 축약 필요 가능")
+        except Exception as e:
+            logger.warning(f"문서 크기 체크 실패(계속 진행): {e}")
         
         # metadata 업데이트
         if "metadata" in result_dict:
             result_dict["metadata"]["created_at"] = datetime.utcnow()
             result_dict["metadata"]["updated_at"] = datetime.utcnow()
         
-        logger.info(f"새 분석 결과 생성 시도: NE={result.ne_id}, Cell={result.cell_id}")
+        # 요청 컨텍스트 로거 생성
+        req_logger = create_request_context_logger("app.analysis.create")
+        
+        req_logger.info("새 분석 결과 생성 시도", extra={
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id,
+            "analysis_type": result.analysis_type,
+            "status": result.status,
+            "document_size_bytes": doc_size if 'doc_size' in locals() else 0
+        })
+        
+        # 비즈니스 이벤트 로깅
+        log_business_event("analysis_result_create_started", {
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id,
+            "analysis_type": result.analysis_type
+        })
         
         # 중복 검사 (같은 NE, Cell, 날짜에 대한 분석 결과가 이미 있는지 확인)
         existing = await collection.find_one({
@@ -111,6 +184,32 @@ async def create_analysis_result(
                 analysis_date=result.analysis_date.isoformat()
             )
         
+        # 데이터 최적화 적용 (큰 문서인 경우)
+        if doc_size > 1024 * 1024:  # 1MB 이상인 경우
+            req_logger.info("대용량 문서 감지, 최적화 적용", extra={
+                "original_size_bytes": doc_size,
+                "ne_id": result.ne_id,
+                "cell_id": result.cell_id
+            })
+            
+            try:
+                optimized_dict = await optimize_analysis_result(result_dict)
+                optimized_size = len(bson.BSON.encode(optimized_dict))
+                
+                req_logger.info("문서 최적화 완료", extra={
+                    "original_size": doc_size,
+                    "optimized_size": optimized_size,
+                    "compression_ratio": optimized_size / doc_size,
+                    "space_saved": doc_size - optimized_size
+                })
+                
+                result_dict = optimized_dict
+                
+            except Exception as e:
+                req_logger.warning(f"문서 최적화 실패, 원본으로 저장: {e}", extra={
+                    "error_type": type(e).__name__
+                })
+        
         # 문서 삽입
         insert_result = await collection.insert_one(result_dict)
         
@@ -123,7 +222,28 @@ async def create_analysis_result(
         # 응답 모델로 변환
         analysis_model = AnalysisResultModel.from_mongo(created_result)
         
-        logger.info(f"분석 결과 생성 성공: ID={insert_result.inserted_id}")
+        # 관련 캐시 무효화
+        cache_manager = await get_cache_manager()
+        await cache_manager.invalidate_analysis_caches(
+            ne_id=result.ne_id,
+            cell_id=result.cell_id
+        )
+        
+        req_logger.info("분석 결과 생성 성공", extra={
+            "document_id": str(insert_result.inserted_id),
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id,
+            "analysis_type": result.analysis_type,
+            "cache_invalidated": True
+        })
+        
+        # 데이터 이벤트 로깅
+        log_data_event("analysis_result_created", {
+            "document_id": str(insert_result.inserted_id),
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id,
+            "collection": "analysis_results"
+        })
         
         return AnalysisResultCreateResponse(
             message="Analysis result created successfully",
@@ -135,11 +255,21 @@ async def create_analysis_result(
         raise e
         
     except PyMongoError as e:
-        logger.error(f"MongoDB 오류: {e}")
+        req_logger.error("MongoDB 오류 발생", extra={
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id
+        }, exc_info=True)
         raise DatabaseConnectionException(f"Database operation failed: {str(e)}")
         
     except Exception as e:
-        logger.error(f"분석 결과 생성 중 예상치 못한 오류: {e}")
+        req_logger.error("분석 결과 생성 중 예상치 못한 오류", extra={
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "ne_id": result.ne_id,
+            "cell_id": result.cell_id
+        }, exc_info=True)
         raise InvalidAnalysisDataException(f"Failed to create analysis result: {str(e)}")
 
 
@@ -183,7 +313,37 @@ async def list_analysis_results(
             if date_to:
                 filter_dict["analysis_date"]["$lte"] = date_to
         
-        logger.info(f"분석 결과 목록 조회: page={page}, size={size}, filters={filter_dict}")
+        # 요청 컨텍스트 로거 생성
+        req_logger = create_request_context_logger("app.analysis.list")
+        
+        # 페이지네이션 검증
+        try:
+            page, size = validate_pagination_params(page, size)
+        except ValidationError as e:
+            req_logger.warning(f"페이지네이션 매개변수 검증 실패: {e.message}")
+            raise InvalidAnalysisDataException(e.message)
+        
+        req_logger.info("분석 결과 목록 조회 시작", extra={
+            "page": page,
+            "size": size,
+            "filters": filter_dict,
+            "filter_count": len([k for k, v in filter_dict.items() if v is not None])
+        })
+        
+        # 캐시 확인
+        cache_manager = await get_cache_manager()
+        cached_results = await cache_manager.get_cached_analysis_results(
+            filter_dict, page, size
+        )
+        
+        if cached_results:
+            req_logger.info("캐시된 분석 결과 반환", extra={
+                "page": page,
+                "size": size,
+                "cache_hit": True,
+                "result_count": len(cached_results.get("results", []))
+            })
+            return cached_results
         
         # 전체 개수 조회
         total_count = await collection.count_documents(filter_dict)
@@ -206,6 +366,9 @@ async def list_analysis_results(
             "results": 1,
             "analysis_type": 1,
             "analysisType": 1,
+            # include overview by default, exclude raw compact
+            "results_overview": 1,
+            "resultsOverview": 1,
         }
         
         cursor = collection.find(filter_dict, projection)
@@ -233,20 +396,35 @@ async def list_analysis_results(
                 "cellId": cell_id_val,
                 "status": doc.get("status"),
                 "results_count": results_count,
-                "analysis_type": analysis_type_val
+                "analysis_type": analysis_type_val,
+                "results_overview": doc.get("results_overview") or doc.get("resultsOverview"),
             }
             
             items.append(item_dict)
         
-        logger.info(f"분석 결과 목록 조회 완료: {len(items)}개 항목")
-        
-        return AnalysisResultListResponse(
+        # 응답 데이터 구성
+        response_data = AnalysisResultListResponse(
             items=items,
             total=total_count,
             page=page,
             size=size,
             has_next=has_next
         )
+        
+        # 결과를 캐시에 저장
+        await cache_manager.cache_analysis_results(filter_dict, page, size, response_data.dict())
+        
+        req_logger.info("분석 결과 목록 조회 완료", extra={
+            "returned_items": len(items),
+            "total_count": total_count,
+            "page": page,
+            "size": size,
+            "has_next": has_next,
+            "applied_filters": len([k for k, v in filter_dict.items() if v is not None]),
+            "cached": True
+        })
+        
+        return response_data
         
     except PyMongoError as e:
         logger.error(f"MongoDB 오류: {e}")
@@ -263,7 +441,7 @@ async def list_analysis_results(
     summary="분석 결과 상세 조회",
     description="특정 ID의 분석 결과를 상세 조회합니다."
 )
-async def get_analysis_result(result_id: PyObjectId):
+async def get_analysis_result(result_id: PyObjectId, includeRaw: bool = Query(False, description="압축 원본(analysis_raw_compact) 포함 여부")):
     """
     특정 ID의 분석 결과를 상세 조회합니다.
     
@@ -272,7 +450,24 @@ async def get_analysis_result(result_id: PyObjectId):
     try:
         collection = get_analysis_collection()
         
-        logger.info(f"분석 결과 상세 조회: ID={result_id}")
+        # 요청 컨텍스트 로거 생성
+        req_logger = create_request_context_logger("app.analysis.detail")
+        
+        req_logger.info("분석 결과 상세 조회 시작", extra={
+            "result_id": str(result_id),
+            "include_raw": includeRaw
+        })
+        
+        # 캐시 확인 (includeRaw=True인 경우는 캐시하지 않음)
+        cache_manager = await get_cache_manager()
+        if not includeRaw:
+            cached_result = await cache_manager.get_cached_analysis_detail(str(result_id))
+            if cached_result:
+                req_logger.info("캐시된 분석 결과 상세 반환", extra={
+                    "result_id": str(result_id),
+                    "cache_hit": True
+                })
+                return AnalysisResultModel.parse_obj(cached_result)
         
         # 문서 조회
         document = await collection.find_one({"_id": result_id})
@@ -280,10 +475,46 @@ async def get_analysis_result(result_id: PyObjectId):
         if not document:
             raise AnalysisResultNotFoundException(str(result_id))
         
+        # 최적화된 문서인 경우 복원
+        if "_optimization" in document:
+            req_logger.info("최적화된 문서 복원 시작", extra={
+                "result_id": str(result_id)
+            })
+            
+            try:
+                document = await restore_analysis_result(document)
+                req_logger.info("문서 복원 완료", extra={
+                    "result_id": str(result_id)
+                })
+            except Exception as e:
+                req_logger.warning(f"문서 복원 실패, 원본 사용: {e}", extra={
+                    "error_type": type(e).__name__,
+                    "result_id": str(result_id)
+                })
+
+        # 레거시 키 정규화 (camelCase → snake_case 우선)
+        document = _normalize_legacy_keys(document)
+
+        # includeRaw=false인 경우 압축 원본 제외하여 경량 응답 (두 케이스 모두 제거)
+        if not includeRaw:
+            document.pop("analysis_raw_compact", None)
+            document.pop("analysisRawCompact", None)
+        
         # 응답 모델로 변환
         analysis_model = AnalysisResultModel.from_mongo(document)
         
-        logger.info(f"분석 결과 상세 조회 완료: ID={result_id}")
+        # 캐시에 저장 (includeRaw=False인 경우만)
+        if not includeRaw:
+            await cache_manager.cache_analysis_detail(str(result_id), analysis_model.dict())
+        
+        req_logger.info("분석 결과 상세 조회 완료", extra={
+            "result_id": str(result_id),
+            "ne_id": analysis_model.ne_id,
+            "cell_id": analysis_model.cell_id,
+            "analysis_type": analysis_model.analysis_type,
+            "include_raw": includeRaw,
+            "cached": not includeRaw
+        })
         
         return AnalysisResultResponse(
             message="Analysis result retrieved successfully",
@@ -403,6 +634,202 @@ async def delete_analysis_result(result_id: PyObjectId):
     except Exception as e:
         logger.error(f"분석 결과 삭제 중 오류: {e}")
         raise DatabaseConnectionException(f"Failed to delete analysis result: {str(e)}")
+
+
+@router.get("/optimization/stats", summary="데이터 최적화 통계", tags=["Optimization"])
+async def get_optimization_statistics():
+    """
+    데이터 최적화 통계 조회
+    
+    압축률, GridFS 사용량, 저장공간 절약 등의 통계를 제공합니다.
+    """
+    from datetime import datetime
+    from ..middleware.request_tracing import get_current_request_id
+    
+    request_id = get_current_request_id()
+    req_logger = create_request_context_logger("app.analysis.optimization_stats")
+    
+    try:
+        req_logger.info("최적화 통계 조회 시작")
+        
+        stats = await get_optimization_stats()
+        
+        req_logger.info("최적화 통계 조회 완료", extra={
+            "total_documents": stats.get("total_documents", 0),
+            "optimized_documents": stats.get("optimized_documents", 0),
+            "optimization_rate": stats.get("optimization_rate", 0)
+        })
+        
+        return {
+            "status": "success",
+            "data": stats,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        req_logger.error(f"최적화 통계 조회 실패: {e}", extra={
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"최적화 통계 조회 실패: {str(e)}",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+
+@router.post("/optimization/cleanup", summary="최적화 정리 작업", tags=["Optimization"])
+async def cleanup_optimization():
+    """
+    최적화 관련 정리 작업 수행
+    
+    고아 GridFS 파일 정리 등의 유지보수 작업을 수행합니다.
+    """
+    from datetime import datetime
+    from ..middleware.request_tracing import get_current_request_id
+    from ..utils.data_optimization import get_data_optimizer
+    
+    request_id = get_current_request_id()
+    req_logger = create_request_context_logger("app.analysis.optimization_cleanup")
+    
+    try:
+        req_logger.info("최적화 정리 작업 시작")
+        
+        optimizer = await get_data_optimizer()
+        cleanup_result = await optimizer.cleanup_orphaned_gridfs_files()
+        
+        req_logger.info("최적화 정리 작업 완료", extra={
+            "deleted_files": cleanup_result.get("deleted_files", 0),
+            "orphaned_files": cleanup_result.get("orphaned_files", 0)
+        })
+        
+        # 정리 후 업데이트된 통계
+        updated_stats = await get_optimization_stats()
+        
+        return {
+            "status": "success",
+            "cleanup_result": cleanup_result,
+            "updated_stats": updated_stats,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        req_logger.error(f"최적화 정리 작업 실패: {e}", extra={
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"최적화 정리 작업 실패: {str(e)}",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+
+@router.get("/cache/stats", summary="캐시 통계", tags=["Performance"])
+async def get_cache_statistics():
+    """
+    캐시 시스템 통계 조회
+    
+    Redis와 메모리 캐시의 성능 지표를 제공합니다.
+    """
+    from datetime import datetime
+    from ..middleware.request_tracing import get_current_request_id
+    
+    request_id = get_current_request_id()
+    req_logger = create_request_context_logger("app.analysis.cache_stats")
+    
+    try:
+        req_logger.info("캐시 통계 조회 시작")
+        
+        cache_manager = await get_cache_manager()
+        stats = await cache_manager.get_cache_stats()
+        
+        req_logger.info("캐시 통계 조회 완료", extra={
+            "memory_cache_size": stats.get("memory_cache", {}).get("size", 0),
+            "redis_available": stats.get("redis_available", False)
+        })
+        
+        return {
+            "status": "success",
+            "data": stats,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        req_logger.error(f"캐시 통계 조회 실패: {e}", extra={
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"캐시 통계 조회 실패: {str(e)}",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+
+@router.post("/cache/clear", summary="캐시 정리", tags=["Performance"])
+async def clear_cache(pattern: str = "*"):
+    """
+    캐시 정리 작업
+    
+    지정된 패턴의 캐시를 삭제합니다.
+    """
+    from datetime import datetime
+    from ..middleware.request_tracing import get_current_request_id
+    
+    request_id = get_current_request_id()
+    req_logger = create_request_context_logger("app.analysis.cache_clear")
+    
+    try:
+        req_logger.info("캐시 정리 시작", extra={"pattern": pattern})
+        
+        cache_manager = await get_cache_manager()
+        deleted_count = await cache_manager.delete_pattern(pattern)
+        
+        req_logger.info("캐시 정리 완료", extra={
+            "pattern": pattern,
+            "deleted_count": deleted_count
+        })
+        
+        return {
+            "status": "success",
+            "message": f"캐시 정리 완료: {deleted_count}개 항목 삭제",
+            "deleted_count": deleted_count,
+            "pattern": pattern,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id
+        }
+        
+    except Exception as e:
+        req_logger.error(f"캐시 정리 실패: {e}", extra={
+            "error_type": type(e).__name__,
+            "pattern": pattern
+        }, exc_info=True)
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"캐시 정리 실패: {str(e)}",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
 
 
 @router.get(

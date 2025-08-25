@@ -22,8 +22,6 @@ import {
   CheckCircle,
   BookOpen,
   Copy,
-  Download,
-  Upload,
   Database
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -125,7 +123,7 @@ const DerivedPegManager = ({
       // PEG 참조 검증 (기본 PEG + Derived PEG 포함)
       // 1) ${RawPEGName} 형태는 특수문자 허용 → 경고/에러 대상 제외
       // 2) 그 외 토큰은 안전 토큰(영문/숫자/_)으로 간주하여 검증
-      const rawRefs = formula.match(/\$\{[^}]+\}/g) || []
+      // const rawRefs = formula.match(/\$\{[^}]+\}/g) || []
       // 원본 참조(${...})는 먼저 제거하여 안전 토큰만 검증
       const pegReferences = (formula.replace(/\$\{[^}]+\}/g, ' ').match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [])
       
@@ -178,7 +176,7 @@ const DerivedPegManager = ({
         dependencies: basicPegDependencies,
         derivedDependencies: derivedPegDependencies
       }
-    } catch (error) {
+    } catch (_error) {
       return {
         isValid: false,
         errors: ['수식 분석 중 오류가 발생했습니다'],

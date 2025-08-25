@@ -74,11 +74,29 @@ const ResultDetail = ({
   const [activeTab, setActiveTab] = useState('overview')
   const [isFullscreen, setIsFullscreen] = useState(false)
   
+  // === 키보드 단축키 지원 ===
+  useEffect(() => {
+    const handleKeydown = (event) => {
+      if (event.key === 'F11') {
+        event.preventDefault()
+        setIsFullscreen(prev => !prev)
+      } else if (event.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false)
+      }
+    }
+    
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeydown)
+      return () => window.removeEventListener('keydown', handleKeydown)
+    }
+  }, [isOpen, isFullscreen])
+  
   // === PEG 차트 제어 상태 ===
   const [pegPage, setPegPage] = useState(0)
   const [pegPageSize, setPegPageSize] = useState(10)
   const [pegFilter, setPegFilter] = useState('')
   const [weightFilter, setWeightFilter] = useState('all') // all, high(>=8), medium(6-7.9), low(<6)
+  const [trendFilter, setTrendFilter] = useState('all') // all, up, down, stable
 
   const isCompareMode = mode === 'compare' && resultIds.length > 1
   const isSingleMode = mode === 'single' && resultIds.length === 1
@@ -156,49 +174,12 @@ const ResultDetail = ({
     }
   }
 
-  // === Mock 데이터 생성 (API 실패 시 대체) ===
-  const generateMockData = (result) => {
-    const kpiTypes = ['availability', 'rrc', 'erab', 'sar', 'mobility_intra', 'cqi']
-    
-    return {
-      ...result,
-      summary: {
-        totalKpis: kpiTypes.length,
-        successfulAnalysis: Math.floor(Math.random() * kpiTypes.length) + 1,
-        averageScore: (Math.random() * 40 + 60).toFixed(1),
-        recommendations: Math.floor(Math.random() * 5) + 1
-      },
-      kpiResults: kpiTypes.map(type => ({
-        name: type,
-        value: (Math.random() * 40 + 60).toFixed(2),
-        trend: Math.random() > 0.5 ? 'up' : 'down',
-        change: (Math.random() * 10 - 5).toFixed(1),
-        status: Math.random() > 0.8 ? 'warning' : 'good'
-      })),
-      timeline: Array.from({ length: 24 }, (_, i) => ({
-        hour: i,
-        value: Math.random() * 100,
-        timestamp: new Date(Date.now() - (23 - i) * 60 * 60 * 1000).toISOString()
-      })),
-      recommendations: [
-        '네트워크 성능 최적화를 위해 특정 셀의 설정 조정을 권장합니다.',
-        'RRC 연결 성공률 개선을 위한 안테나 각도 조정이 필요합니다.',
-        'ERAB 성공률 향상을 위해 백홀 용량 증설을 고려해보세요.'
-      ]
-    }
-  }
+  // (모킹 제거)
 
   // === 처리된 결과 데이터 ===
   const processedResults = useMemo(() => {
-    return results.map(result => {
-      if (result.error) {
-        return generateMockData(result)
-      }
-      // LLM 구조(results[0].kpi_results) 또는 mock 구조(kpiResults)를 모두 지원
-      const hasLlmKpis = !!(result?.results?.[0]?.kpi_results?.length)
-      const hasMockKpis = !!(result?.kpiResults?.length)
-      return (hasLlmKpis || hasMockKpis) ? result : generateMockData(result)
-    })
+    // 모킹 제거: 에러가 있는 항목은 제외하고 그대로 사용
+    return results.filter(r => !r.error)
   }, [results])
 
   // === 비교 모드 데이터 처리 ===
@@ -219,121 +200,100 @@ const ResultDetail = ({
     })
   }, [processedResults, isCompareMode])
 
-  // === 단일 결과 개요 렌더링 ===
-  const renderSingleOverview = (result) => (
-    <div className="space-y-6">
-      {/* 기본 정보 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            분석 정보
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">분석 일시</div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                <span className="font-medium">{formatDate(result.analysisDate)}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">NE ID</div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.neId || result.results?.[0]?.analysis_info?.ne || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Cell ID</div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span className="font-medium">{result.cellId || result.results?.[0]?.analysis_info?.cellid || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">상태</div>
-              <Badge variant={getStatusBadgeVariant(result.status)}>
-                {result.status || 'unknown'}
-              </Badge>
-            </div>
+  // === 단일 결과 차트 데이터 처리 ===
+  const kpiChartData = useMemo(() => {
+    if (isCompareMode || !processedResults.length || !processedResults[0].stats) {
+      return {
+        kpiResults: [],
+        sortedKpiResults: [],
+        filteredResults: [],
+        dataWithTrends: [],
+        trendFilteredResults: [],
+        totalPages: 0,
+        paginatedResults: [],
+        data: [],
+        summaryStats: { improved: 0, declined: 0, stable: 0, avgChange: 0, weightedAvgChange: 0 }
+      };
+    }
 
-            {/* ✅ 추가된 필드들 */}
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Host</div>
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                <span className="font-medium">{result.results?.[0]?.analysis_info?.host || '-'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Version</div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {result.results?.[0]?.analysis_info?.version || '-'}
-                </Badge>
-              </div>
-            </div>
+    const result = processedResults[0];
+    const statsData = result.stats || [];
 
-            {/* 평균점수 추가 */}
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">평균점수</div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-green-500" />
-                <span className="font-bold text-lg text-green-600">
-                  {result.results?.[0]?.average_score || '97.7'}%
-                </span>
-              </div>
-            </div>
+    const pegComparison = {};
+    statsData.forEach(stat => {
+      const pegName = stat.kpi_name;
+      if (!pegComparison[pegName]) {
+        pegComparison[pegName] = { peg_name: pegName, weight: 5 };
+      }
+      if (stat.period === 'N-1') {
+        pegComparison[pegName]['N-1'] = stat.avg;
+      } else if (stat.period === 'N') {
+        pegComparison[pegName]['N'] = stat.avg;
+      }
+    });
 
-            {/* 계산 수식 추가 */}
-            <div className="space-y-1 col-span-full">
-              <div className="text-sm text-muted-foreground">평균점수 계산 수식</div>
-              <div className="bg-muted/50 p-2 rounded text-sm font-mono">
-                {result.results?.[0]?.score_formula || '가중 평균 = Σ(PEG값 × 가중치) / Σ(가중치)'}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    const weightData = result.request_params?.peg_definitions || {};
+    Object.keys(pegComparison).forEach(pegName => {
+      if (weightData[pegName]?.weight) {
+        pegComparison[pegName].weight = weightData[pegName].weight;
+      }
+    });
 
-      {/* 요약 통계 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>분석 요약</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{result.summary?.totalKpis || 0}</div>
-              <div className="text-sm text-muted-foreground">총 KPI 수</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{result.summary?.successfulAnalysis || 0}</div>
-              <div className="text-sm text-muted-foreground">성공 분석</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">{result.summary?.averageScore || 0}%</div>
-              <div className="text-sm text-muted-foreground">평균 점수</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{result.summary?.recommendations || 0}</div>
-              <div className="text-sm text-muted-foreground">권장사항</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
+    const kpiResults = Object.values(pegComparison).filter(peg => peg['N-1'] !== undefined && peg['N'] !== undefined);
+    const sortedKpiResults = [...kpiResults].sort((a, b) => (b.weight || 0) - (a.weight || 0));
 
-  // === KPI 결과 차트 렌더링 ===
-  const renderKpiChart = (results) => {
+    const filteredResults = sortedKpiResults.filter(item => {
+      const matchesNameFilter = !pegFilter || item.peg_name.toLowerCase().includes(pegFilter.toLowerCase());
+      const weight = item.weight || 0;
+      let matchesWeightFilter = true;
+      if (weightFilter === 'high') matchesWeightFilter = weight >= 8;
+      else if (weightFilter === 'medium') matchesWeightFilter = weight >= 6 && weight < 8;
+      else if (weightFilter === 'low') matchesWeightFilter = weight < 6;
+      return matchesNameFilter && matchesWeightFilter;
+    });
+
+    const dataWithTrends = filteredResults.map(item => {
+      const n1Value = item['N-1'] || 0;
+      const nValue = item['N'] || 0;
+      const change = nValue - n1Value;
+      const changePercent = n1Value !== 0 ? (change / n1Value) * 100 : 0;
+      const trend = change > 0 ? 'up' : change < 0 ? 'down' : 'stable';
+      return { ...item, change, changePercent, trend };
+    });
+
+    const trendFilteredResults = dataWithTrends.filter(item => {
+      if (trendFilter === 'all') return true;
+      return item.trend === trendFilter;
+    });
+
+    const totalPages = Math.ceil(trendFilteredResults.length / pegPageSize);
+    const paginatedResults = trendFilteredResults.slice(pegPage * pegPageSize, (pegPage + 1) * pegPageSize);
+
+    const data = paginatedResults.map(item => ({
+      name: item.peg_name,
+      'N-1': item['N-1'] || 0,
+      'N': item['N'] || 0,
+      change: item.change,
+      changePercent: item.changePercent,
+      trend: item.trend,
+      weight: item.weight,
+      unit: '%',
+      peg: item.weight || 0
+    }));
+
+    const improved = data.filter(item => item.trend === 'up').length;
+    const declined = data.filter(item => item.trend === 'down').length;
+    const stable = data.filter(item => item.trend === 'stable').length;
+    const avgChange = data.length > 0 ? data.reduce((sum, item) => sum + item.change, 0) / data.length : 0;
+    const weightedAvgChange = data.length > 0 ? data.reduce((sum, item) => sum + (item.change * item.weight), 0) / data.reduce((sum, item) => sum + item.weight, 0) : 0;
+    const summaryStats = { improved, declined, stable, avgChange, weightedAvgChange };
+
+    return { kpiResults, sortedKpiResults, filteredResults, dataWithTrends, trendFilteredResults, totalPages, paginatedResults, data, summaryStats };
+  }, [isCompareMode, processedResults, pegFilter, weightFilter, trendFilter, pegPage, pegPageSize]);
+
+  const renderKpiChart = () => {
+    const { kpiResults, trendFilteredResults, totalPages, data, summaryStats } = kpiChartData;
+
     if (isCompareMode) {
       return (
         <ResponsiveContainer width="100%" height={400}>
@@ -355,62 +315,52 @@ const ResultDetail = ({
       )
     }
 
-    // 단일 결과 차트 - 개선된 N-1/N 비교 차트
-    const result = results[0]
-    // 백엔드(LLM) 구조(results[0].kpi_results)와 mock 구조(kpiResults)를 모두 지원
-    const kpiResults = (result?.results?.[0]?.kpi_results || result?.kpiResults || [])
-    
     if (!kpiResults.length) {
-      return <div className="text-center text-muted-foreground">차트 데이터가 없습니다.</div>
+      return <div className="text-center text-muted-foreground">PEG 비교 데이터가 없습니다.</div>
     }
-
-    // 가중치 순으로 정렬 (높은 순)
-    const sortedKpiResults = [...kpiResults].sort((a, b) => (b.weight || 0) - (a.weight || 0))
-
-    // 필터링 적용
-    const filteredResults = sortedKpiResults.filter((item) => {
-      // PEG 이름 필터
-      const matchesNameFilter = !pegFilter || 
-        item.peg_name.toLowerCase().includes(pegFilter.toLowerCase())
-      
-      // 가중치 필터
-      const weight = item.weight || 0
-      let matchesWeightFilter = true
-      if (weightFilter === 'high') matchesWeightFilter = weight >= 8
-      else if (weightFilter === 'medium') matchesWeightFilter = weight >= 6 && weight < 8
-      else if (weightFilter === 'low') matchesWeightFilter = weight < 6
-      
-      return matchesNameFilter && matchesWeightFilter
-    })
-
-    // 페이지네이션 적용
-    const totalPages = Math.ceil(filteredResults.length / pegPageSize)
-    const paginatedResults = filteredResults.slice(
-      pegPage * pegPageSize,
-      (pegPage + 1) * pegPageSize
-    )
-
-    const data = paginatedResults.map((item) => ({
-      name: item.peg_name,
-      'N-1': item.n_minus_1,
-      'N': item.n,
-      weight: item.weight,
-      unit: item.unit,
-      peg: item.peg || 0
-    }))
 
     return (
       <div className="space-y-4">
+        {/* 성능 요약 통계 */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-muted/30 rounded-lg">
+          <div className="text-center">
+            <div className="text-lg font-bold text-green-600">{summaryStats.improved}</div>
+            <div className="text-xs text-muted-foreground">개선 📈</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-red-600">{summaryStats.declined}</div>
+            <div className="text-xs text-muted-foreground">하락 📉</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-600">{summaryStats.stable}</div>
+            <div className="text-xs text-muted-foreground">안정 ➡️</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-lg font-bold ${summaryStats.avgChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {summaryStats.avgChange > 0 ? '+' : ''}{summaryStats.avgChange.toFixed(2)}%
+            </div>
+            <div className="text-xs text-muted-foreground">평균 변화</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-lg font-bold ${summaryStats.weightedAvgChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {summaryStats.weightedAvgChange > 0 ? '+' : ''}{summaryStats.weightedAvgChange.toFixed(2)}%
+            </div>
+            <div className="text-xs text-muted-foreground">가중 평균 변화</div>
+          </div>
+        </div>
+
         {/* 필터 및 제어 영역 */}
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>📊 PEG별 N-1/N 성능 비교 (가중치 높은 순)</span>
             <Badge variant="outline">
-              전체 {kpiResults.length}개 중 {filteredResults.length}개 표시
+              전체 {kpiResults.length}개 중 {trendFilteredResults.length}개 표시
             </Badge>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className={`grid gap-3 transition-all duration-300 ${
+            isFullscreen ? 'grid-cols-1 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-1 md:grid-cols-5'
+          }`}>
             {/* PEG 이름 검색 */}
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -439,6 +389,22 @@ const ResultDetail = ({
                 <SelectItem value="high">높음 (≥8)</SelectItem>
                 <SelectItem value="medium">중간 (6-7.9)</SelectItem>
                 <SelectItem value="low">낮음 (&lt;6)</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* 트렌드 필터 */}
+            <Select value={trendFilter} onValueChange={(value) => {
+              setTrendFilter(value)
+              setPegPage(0) // 필터 변경 시 첫 페이지로
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="트렌드 필터" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 트렌드</SelectItem>
+                <SelectItem value="up">개선 📈</SelectItem>
+                <SelectItem value="down">하락 📉</SelectItem>
+                <SelectItem value="stable">안정 ➡️</SelectItem>
               </SelectContent>
             </Select>
             
@@ -482,7 +448,11 @@ const ResultDetail = ({
             </div>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={500}>
+        <ResponsiveContainer 
+          width="100%" 
+          height={isFullscreen ? Math.min(window.innerHeight * 0.55, 900) : Math.min(window.innerHeight * 0.4, 500)}
+          className="transition-all duration-300"
+        >
           <BarChart 
             data={data} 
             margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
@@ -499,12 +469,64 @@ const ResultDetail = ({
             <YAxis />
             <Tooltip 
               formatter={(value, name, props) => [
-                `${value} ${props.payload.unit}`,
+                `${value?.toFixed(2)} ${props.payload.unit}`,
                 name
               ]}
               labelFormatter={(label) => {
                 const item = data.find(d => d.name === label)
                 return `${label} (가중치: ${item?.weight || 0})`
+              }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                
+                const data = payload[0]?.payload
+                if (!data) return null
+                
+                const getTrendIcon = (trend) => {
+                  switch(trend) {
+                    case 'up': return '📈'
+                    case 'down': return '📉'
+                    default: return '➡️'
+                  }
+                }
+                
+                const getTrendColor = (trend) => {
+                  switch(trend) {
+                    case 'up': return 'text-green-600'
+                    case 'down': return 'text-red-600'
+                    default: return 'text-gray-600'
+                  }
+                }
+                
+                return (
+                  <div className="bg-white border rounded-lg shadow-lg p-3 min-w-[200px]">
+                    <div className="font-semibold mb-2">{label}</div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-orange-600">N-1 기간:</span>
+                        <span className="font-medium">{data['N-1']?.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">N 기간:</span>
+                        <span className="font-medium">{data['N']?.toFixed(2)}%</span>
+                      </div>
+                      <div className="border-t pt-1 mt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">성능 변화:</span>
+                          <div className={`flex items-center gap-1 font-medium ${getTrendColor(data.trend)}`}>
+                            <span>{getTrendIcon(data.trend)}</span>
+                            <span>{data.change > 0 ? '+' : ''}{data.change?.toFixed(2)}%</span>
+                            <span className="text-xs">({data.changePercent > 0 ? '+' : ''}{data.changePercent?.toFixed(1)}%)</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-gray-600">가중치:</span>
+                          <span className="font-medium">{data.weight}/10</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
               }}
             />
             <Legend />
@@ -696,7 +718,7 @@ const ResultDetail = ({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">개요</TabsTrigger>
-          <TabsTrigger value="kpi">KPI 결과</TabsTrigger>
+          <TabsTrigger value="kpi">PEG 비교 결과</TabsTrigger>
           <TabsTrigger value="recommendations">LLM 분석 리포트</TabsTrigger>
         </TabsList>
 
@@ -709,11 +731,11 @@ const ResultDetail = ({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                {isCompareMode ? 'KPI 비교 차트' : 'KPI 분석 결과'}
+                {isCompareMode ? 'PEG 성능 비교 차트' : 'PEG 비교 결과 (N-1 vs N)'}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {renderKpiChart(processedResults)}
+              {renderKpiChart()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -727,7 +749,11 @@ const ResultDetail = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`${isFullscreen ? 'max-w-7xl h-[92vh] w-[95vw]' : 'max-w-6xl max-h-[85vh] w-[90vw]'}`}>
+      <DialogContent className={`transition-all duration-500 ease-in-out transform ${
+        isFullscreen 
+          ? 'max-w-[99vw] h-[98vh] w-[99vw] scale-100' 
+          : 'max-w-6xl max-h-[85vh] w-[90vw] scale-100'
+      }`}>
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -740,7 +766,8 @@ const ResultDetail = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                title={isFullscreen ? "원래 크기로" : "최대화"}
+                className="transition-all duration-200 hover:scale-110 hover:bg-accent"
+                title={isFullscreen ? "원래 크기로 (ESC)" : "최대화 (F11)"}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
@@ -749,7 +776,9 @@ const ResultDetail = ({
           </div>
         </DialogHeader>
 
-        <ScrollArea className={isFullscreen ? 'h-full' : 'max-h-[70vh]'}>
+        <ScrollArea className={`transition-all duration-300 ${
+          isFullscreen ? 'h-[85vh]' : 'max-h-[70vh]'
+        }`}>
           <div className="px-1">
             {renderContent()}
           </div>

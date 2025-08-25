@@ -44,8 +44,7 @@ import {
   ChevronDown,
   ChevronUp,
   File,
-  FolderOpen,
-  Save
+  FolderOpen
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -139,7 +138,7 @@ const ImportExportBox = ({
       // 부분 내보내기인 경우 선택된 섹션만 포함
       if (exportType === 'partial') {
         const selectedSections = Object.entries(exportSections)
-          .filter(([key, selected]) => selected)
+          .filter(([_key, selected]) => selected)
           .map(([key]) => key)
         
         if (selectedSections.length === 0) {

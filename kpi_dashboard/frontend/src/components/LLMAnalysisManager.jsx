@@ -4,7 +4,7 @@
  * Frontend Database Setting을 활용하여 LLM 분석을 요청하고 결과를 관리합니다.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,17 +19,13 @@ import {
   Database, 
   Play, 
   Clock, 
-  CheckCircle, 
-  XCircle, 
   Loader2,
   Settings,
-  Calendar,
-  Filter,
   FileText
 } from 'lucide-react'
 
 import { triggerLLMAnalysis, getLLMAnalysisResult, testDatabaseConnection } from '@/lib/apiClient'
-import { usePreference } from '@/contexts/PreferenceContext.jsx'
+import { usePreference } from '@/hooks/usePreference.js'
 
 const LLMAnalysisManager = () => {
   // Preference에서 DB 설정 사용 (공통)
@@ -54,38 +50,13 @@ const LLMAnalysisManager = () => {
   })
 
   // UI 상태
-  const [isConnecting, setIsConnecting] = useState(false)
+  
   const [connectionStatus, setConnectionStatus] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [currentAnalysis, setCurrentAnalysis] = useState(null)
   const [analysisHistory, setAnalysisHistory] = useState([])
 
-  // Database 연결 테스트 (Preference 기반)
-  const handleTestConnection = async () => {
-    if (!dbConfig.host || !dbConfig.password) {
-      toast.error('Host와 Password는 필수 입력값입니다.')
-      return
-    }
-
-    setIsConnecting(true)
-    try {
-      const result = await testDatabaseConnection(dbConfig)
-      
-      if (result.success) {
-        setConnectionStatus({ type: 'success', message: 'Database 연결 성공' })
-        toast.success('Database 연결이 성공했습니다.')
-      } else {
-        setConnectionStatus({ type: 'error', message: result.error })
-        toast.error(`Database 연결 실패: ${result.error}`)
-      }
-    } catch (error) {
-      console.error('Connection test error:', error)
-      setConnectionStatus({ type: 'error', message: error.message })
-      toast.error('연결 테스트 중 오류가 발생했습니다.')
-    } finally {
-      setIsConnecting(false)
-    }
-  }
+  
 
   // LLM 분석 실행
   const handleStartAnalysis = async () => {

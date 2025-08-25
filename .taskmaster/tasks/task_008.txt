@@ -1,0 +1,55 @@
+# Task ID: 8
+# Title: Frontend: Create Detailed View with Time-Series Chart and Anomaly Highlighting
+# Status: todo
+# Dependencies: 7
+# Priority: medium
+# Description: Build the drill-down view that provides detailed diagnostics for a selected peg or cell, including an interactive time-series chart.
+# Details:
+As specified in PRD Section 3.4.3, when a user clicks a row in the main table (Task 7), navigate to a detailed view. This view should contain a simple metrics table and a time-series comparison chart (e.g., using MUI X Charts). The chart must plot the 'n-1' period (gray line) overlaid with the 'n' period (blue line). Crucially, highlight the points in the 'n' period where anomalies were detected (from the ML model) using red dots or a shaded region.
+
+# Test Strategy:
+Using mock data, verify that clicking a table row navigates to the correct detail page. Ensure the chart renders both time-series correctly and that the anomaly highlighting is accurately displayed based on the input data.
+
+# Subtasks:
+## 1. Design User Authentication Database Schema [pending]
+### Dependencies: None
+### Description: Define the database tables, columns, and relationships required for storing user data, including credentials, profile information, and session tokens.
+### Details:
+Create an ERD for `users`, `user_profiles`, and `sessions` tables. The `users` table must include `id`, `email`, `password_hash`, `created_at`, and `updated_at`. Ensure `email` is unique. The `password_hash` field should be of sufficient length for bcrypt or Argon2 hashes.
+
+## 2. Develop Backend API Endpoints for Registration and Login [pending]
+### Dependencies: None
+### Description: Create the server-side API endpoints for user registration (`POST /api/auth/register`) and login (`POST /api/auth/login`).
+### Details:
+The registration endpoint will validate input, check for existing users, hash the password, and create a new user record. The login endpoint will authenticate credentials, and upon success, generate and return a JSON Web Token (JWT).
+
+## 3. Implement Secure Password Hashing and Storage [pending]
+### Dependencies: None
+### Description: Integrate a robust, one-way hashing algorithm for user passwords to ensure they are never stored in plaintext.
+### Details:
+Use the bcrypt or Argon2 library to hash passwords during registration and to compare hashes during login. The salt should be automatically generated and stored as part of the hash string. Implement strict input validation on all endpoints.
+
+## 4. Build Frontend UI for Login and Registration Pages [pending]
+### Dependencies: None
+### Description: Create the user interface components for the login and registration forms using the project's designated frontend framework.
+### Details:
+Develop responsive and accessible forms with fields for email and password. Implement client-side validation to provide immediate feedback to the user (e.g., email format, password complexity requirements).
+
+## 5. Integrate Frontend Forms with Backend Authentication API [pending]
+### Dependencies: None
+### Description: Connect the frontend UI components to the backend registration and login endpoints to enable user interaction.
+### Details:
+Use a library like Axios or the native Fetch API to handle HTTP requests. On successful login, store the received JWT securely in the client (e.g., HttpOnly cookie or local storage). Implement user feedback for success and error states.
+
+## 6. Implement Protected Routes and Session Management [pending]
+### Dependencies: None
+### Description: Create a mechanism to restrict access to certain parts of the application to authenticated users only.
+### Details:
+On the frontend, create a route guard or higher-order component that checks for a valid JWT before rendering a protected component. If the token is invalid or missing, redirect to the login page. On the backend, create middleware to validate the JWT on all protected API endpoints.
+
+## 7. Develop Password Reset Functionality [pending]
+### Dependencies: None
+### Description: Implement a secure 'Forgot Password' workflow that allows users to reset their password via an email link.
+### Details:
+Create an endpoint to generate a unique, single-use, time-limited reset token and email a reset link to the user. Create a new frontend page for the user to enter a new password. Create a final endpoint to validate the token and update the user's password hash in the database.
+

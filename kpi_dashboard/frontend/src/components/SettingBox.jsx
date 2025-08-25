@@ -42,13 +42,10 @@ import {
   ChevronDown, 
   ChevronUp, 
   Check, 
-  X, 
   Clock, 
   AlertCircle, 
   Save, 
-  RotateCcw,
-  Eye,
-  EyeOff 
+  RotateCcw
 } from 'lucide-react'
 
 // ================================
@@ -271,7 +268,7 @@ const SettingBox = ({
     saving,
     error: globalError,
     validationErrors,
-    hasValidationErrors,
+    
     logInfo,
     saveImmediately,
     defaultSettings

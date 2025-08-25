@@ -83,6 +83,75 @@ class AnalysisMetadata(BaseModel):
     processing_time: Optional[float] = Field(None, description="처리 시간 (초)")
 
 
+class TargetScope(BaseModel):
+    """
+    분석 타겟 범위 정의
+    
+    NE, Cell, Host의 다중 필터링을 지원하는 구조체입니다.
+    """
+    ne_ids: Optional[List[str]] = Field(None, description="분석 대상 NE ID 목록")
+    cell_ids: Optional[List[str]] = Field(None, description="분석 대상 Cell ID 목록")
+    host_ids: Optional[List[str]] = Field(None, description="분석 대상 Host ID 목록")
+    primary_ne: Optional[str] = Field(None, description="대표 NE ID")
+    primary_cell: Optional[str] = Field(None, description="대표 Cell ID")
+    primary_host: Optional[str] = Field(None, description="대표 Host ID")
+    scope_type: str = Field(default="network_wide", description="분석 범위 타입 (specific_target, network_wide)")
+    target_combinations: Optional[List[Dict[str, str]]] = Field(
+        None, 
+        description="NE-Cell-Host 조합 목록 (예: [{'ne': 'nvgnb#10000', 'cell': '2010', 'host': 'host01'}])"
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "ne_ids": ["nvgnb#10000", "nvgnb#20000"],
+                "cell_ids": ["2010", "2011"],
+                "host_ids": ["host01", "192.168.1.10"],
+                "primary_ne": "nvgnb#10000",
+                "primary_cell": "2010",
+                "primary_host": "host01",
+                "scope_type": "specific_target",
+                "target_combinations": [
+                    {"ne": "nvgnb#10000", "cell": "2010", "host": "host01"},
+                    {"ne": "nvgnb#10000", "cell": "2011", "host": "host01"}
+                ]
+            }
+        }
+    )
+
+
+class FilterMetadata(BaseModel):
+    """
+    필터링 메타데이터
+    
+    적용된 필터의 통계 및 커버리지 정보를 포함합니다.
+    """
+    applied_ne_count: int = Field(0, description="적용된 NE 수")
+    applied_cell_count: int = Field(0, description="적용된 Cell 수")
+    applied_host_count: int = Field(0, description="적용된 Host 수")
+    data_coverage_ratio: Optional[float] = Field(None, description="필터링된 데이터 비율")
+    relationship_coverage: Optional[Dict[str, int]] = Field(
+        None,
+        description="연관성 커버리지 (ne_cell_matches, host_ne_matches, full_combination_matches)"
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "applied_ne_count": 2,
+                "applied_cell_count": 4,
+                "applied_host_count": 2,
+                "data_coverage_ratio": 0.85,
+                "relationship_coverage": {
+                    "ne_cell_matches": 4,
+                    "host_ne_matches": 2,
+                    "full_combination_matches": 4
+                }
+            }
+        }
+    )
+
+
 class AnalysisResultBase(BaseModel):
     """
     분석 결과 기본 모델
@@ -94,9 +163,13 @@ class AnalysisResultBase(BaseModel):
         description="분석 기준 날짜",
         alias="analysisDate"
     )
-    # LLM 분석의 경우 ne_id, cell_id가 없을 수 있으므로 Optional로 변경
-    ne_id: Optional[str] = Field(None, description="Network Element ID", alias="neId")
-    cell_id: Optional[str] = Field(None, description="Cell ID", alias="cellId")
+    # 하위 호환성을 위해 기존 필드들 유지 (Optional)
+    ne_id: Optional[str] = Field(None, description="Network Element ID (하위 호환성용)", alias="neId")
+    cell_id: Optional[str] = Field(None, description="Cell ID (하위 호환성용)", alias="cellId")
+    
+    # 새로운 다중 타겟 지원 필드들
+    target_scope: Optional[TargetScope] = Field(None, description="분석 타겟 범위")
+    filter_metadata: Optional[FilterMetadata] = Field(None, description="필터링 메타데이터")
     results: List[AnalysisDetail] = Field(
         default_factory=list,
         description="KPI별 분석 결과 목록"
@@ -107,6 +180,17 @@ class AnalysisResultBase(BaseModel):
     )
     status: str = Field(default="success", description="분석 상태")
     report_path: Optional[str] = Field(None, description="보고서 파일 경로")
+    # 운영 요약 및 압축 원본(하이브리드 전략용)
+    results_overview: Optional[Dict[str, Any]] = Field(
+        None,
+        description="요약 결과(핵심 소견/경보/권장사항)",
+        alias="resultsOverview"
+    )
+    analysis_raw_compact: Optional[Dict[str, Any]] = Field(
+        None,
+        description="압축된 원본 분석 데이터(상세 Raw의 경량 버전)",
+        alias="analysisRawCompact"
+    )
     metadata: AnalysisMetadata = Field(
         default_factory=AnalysisMetadata,
         description="분석 메타데이터"
@@ -199,20 +283,46 @@ class AnalysisResultSummary(BaseModel):
     분석 결과 요약 모델
     
     목록 조회 시 사용되는 간소화된 모델입니다.
-    LLM 분석의 경우 ne_id, cell_id가 없을 수 있으므로 Optional로 처리합니다.
+    Host 정보를 포함한 확장된 요약 정보를 제공합니다.
     """
-    id: str = Field(alias="_id")  # ✅ PyObjectId → str 변경
+    id: str = Field(alias="_id")
     analysis_date: datetime = Field(alias="analysisDate")
-    ne_id: Optional[str] = Field(None, alias="neId")  # ✅ Optional로 변경
-    cell_id: Optional[str] = Field(None, alias="cellId")  # ✅ Optional로 변경
+    
+    # 하위 호환성을 위한 기존 필드들 (Optional)
+    ne_id: Optional[str] = Field(None, alias="neId", description="대표 NE ID (하위 호환성)")
+    cell_id: Optional[str] = Field(None, alias="cellId", description="대표 Cell ID (하위 호환성)")
+    
+    # 새로운 타겟 범위 요약 정보
+    target_summary: Optional[Dict[str, Any]] = Field(
+        None, 
+        description="타겟 범위 요약 (ne_count, cell_count, host_count, scope_type)"
+    )
+    
     status: str
     results_count: int = Field(0, description="분석 결과 개수")
-    analysis_type: Optional[str] = Field(None, description="분석 유형 (standard, llm_analysis)")  # ✅ 추가
+    analysis_type: Optional[str] = Field(None, description="분석 유형 (standard, llm_analysis)")
     
     model_config = ConfigDict(
         populate_by_name=True,
         json_encoders={
             datetime: lambda v: v.isoformat()
+        },
+        json_schema_extra={
+            "example": {
+                "id": "64f8a9b2c3d4e5f6a7b8c9d0",
+                "analysis_date": "2025-08-20T10:30:00Z",
+                "ne_id": "nvgnb#10000",
+                "cell_id": "2010",
+                "target_summary": {
+                    "ne_count": 2,
+                    "cell_count": 4,
+                    "host_count": 2,
+                    "scope_type": "specific_target"
+                },
+                "status": "success",
+                "results_count": 15,
+                "analysis_type": "llm_analysis"
+            }
         }
     )
 
@@ -222,15 +332,42 @@ class AnalysisResultFilter(BaseModel):
     분석 결과 필터링 모델
     
     검색 및 필터링 파라미터를 정의합니다.
+    Host 필터링 지원을 포함한 확장된 필터링 옵션을 제공합니다.
     """
-    ne_id: Optional[str] = Field(None, alias="neId", description="Network Element ID로 필터링")
-    cell_id: Optional[str] = Field(None, alias="cellId", description="Cell ID로 필터링")
+    # 하위 호환성을 위한 기존 필드들
+    ne_id: Optional[str] = Field(None, alias="neId", description="Network Element ID로 필터링 (하위 호환성)")
+    cell_id: Optional[str] = Field(None, alias="cellId", description="Cell ID로 필터링 (하위 호환성)")
+    
+    # 새로운 다중 필터링 지원
+    ne_ids: Optional[List[str]] = Field(None, description="NE ID 목록으로 필터링")
+    cell_ids: Optional[List[str]] = Field(None, description="Cell ID 목록으로 필터링")
+    host_ids: Optional[List[str]] = Field(None, description="Host ID 목록으로 필터링")
+    host_id: Optional[str] = Field(None, description="단일 Host ID로 필터링")
+    
+    # 기존 필터링 옵션들
     status: Optional[str] = Field(None, description="상태로 필터링")
     date_from: Optional[datetime] = Field(None, description="시작 날짜")
     date_to: Optional[datetime] = Field(None, description="종료 날짜")
     analysis_type: Optional[str] = Field(None, description="분석 유형으로 필터링")
     
-    model_config = ConfigDict(populate_by_name=True)
+    # 타겟 범위 기반 필터링
+    scope_type: Optional[str] = Field(None, description="분석 범위 타입으로 필터링")
+    
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "ne_ids": ["nvgnb#10000", "nvgnb#20000"],
+                "cell_ids": ["2010", "2011"],
+                "host_ids": ["host01", "192.168.1.10"],
+                "status": "success",
+                "date_from": "2025-08-08T00:00:00Z",
+                "date_to": "2025-08-20T23:59:59Z",
+                "analysis_type": "llm_analysis",
+                "scope_type": "specific_target"
+            }
+        }
+    )
 
 
 # 응답 모델들

@@ -178,15 +178,25 @@ async def kpi_query(payload: dict = Body(...)):
                 detail="start_date, end_date, kpi_types는 필수 매개변수입니다"
             )
 
-        # 날짜 파싱 및 검증
+        # 날짜 파싱 및 검증 - ISO 형식과 일반 날짜 형식 모두 지원
         try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
-        except ValueError:
+            # ISO 형식 (YYYY-MM-DDTHH:MM:SS) 시도
+            if 'T' in start_date or 'T' in end_date:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            else:
+                # 일반 날짜 형식 (YYYY-MM-DD)
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+        except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="날짜 형식은 YYYY-MM-DD 이어야 합니다"
+                detail=f"날짜 형식 오류: {str(e)}. 지원 형식: YYYY-MM-DD 또는 YYYY-MM-DDTHH:MM:SS"
             )
+
+        # 날짜를 PostgreSQL 쿼리용 형식으로 변환
+        start_date_formatted = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        end_date_formatted = end_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         # 선택적 매개변수 처리
         entity_ids = payload.get("entity_ids", "LHK078ML1,LHK078MR1")
@@ -210,8 +220,8 @@ async def kpi_query(payload: dict = Body(...)):
         from ..utils.postgresql_db import query_kpi_data
 
         data_by_kpi = query_kpi_data(
-            start_date=start_date,
-            end_date=end_date,
+            start_date=start_date_formatted,
+            end_date=end_date_formatted,
             kpi_types=kpi_types,
             ne_filters=ne_filters,
             cellid_filters=cellid_filters

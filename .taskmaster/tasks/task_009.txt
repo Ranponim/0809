@@ -1,0 +1,43 @@
+# Task ID: 9
+# Title: Backend: Implement Transformer Model and Ensemble Anomaly Scoring
+# Status: todo
+# Dependencies: 5, 6
+# Priority: medium
+# Description: Enhance the anomaly detection capability by adding a Transformer-based model and creating an ensemble score.
+# Details:
+Implement the Transformer-based autoencoder model as described in PRD Section 3.3.3 to capture long-range dependencies in the time-series data. Develop the ensemble scoring mechanism (PRD 3.3.4) that normalizes the anomaly scores from both the LSTM (Task 5) and Transformer models and combines them into a single, more robust score using a weighted average. Update the main analysis workflow (Task 6) to use this new ensemble score.
+
+# Test Strategy:
+Compare the Transformer model's performance against the LSTM on a benchmark dataset. Test the ensemble function to ensure scores are normalized and combined correctly. Verify that the main workflow now outputs the ensemble score.
+
+# Subtasks:
+## 1. Design and Implement User Database Schema [pending]
+### Dependencies: None
+### Description: Create the database table(s) to store user information, including username, hashed password, email, and timestamps.
+### Details:
+Use a migration tool (e.g., Alembic, Flyway) to create a 'users' table. Fields should include 'id' (primary key), 'username' (unique, indexed), 'email' (unique, indexed), 'hashed_password' (string), 'created_at', and 'updated_at'. Ensure proper constraints are set.
+
+## 2. Create User Registration API Endpoint [pending]
+### Dependencies: None
+### Description: Develop a public API endpoint (e.g., POST /api/users/register) that allows new users to create an account.
+### Details:
+The endpoint should accept a username, email, and password. It must validate the input (e.g., password strength, valid email format), check for existing username/email, hash the password using a strong algorithm (like bcrypt), and save the new user to the database. Return a success message or appropriate error codes.
+
+## 3. Implement User Login and JWT Generation [pending]
+### Dependencies: None
+### Description: Create an API endpoint (e.g., POST /api/auth/login) for users to authenticate and receive a JSON Web Token (JWT).
+### Details:
+The endpoint should accept a username/email and password. It will find the user in the database, compare the provided password with the stored hash, and if they match, generate a signed JWT. The JWT payload should include user ID and an expiration time. The token should be returned in the response body.
+
+## 4. Create Authentication Middleware for Token Verification [pending]
+### Dependencies: None
+### Description: Develop middleware to protect specific API routes by verifying the JWT from the Authorization header.
+### Details:
+The middleware should extract the JWT from the 'Authorization: Bearer <token>' header. It must validate the token's signature and check its expiration. If valid, it should decode the payload, identify the user, and attach the user object to the request context. If invalid, it should return a 401 Unauthorized error.
+
+## 5. Implement Protected 'Get User Profile' Endpoint [pending]
+### Dependencies: None
+### Description: Create a protected API endpoint (e.g., GET /api/users/me) that returns the profile information of the currently authenticated user.
+### Details:
+Apply the authentication middleware to this route. The route handler should use the user information attached to the request by the middleware to fetch the user's details (excluding the password hash) from the database and return them as a JSON response.
+

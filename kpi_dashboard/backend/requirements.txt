@@ -17,6 +17,7 @@ pandas
 numpy
 scipy
 matplotlib
+ruptures
 
 # HTTP 요청
 requests
@@ -24,7 +25,24 @@ requests
 # 성능 모니터링
 psutil
 
+# Host 필터링 및 검증을 위한 추가 의존성
+validators
+dnspython
+
 # 테스트 (개발용)
 pytest
 pytest-asyncio
+
+# Celery
+celery
+redis
+
+# Machine Learning
+torch
+torchvision
+scikit-learn
+tensorflow
+keras
+
+
 

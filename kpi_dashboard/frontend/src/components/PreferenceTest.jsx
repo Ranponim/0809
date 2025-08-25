@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
-import { AlertCircle, Check, Clock, Download, Upload, RotateCcw } from 'lucide-react'
+import { AlertCircle, Check, Clock, RotateCcw } from 'lucide-react'
 import SettingBox from './SettingBox.jsx'
 import ImportExportBox from './ImportExportBox.jsx'
 
@@ -29,10 +29,8 @@ const PreferenceTest = () => {
     lastSaved,
     validationErrors,
     hasValidationErrors,
-    updateSettings,
     saveImmediately,
     resetSettings,
-    exportSettings,
     logInfo
   } = usePreference()
 

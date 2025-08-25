@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-08-25T03:04:53.432722",
+  "tests": {
+    "backend_health": true,
+    "frontend_connectivity": true,
+    "analysis_workflow": false,
+    "data_consistency": false,
+    "performance": {
+      "/health_response_time": 0.02391815185546875,
+      "/api/analyze/_response_time": 0.0037903785705566406,
+      "/api/statistical/compare-periods_response_time": 0.00542140007019043,
+      "/api/anomaly/detect_response_time": 0.0057680606842041016,
+      "/api/integrated-analysis/execute_response_time": 0.006402015686035156
+    },
+    "error_handling": false
+  },
+  "overall_success": false,
+  "summary": {
+    "passed_tests": 2,
+    "total_tests": 5,
+    "success_rate": 40.0
+  }
+}

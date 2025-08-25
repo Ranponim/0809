@@ -20,23 +20,24 @@ const Dashboard = () => {
   // usePreference 훅 사용
   const {
     settings: dashboardSettings,
-    updateSettings: updateDashboardSettings,
     saving,
     error: settingsError
   } = useDashboardSettings()
 
-  // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용
-  const selectedPegs = Array.isArray(dashboardSettings.selectedPegs) ? dashboardSettings.selectedPegs : []
+  // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용 - 안전한 접근
+  const selectedPegs = Array.isArray(dashboardSettings?.selectedPegs) ? dashboardSettings.selectedPegs : []
   // Preference > Statistics의 데이터 선택 반영
   const { settings: pref } = usePreference()
   const statisticsSel = pref?.statisticsSettings || {}
   const selectedNEs = Array.isArray(statisticsSel.selectedNEs) ? statisticsSel.selectedNEs : []
   const selectedCellIds = Array.isArray(statisticsSel.selectedCellIds) ? statisticsSel.selectedCellIds : []
-  const autoRefreshInterval = dashboardSettings.autoRefreshInterval || 30
-  const chartStyle = dashboardSettings.chartStyle || 'line'
-  const chartLayout = dashboardSettings.chartLayout || 'byPeg'
-  const showLegend = dashboardSettings.showLegend !== false
-  const showGrid = dashboardSettings.showGrid !== false
+  const autoRefreshInterval = dashboardSettings?.autoRefreshInterval || 30
+  const chartStyle = dashboardSettings?.chartStyle || 'line'
+  const chartLayout = dashboardSettings?.chartLayout || 'byPeg'
+  const showLegend = dashboardSettings?.showLegend !== false
+  const showGrid = dashboardSettings?.showGrid !== false
+  const defaultNe = dashboardSettings?.defaultNe || ''
+  const defaultCellId = dashboardSettings?.defaultCellId || ''
 
   const titleFor = (key) => key
 
@@ -47,17 +48,10 @@ const Dashboard = () => {
     return `hsl(${hue}, 70%, 50%)`
   }
 
-  const kpiTypes = [
-    { key: 'availability', title: 'Availability (%)', color: '#8884d8' },
-    { key: 'rrc', title: 'RRC Success Rate (%)', color: '#82ca9d' },
-    { key: 'erab', title: 'ERAB Success Rate (%)', color: '#ffc658' },
-    { key: 'sar', title: 'SAR', color: '#ff7300' },
-    { key: 'mobility_intra', title: 'Mobility Intra (%)', color: '#8dd1e1' },
-    { key: 'cqi', title: 'CQI', color: '#d084d0' }
-  ]
+  
 
   // 데이터 fetching 함수
-  const fetchKPIData = async () => {
+  const fetchKPIData = React.useCallback(async () => {
     if (selectedPegs.length === 0) {
       setKpiData({})
       setLoading(false)
@@ -74,7 +68,7 @@ const Dashboard = () => {
 
       // 기간: 기본 1시간 (설정 저장 가능하도록 dashboardSettings에 저장/사용)
       const end = new Date()
-      const start = new Date(end.getTime() - (dashboardSettings.defaultHours || 1) * 60 * 60 * 1000)
+      const start = new Date(end.getTime() - (dashboardSettings?.defaultHours || 1) * 60 * 60 * 1000)
 
       const response = await apiClient.post('/api/kpi/timeseries', {
         kpi_types: selectedPegs,
@@ -100,7 +94,7 @@ const Dashboard = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedPegs, selectedNEs, selectedCellIds, dashboardSettings?.defaultHours, defaultNe, defaultCellId])
 
   // 자동 새로고침 설정
   useEffect(() => {
@@ -141,12 +135,12 @@ const Dashboard = () => {
         clearInterval(countdownIntervalRef.current)
       }
     }
-  }, [autoRefreshInterval])
+  }, [autoRefreshInterval, fetchKPIData])
 
   // 설정 변경 시 데이터 다시 로드
   useEffect(() => {
     fetchKPIData()
-  }, [selectedPegs, statisticsSel.selectedNEs, statisticsSel.selectedCellIds, dashboardSettings.defaultHours])
+  }, [fetchKPIData])
 
   // 수동 새로고침
   const handleManualRefresh = () => {
@@ -154,19 +148,7 @@ const Dashboard = () => {
     fetchKPIData()
   }
 
-  const formatChartData = (data) => {
-    const rows = Array.isArray(data) ? data : Object.values(data || {}).flat()
-    if (!rows || rows.length === 0) return []
-    
-    const groupedByTime = rows.reduce((acc, item) => {
-      const time = new Date(item.timestamp).toLocaleDateString()
-      if (!acc[time]) acc[time] = { time }
-      acc[time][item.entity_id] = item.value
-      return acc
-    }, {})
-
-    return Object.values(groupedByTime)
-  }
+  
 
   // 차트 스타일에 따른 컴포넌트 선택
   const renderChart = (chartData, key, idx) => {

@@ -96,6 +96,17 @@ async def performance_middleware(request: Request, call_next: Callable) -> Respo
         duration = end_time - start_time
         memory_diff = end_memory - start_memory
         
+        # 응답 크기 계산(가능한 경우)
+        resp_size = None
+        try:
+            cl = response.headers.get("content-length")
+            if cl is not None:
+                resp_size = int(cl)
+            elif hasattr(response, "body") and isinstance(response.body, (bytes, bytearray)):
+                resp_size = len(response.body)
+        except Exception:
+            resp_size = None
+
         # 성능 로그 기록
         perf_logger.info(
             f"요청 완료 - Method: {request.method} - "
@@ -103,7 +114,8 @@ async def performance_middleware(request: Request, call_next: Callable) -> Respo
             f"상태: {response.status_code} - "
             f"소요시간: {duration:.3f}s - "
             f"메모리 변화: {memory_diff:+.2f}MB - "
-            f"현재 메모리: {end_memory:.1f}MB"
+            f"현재 메모리: {end_memory:.1f}MB - "
+            f"응답 크기: {resp_size if resp_size is not None else 'unknown'}B"
         )
         
         # 성능 헤더 추가
@@ -126,6 +138,12 @@ async def performance_middleware(request: Request, call_next: Callable) -> Respo
                 f"메모리 누수 의심"
             )
         
+        # 큰 응답 경고(2MB 이상)
+        if resp_size is not None and resp_size > 2 * 1024 * 1024:
+            perf_logger.warning(
+                f"큰 응답 감지 - URL: {request.url.path} - size={resp_size}B"
+            )
+
         return response
         
     except Exception as e:

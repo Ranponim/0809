@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { 
   BarChart3, TrendingUp, TrendingDown, PieChart as PieIcon, Activity, 
-  Download, Settings, Eye, Maximize2, Minimize2, RefreshCw
+  Maximize2, Minimize2
 } from 'lucide-react'
 
 const ComparisonChart = ({ 
@@ -31,7 +31,6 @@ const ComparisonChart = ({
 }) => {
   
   const [chartType, setChartType] = useState(defaultChartType)
-  const [showDelta, setShowDelta] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedMetric, setSelectedMetric] = useState("mean") // mean, delta, delta_percentage
   
@@ -58,7 +57,7 @@ const ComparisonChart = ({
     
     console.log('📊 차트 데이터 생성 중:', comparisonResults.analysis_results)
     
-    return comparisonResults.analysis_results.map((result, index) => {
+    return comparisonResults.analysis_results.map((result) => {
       const period1Mean = parseFloat(result.period1_stats?.mean) || 0
       const period2Mean = parseFloat(result.period2_stats?.mean) || 0
       const delta = parseFloat(result.delta) || 0

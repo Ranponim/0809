@@ -80,10 +80,16 @@ def query_kpi_data(
         params.append(ne_filters)
 
     if cellid_filters:
-        query += " AND cellid = ANY(%s)"
-        params.append(cellid_filters)
+        # cellid_filters를 정수 배열로 변환
+        cellid_ints = [int(cellid) for cellid in cellid_filters if str(cellid).isdigit()]
+        if cellid_ints:
+            query += " AND cellid = ANY(%s)"
+            params.append(cellid_ints)
 
     query += " ORDER BY datetime ASC;"
+
+    logger.info(f"PostgreSQL 쿼리: {query}")
+    logger.info(f"PostgreSQL 파라미터: {params}")
 
     data_by_kpi = {kpi: [] for kpi in kpi_types}
 
@@ -92,6 +98,8 @@ def query_kpi_data(
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 cur.execute(query, tuple(params))
                 rows = cur.fetchall()
+
+                logger.info(f"PostgreSQL 조회 결과: {len(rows)}개 행")
 
                 for row in rows:
                     row_dict = dict(row)
@@ -154,8 +162,11 @@ def query_kpi_time_series(
                 aggregate_mode = aggregate_cells_if_missing and not cellid_filters
 
                 if not aggregate_mode and cellid_filters:
-                    where_clauses.append("cellid = ANY(%s)")
-                    params.append(cellid_filters)
+                    # cellid_filters를 정수 배열로 변환
+                    cellid_ints = [int(cellid) for cellid in cellid_filters if str(cellid).isdigit()]
+                    if cellid_ints:
+                        where_clauses.append("cellid = ANY(%s)")
+                        params.append(cellid_ints)
 
                 where_sql = " AND ".join(where_clauses)
 

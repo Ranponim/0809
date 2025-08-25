@@ -3,22 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
-import { Settings, BarChart3, Database, Bell, Clock, RefreshCw, Calculator } from 'lucide-react'
+import { Settings, BarChart3, Database, Bell, Clock, RefreshCw, Calculator, RotateCcw, Loader2, AlertTriangle } from 'lucide-react'
 import { Label } from '@/components/ui/label.jsx'
 import SettingBox from './SettingBox.jsx'
 import ImportExportBox from './ImportExportBox.jsx'
 import DerivedPegManager from './DerivedPegManager.jsx'
-import { usePreference, useDashboardSettings, useStatisticsSettings, useNotificationSettings } from '@/hooks/usePreference.js'
+import { usePreference } from '@/hooks/usePreference.js'
 import apiClient from '@/lib/apiClient.js'
-import { getCombinedPegOptions, formatPegOptionsForUI } from '@/lib/derivedPegUtils.js'
+import { formatPegOptionsForUI } from '@/lib/derivedPegUtils.js'
+import { CardDescription } from '@/components/ui/card.jsx'
 
 const PreferenceManager = () => {
-  const { settings, isLoading, isSaving, error, lastSaved, updateSettings, saveImmediately } = usePreference()
+  const { settings, isLoading, isSaving, error, lastSaved, updateSettings, saveSettings, resetSettings } = usePreference()
   
   // DB PEG 관련 상태
   const [dbPegOptions, setDbPegOptions] = useState([])
   const [pegOptionsLoading, setPegOptionsLoading] = useState(false)
-  const [useDbPegs, setUseDbPegs] = useState(true)
+  const useDbPegs = true
   const [lastDbFetch, setLastDbFetch] = useState(null)
 
   // DB에서 실제 PEG 목록 가져오기
@@ -63,7 +64,7 @@ const PreferenceManager = () => {
     } finally {
       setPegOptionsLoading(false)
     }
-  }, [])
+  }, [settings?.databaseSettings])
 
   // 현재 사용할 PEG 옵션 결정 (Database Setting PEG + Derived PEG 통합)
   const getCurrentPegOptions = useCallback(() => {
@@ -82,6 +83,7 @@ const PreferenceManager = () => {
     table: settings?.databaseSettings?.table
   })
   useEffect(() => {
+    // PreferenceManager가 마운트될 때만 API 호출
     fetchDbPegs()
   }, [fetchDbPegs, dbKey])
 
@@ -94,14 +96,6 @@ const PreferenceManager = () => {
       required: false,
       options: getCurrentPegOptions(),
       placeholder: 'Database PEG에서 선택하세요'
-    },
-    {
-      key: 'defaultHours',
-      label: '기본 기간 (시간)',
-      type: 'number',
-      min: 1,
-      max: 336,
-      placeholder: '기본 조회 시간 (최대 336시간 = 14일)'
     },
     {
       key: 'chartLayout',
@@ -150,6 +144,7 @@ const PreferenceManager = () => {
         console.error('[PreferenceManager] HOST 목록 조회 실패', e)
       }
     }
+    
     fetchHosts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.databaseSettings?.host, settings?.databaseSettings?.port, settings?.databaseSettings?.user, settings?.databaseSettings?.password, settings?.databaseSettings?.dbname, settings?.databaseSettings?.table])
@@ -175,6 +170,7 @@ const PreferenceManager = () => {
         console.error('[PreferenceManager] NE 목록 조회 실패', e)
       }
     }
+    
     fetchNes()
   }, [selectedHosts, settings?.databaseSettings])
 
@@ -200,6 +196,7 @@ const PreferenceManager = () => {
         console.error('[PreferenceManager] CellID 목록 조회 실패', e)
       }
     }
+    
     fetchCells()
   }, [selectedNEs, selectedHosts, settings?.databaseSettings])
 
@@ -393,8 +390,26 @@ const PreferenceManager = () => {
             fields={dashboardFields}
             defaultOpen={true}
             showResetButton={true}
-            showSaveButton={true}
+            showSaveButton={false} // 직접 구현한 저장 버튼 사용
           />
+          
+          {/* Dashboard 저장 버튼 */}
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  await saveSettings()
+                  alert('Dashboard 설정이 저장되었습니다')
+                } catch (e) {
+                  alert('저장 실패: ' + (e?.message || '알 수 없는 오류'))
+                }
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? '저장 중...' : '저장'}
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="statistics" className="space-y-6">
@@ -475,14 +490,15 @@ const PreferenceManager = () => {
                             selectedCellIds
                           }
                         })
-                        await saveImmediately()
-                        alert('데이터 선택이 저장되었습니다')
+                        await saveSettings()
+                        alert('Statistics 설정이 저장되었습니다')
                       } catch (e) {
                         alert('저장 실패: ' + (e?.message || '알 수 없는 오류'))
                       }
                     }}
+                    disabled={isSaving}
                   >
-                    저장
+                    {isSaving ? '저장 중...' : '저장'}
                   </Button>
                 </div>
               </div>
@@ -498,9 +514,26 @@ const PreferenceManager = () => {
             fields={databaseFields}
             defaultOpen={true}
             showResetButton={true}
-            showSaveButton={true}
+            showSaveButton={false} // 직접 구현한 저장 버튼 사용
           />
+          
+          {/* Database 저장 버튼 */}
           <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  await saveSettings()
+                  alert('Database 설정이 저장되었습니다')
+                } catch (e) {
+                  alert('저장 실패: ' + (e?.message || '알 수 없는 오류'))
+                }
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? '저장 중...' : '저장'}
+            </Button>
+            
             <Button
               size="sm"
               onClick={async () => {
@@ -562,6 +595,80 @@ const PreferenceManager = () => {
             description="모든 환경설정을 JSON 파일로 내보내거나 백업 파일에서 복원할 수 있습니다"
             defaultOpen={true}
           />
+          
+          {/* 설정 초기화 섹션 추가 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RotateCcw className="h-5 w-5 text-orange-500" />
+                설정 초기화
+              </CardTitle>
+              <CardDescription>
+                Dashboard, Statistics, Database 설정을 기본값으로 초기화합니다. 이 작업은 되돌릴 수 없습니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5" />
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-orange-800">주의사항</h4>
+                    <ul className="text-sm text-orange-700 space-y-1">
+                      <li>• Dashboard의 선택된 PEG 목록이 초기화됩니다</li>
+                      <li>• Statistics의 기본 설정이 초기화됩니다</li>
+                      <li>• Database 연결 설정이 기본값으로 초기화됩니다</li>
+                      <li>• 이 작업은 되돌릴 수 없습니다</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">초기화할 설정</p>
+                  <p className="text-xs text-muted-foreground">
+                    Dashboard, Statistics, Database 설정을 기본값으로 초기화
+                  </p>
+                </div>
+                
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    const confirmed = window.confirm(
+                      '정말로 Dashboard, Statistics, Database 설정을 초기화하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.'
+                    )
+                    
+                    if (confirmed) {
+                      try {
+                        const result = await resetSettings(['dashboardSettings', 'statisticsSettings', 'databaseSettings'])
+                        if (result.success) {
+                          alert('✅ 설정이 성공적으로 초기화되었습니다!')
+                        } else {
+                          alert('❌ 설정 초기화 실패: ' + (result.error || '알 수 없는 오류'))
+                        }
+                      } catch (error) {
+                        alert('❌ 설정 초기화 중 오류 발생: ' + error.message)
+                      }
+                    }
+                  }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      초기화 중...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      설정 초기화
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

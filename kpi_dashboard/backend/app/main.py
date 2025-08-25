@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 
 # 내부 모듈 임포트
 from .db import connect_to_mongo, close_mongo_connection, get_db_stats
-from .routers import analysis, preference, kpi, statistics, master, llm_analysis
+from .routers import analysis, preference, kpi, statistics, master, llm_analysis, analysis_workflow, period_identification, statistical_comparison, anomaly_detection, integrated_analysis, test
+from .routers.statistical_comparison import analysis_router
 from .middleware.performance import performance_middleware, setup_mongo_monitoring, get_performance_stats
 from .exceptions import (
     BaseAPIException,
@@ -35,12 +36,41 @@ from .exceptions import (
     general_exception_handler
 )
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# 고급 로깅 설정 임포트 및 초기화
+from .utils.logging_config import setup_logging
+from .middleware.request_tracing import RequestTracingMiddleware
+from .middleware.metrics_middleware import MetricsCollectionMiddleware
+from .utils.cache_manager import close_cache_manager
+from .utils.metrics_collector import get_metrics_collector, stop_metrics_collection
+
+# Celery 앱 임포트
+from .celery_app import celery_app
+from . import tasks # Celery tasks
+
+# 로깅 시스템 초기화
+setup_logging()
+logger = logging.getLogger("app.main")
+
+
+async def _get_cache_health():
+    """캐시 시스템 건강 상태 확인"""
+    try:
+        from .utils.cache_manager import get_cache_manager
+        cache_manager = await get_cache_manager()
+        cache_stats = await cache_manager.get_cache_stats()
+        
+        return {
+            "status": "healthy",
+            "redis_available": cache_stats.get("redis_available", False),
+            "memory_cache_usage": cache_stats.get("memory_cache", {}).get("usage_percentage", 0),
+            "details": cache_stats
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "redis_available": False
+        }
 
 
 @asynccontextmanager
@@ -60,6 +90,18 @@ async def lifespan(app: FastAPI):
         # MongoDB 성능 모니터링 설정
         setup_mongo_monitoring()
         logger.info("성능 모니터링 설정 완료")
+        
+        # 메트릭 수집 시작
+        metrics_collector = get_metrics_collector()
+        logger.info("메트릭 수집 시작")
+
+        # Celery worker 연결 확인
+        try:
+            celery_app.control.ping(timeout=1)
+            logger.info("Celery worker 연결 성공")
+        except Exception as e:
+            logger.warning(f"Celery worker 연결 실패: {e}")
+
     except Exception as e:
         logger.error(f"애플리케이션 초기화 실패: {e}")
         raise
@@ -68,9 +110,23 @@ async def lifespan(app: FastAPI):
     
     # 종료 시 실행
     logger.info("애플리케이션 종료 중...")
+    
+    # 메트릭 수집 중지
+    try:
+        stop_metrics_collection()
+        logger.info("메트릭 수집 중지 완료")
+    except Exception as e:
+        logger.warning(f"메트릭 수집 중지 실패: {e}")
+    
+    # 캐시 관리자 정리
+    try:
+        await close_cache_manager()
+        logger.info("캐시 관리자 정리 완료")
+    except Exception as e:
+        logger.warning(f"캐시 관리자 정리 실패: {e}")
+    
     await close_mongo_connection()
     logger.info("애플리케이스 종료 완료")
-
 
 # FastAPI 애플리케이션 생성
 app = FastAPI(
@@ -112,8 +168,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 요청 추적 미들웨어 추가 (가장 먼저)
+request_tracing = RequestTracingMiddleware(
+    log_requests=True,
+    log_responses=True,
+    log_headers=False,  # 민감한 정보 보호
+    log_body=True,
+    max_body_size=2048  # 2KB
+)
+app.middleware("http")(request_tracing)
+
+# 메트릭 수집 미들웨어 추가
+app.add_middleware(
+    MetricsCollectionMiddleware,
+    collect_request_body=False,
+    collect_response_body=False
+)
+
 # 성능 모니터링 미들웨어 추가
-app.middleware("http")(performance_middleware)
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class PerformanceMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        return await performance_middleware(request, call_next)
+
+app.add_middleware(PerformanceMiddleware)
 
 # 예외 핸들러 등록
 app.add_exception_handler(BaseAPIException, base_api_exception_handler)
@@ -133,6 +212,17 @@ app.include_router(kpi.router)
 app.include_router(statistics.router)   # Task 46 - Statistics 비교 분석 API
 app.include_router(master.router)       # Master 데이터 API (PEG, Cell 목록)
 app.include_router(llm_analysis.router) # LLM 분석 API
+app.include_router(analysis_workflow.router) # Analysis Workflow API
+app.include_router(period_identification.router) # Period Identification API
+app.include_router(statistical_comparison.router) # Statistical Comparison API
+app.include_router(analysis_router) # Analysis API
+app.include_router(anomaly_detection.router) # Anomaly Detection API
+app.include_router(integrated_analysis.router) # Integrated Analysis API
+app.include_router(test.router)
+
+# 모니터링 라우터 추가
+from .routers import monitoring
+app.include_router(monitoring.router)  # 시스템 모니터링 API
 
 
 @app.get("/", summary="API 루트", tags=["General"])
@@ -156,33 +246,74 @@ async def health_check():
     """
     애플리케이션 헬스 체크
     
-    데이터베이스 연결 상태를 포함한 시스템 상태를 확인합니다.
+    데이터베이스 연결 상태, 성능 지표, 시스템 상태를 포함한 종합적인 건강 상태를 확인합니다.
     """
+    from datetime import datetime
+    from .middleware.request_tracing import get_current_request_id
+    
+    request_id = get_current_request_id()
+    logger.info("건강 상태 확인 요청", extra={"request_id": request_id})
+    
     try:
         # 데이터베이스 상태 확인
         db_stats = await get_db_stats()
         
-        return {
-            "status": "healthy",
-            "timestamp": "2025-08-14T20:00:00Z",
+        # 성능 통계 확인
+        perf_stats = get_performance_stats()
+        
+        # 종합 건강 상태 판단
+        db_healthy = "error" not in db_stats
+        
+        health_data = {
+            "status": "healthy" if db_healthy else "degraded",
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id,
             "services": {
                 "api": "healthy",
-                "database": "healthy" if "error" not in db_stats else "unhealthy"
+                "database": "healthy" if db_healthy else "unhealthy",
+                "logging": "healthy",
+                "monitoring": "healthy"
             },
-            "database": db_stats
+            "database": db_stats,
+            "performance": perf_stats,
+            "cache": await _get_cache_health(),
+            "system": {
+                "environment": "development",
+                "version": "1.0.0",
+                "logging_level": logging.getLevelName(logging.getLogger().getEffectiveLevel())
+            }
         }
+        
+        logger.info("건강 상태 확인 성공", extra={
+            "request_id": request_id,
+            "overall_status": health_data["status"],
+            "db_healthy": db_healthy
+        })
+        
+        return health_data
+        
     except Exception as e:
-        logger.error(f"헬스 체크 실패: {e}")
+        logger.error(f"헬스 체크 실패: {e}", extra={
+            "request_id": request_id,
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        
         return JSONResponse(
             status_code=503,
             content={
                 "status": "unhealthy",
-                "timestamp": "2025-08-14T20:00:00Z",
+                "timestamp": datetime.now().isoformat(),
+                "request_id": request_id,
                 "services": {
-                    "api": "healthy",
-                    "database": "unhealthy"
+                    "api": "degraded",
+                    "database": "unknown",
+                    "logging": "healthy",
+                    "monitoring": "unknown"
                 },
-                "error": str(e)
+                "error": {
+                    "message": str(e),
+                    "type": type(e).__name__
+                }
             }
         )
 
@@ -192,21 +323,55 @@ async def performance_stats():
     """
     현재 애플리케이션 성능 통계
     
-    메모리 사용량, CPU 사용률 등 실시간 성능 지표를 제공합니다.
+    메모리 사용량, CPU 사용률, 요청 처리 속도 등 실시간 성능 지표를 제공합니다.
     """
+    from datetime import datetime
+    from .middleware.request_tracing import get_current_request_id
+    
+    request_id = get_current_request_id()
+    
     try:
         stats = get_performance_stats()
+        
+        # 추가 성능 지표
+        enhanced_stats = {
+            **stats,
+            "request_tracking": {
+                "current_request_id": request_id,
+                "timestamp": datetime.now().isoformat()
+            },
+            "logging": {
+                "level": logging.getLevelName(logging.getLogger().getEffectiveLevel()),
+                "active_loggers": len(logging.Logger.manager.loggerDict)
+            }
+        }
+        
+        logger.info("성능 통계 조회 성공", extra={
+            "request_id": request_id,
+            "memory_mb": stats.get("memory", {}).get("rss", 0),
+            "cpu_percent": stats.get("cpu_percent", 0)
+        })
+        
         return {
             "status": "success",
-            "data": stats,
-            "timestamp": "2025-01-15T12:00:00Z"
+            "data": enhanced_stats,
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id
         }
+        
     except Exception as e:
+        logger.error(f"성능 통계 조회 실패: {e}", extra={
+            "request_id": request_id,
+            "error_type": type(e).__name__
+        }, exc_info=True)
+        
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
-                "message": f"성능 통계 조회 실패: {str(e)}"
+                "message": f"성능 통계 조회 실패: {str(e)}",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat()
             }
         )
 

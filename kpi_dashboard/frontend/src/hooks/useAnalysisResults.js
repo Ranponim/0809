@@ -240,6 +240,7 @@ export const useAnalysisResults = ({
       logInfo('컴포넌트 마운트 - 자동 데이터 조회 시작')
       fetchResults({ skip: 0, append: false, showToast: false })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFetch]) // fetchResults는 의존성에서 제외 (무한 루프 방지)
 
   // === 필터 변경 시 자동 재조회 ===
@@ -248,7 +249,7 @@ export const useAnalysisResults = ({
       logInfo('필터 변경 감지 - 데이터 재조회')
       fetchResults({ skip: 0, append: false, showToast: false })
     }
-  }, [filters]) // fetchResults는 의존성에서 제외
+  }, [autoFetch, filters, fetchResults, logInfo])
 
   // === 계산된 값들 ===
   const isEmpty = useMemo(() => !loading && results.length === 0, [loading, results.length])
