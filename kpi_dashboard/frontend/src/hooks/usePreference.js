@@ -16,7 +16,7 @@
  * ```
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef } from 'react'
 import { usePreference as usePreferenceContext } from '@/contexts/PreferenceContext.jsx'
 import { toast } from 'sonner'
 
@@ -222,7 +222,12 @@ const validateSettings = (settings, section = null) => {
 // ================================
 
 export const usePreference = () => {
-  logPreference('info', 'usePreference 훅 초기화')
+  // 초기화 로깅을 debug 레벨로 변경하고 한 번만 출력
+  const initRef = useRef(false)
+  if (!initRef.current) {
+    logPreference('debug', 'usePreference 훅 초기화')
+    initRef.current = true
+  }
   
   const context = usePreferenceContext()
   const [validationErrors, setValidationErrors] = useState({})
@@ -491,7 +496,12 @@ export const usePreference = () => {
  * Dashboard 설정 전용 훅
  */
 export const useDashboardSettings = () => {
-  logPreference('info', 'useDashboardSettings 훅 초기화')
+  // 초기화 로깅을 debug 레벨로 변경하고 한 번만 출력
+  const initRef = useRef(false)
+  if (!initRef.current) {
+    logPreference('debug', 'useDashboardSettings 훅 초기화')
+    initRef.current = true
+  }
   
   const {
     dashboardSettings: rawDashboardSettings,
@@ -553,7 +563,12 @@ export const useDashboardSettings = () => {
  * Statistics 설정 전용 훅
  */
 export const useStatisticsSettings = () => {
-  logPreference('info', 'useStatisticsSettings 훅 초기화')
+  // 초기화 로깅을 debug 레벨로 변경하고 한 번만 출력
+  const initRef = useRef(false)
+  if (!initRef.current) {
+    logPreference('debug', 'useStatisticsSettings 훅 초기화')
+    initRef.current = true
+  }
   
   const {
     statisticsSettings,

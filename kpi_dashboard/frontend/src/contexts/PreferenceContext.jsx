@@ -17,7 +17,7 @@
  * 리팩토링 버전: 복잡한 로직을 분리하여 안정성 향상
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { logPreference, createDefaultSettings, mergeSettings, validateSettings } from '@/utils/preferenceUtils'
 import usePreferenceStorage from '@/hooks/usePreferenceStorage'
 import usePreferenceAPI from '@/hooks/usePreferenceAPI'
@@ -33,8 +33,8 @@ const PreferenceContext = createContext(null)
 // ================================
 
 export const PreferenceProvider = ({ children }) => {
-  // 기본 설정값 생성
-  const defaultSettings = createDefaultSettings()
+  // 기본 설정값 생성 (메모이제이션으로 불필요한 재생성 방지)
+  const defaultSettings = useMemo(() => createDefaultSettings(), [])
   
   // 상태 관리 (단순화)
   const [settings, setSettings] = useState(defaultSettings)
@@ -114,7 +114,7 @@ export const PreferenceProvider = ({ children }) => {
     return () => {
       mountedRef.current = false
     }
-  }, [defaultSettings, storage.isAvailable])
+  }, [storage.isAvailable])
 
   // ================================
   // 설정 업데이트 함수들

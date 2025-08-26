@@ -17,7 +17,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # 환경 변수에서 MongoDB 설정 읽기
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "kpi")
 
 # 글로벌 변수들

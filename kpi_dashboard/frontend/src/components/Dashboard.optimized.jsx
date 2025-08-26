@@ -67,12 +67,17 @@ const logDashboard = (level, message, data = null) => {
 // ================================
 
 const Dashboard = () => {
-  logDashboard('info', 'Dashboard 컴포넌트 초기화')
+  // 초기화 로깅을 debug 레벨로 변경하고 한 번만 출력
+  const initRef = useRef(false)
+  if (!initRef.current) {
+    logDashboard('debug', 'Dashboard 컴포넌트 초기화')
+    initRef.current = true
+  }
   
   // 상태 관리
   const [kpiData, setKpiData] = useState({})
   const [time2Data, setTime2Data] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // 초기값을 false로 변경
   const [lastRefresh, setLastRefresh] = useState(null)
   const [refreshCountdown, setRefreshCountdown] = useState(0)
   const [zoomed, setZoomed] = useState({ open: false, title: '', data: [] })
@@ -387,12 +392,18 @@ const Dashboard = () => {
         clearInterval(countdownIntervalRef.current)
       }
     }
-  }, [autoRefreshInterval, fetchKPIData])
+  }, [autoRefreshInterval])
 
-  // 설정 변경 시 데이터 다시 로드
+  // 설정 변경 시 데이터 다시 로드 (초기화 완료 후)
   useEffect(() => {
-    fetchKPIData()
-  }, [fetchKPIData])
+    // 초기화가 완료될 때까지 기다림
+    const timer = setTimeout(() => {
+      logDashboard('info', '설정 변경으로 인한 데이터 로드 시작')
+      fetchKPIData()
+    }, 500) // 500ms 지연
+
+    return () => clearTimeout(timer)
+  }, [selectedPegs, selectedNEs, selectedCellIds, dashboardSettings?.defaultHours, defaultNe, defaultCellId, enableTimeComparison, time1Start, time1End, time2Start, time2End])
 
   // 수동 새로고침
   const handleManualRefresh = useCallback(() => {

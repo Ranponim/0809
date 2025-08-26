@@ -537,7 +537,7 @@ if __name__ == "__main__":
     
     async def test_statistics_db():
         """StatisticsDataBase 클래스 테스트"""
-        client = AsyncIOMotorClient("mongodb://localhost:27017")
+        client = AsyncIOMotorClient("mongodb://mongo:27017")
         db = client.test_statistics
         
         stats_db = StatisticsDataBase(db)

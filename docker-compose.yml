@@ -30,14 +30,14 @@ services:
       - postgres
     environment:
       # FastAPI/분석 영구 저장용 Mongo URL 전달
-      MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
+      MONGO_URL: mongodb://mongo:27017
       MONGO_DB_NAME: ${MONGO_DB_NAME:-kpi}
       # PostgreSQL 연결 정보 (KPI 데이터 조회용)
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-pass}
-      DB_NAME: ${DB_NAME:-netperf}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: pass
+      DB_NAME: netperf
       # MCP 분석기 연동 (옵션)
       MCP_ANALYZER_URL: ${MCP_ANALYZER_URL:-}
       MCP_API_KEY: ${MCP_API_KEY:-}
