@@ -230,8 +230,18 @@ const Dashboard = () => {
       currentState: inputCompleted.time1,
       newState: !inputCompleted.time1
     })
+
+    // 수정 모드로 전환할 때 tempTimeSettings를 현재 설정값으로 리셋
+    if (inputCompleted.time1) { // 완료 상태에서 수정 모드로 전환
+      setTempTimeSettings(prev => ({
+        ...prev,
+        time1Start: time1Start, // 현재 설정된 값으로 리셋
+        time1End: time1End
+      }))
+    }
+
     setInputCompleted(prev => ({ ...prev, time1: !prev.time1 }))
-  }, [inputCompleted.time1])
+  }, [inputCompleted.time1, time1Start, time1End])
 
   // Time2 설정 토글 (다시 입력 가능하게 만들기)
   const toggleTime2Settings = useCallback(() => {
@@ -239,8 +249,18 @@ const Dashboard = () => {
       currentState: inputCompleted.time2,
       newState: !inputCompleted.time2
     })
+
+    // 수정 모드로 전환할 때 tempTimeSettings를 현재 설정값으로 리셋
+    if (inputCompleted.time2) { // 완료 상태에서 수정 모드로 전환
+      setTempTimeSettings(prev => ({
+        ...prev,
+        time2Start: time2Start, // 현재 설정된 값으로 리셋
+        time2End: time2End
+      }))
+    }
+
     setInputCompleted(prev => ({ ...prev, time2: !prev.time2 }))
-  }, [inputCompleted.time2])
+  }, [inputCompleted.time2, time2Start, time2End])
 
   // 데이터 fetching 함수
   const fetchKPIData = useCallback(async () => {
@@ -554,10 +574,14 @@ const Dashboard = () => {
         // Time1의 시간은 그대로 사용하되, 인덱스로 구분
         const originalTime = new Date(row.timestamp)
         const timeKey = `T1_${timeIndex++}_${originalTime.getTime()}`
-        const displayTime = originalTime.toLocaleTimeString('ko-KR', {
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
+        // 날짜-시간 형식으로 표시 (MM/DD HH:MM)
+        const displayTime = originalTime.toLocaleString('ko-KR', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).replace(/\./g, '/').replace(' ', ' ')
 
         if (!groupedByTime[timeKey]) {
           groupedByTime[timeKey] = { time: displayTime, _originalTime: originalTime }
@@ -582,11 +606,14 @@ const Dashboard = () => {
           const originalTime = new Date(row.timestamp)
           const timeKey = `T2_${timeIndex++}_${originalTime.getTime()}`
 
-          // Time2 표시 시간은 순수 시간만 표시 (접미사 제거)
-          const displayTime = originalTime.toLocaleTimeString('ko-KR', {
+          // Time2 표시 시간은 날짜-시간 형식으로 표시 (MM/DD HH:MM)
+          const displayTime = originalTime.toLocaleString('ko-KR', {
+            month: '2-digit',
+            day: '2-digit',
             hour: '2-digit',
-            minute: '2-digit'
-          })
+            minute: '2-digit',
+            hour12: false
+          }).replace(/\./g, '/').replace(' ', ' ')
 
           if (!groupedByTime[timeKey]) {
             groupedByTime[timeKey] = { time: displayTime, _originalTime: originalTime, _isTime2: true }

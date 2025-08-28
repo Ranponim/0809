@@ -229,9 +229,9 @@ const DashboardChart = ({
     className: "h-64"
   }
 
-  // X축 틱 포맷터 - 순수 시간 값만 표시
+  // X축 틱 포맷터 - 날짜-시간 형식으로 표시
   const xAxisTickFormatter = (value, index) => {
-    // Time1/Time2 비교 시에도 순수 시간 값만 표시
+    // 이미 데이터에서 날짜-시간 형식으로 포맷팅되어 있으므로 그대로 반환
     return value
   }
 
@@ -248,6 +248,10 @@ const DashboardChart = ({
     <YAxis key="yaxis" />,
     <Tooltip
       key="tooltip"
+      labelFormatter={(label) => {
+        // 라벨에 "시간:" 접두사 추가
+        return `시간: ${label}`
+      }}
       formatter={(value, name) => {
         if (enableTimeComparison) {
           // Time1/Time2 비교 시 PEG 이름만 표시 (시간 구분 제거)
@@ -259,6 +263,13 @@ const DashboardChart = ({
     />,
     showLegend && <Legend
       key="legend"
+      verticalAlign="bottom"
+      align="center"
+      layout="horizontal"
+      wrapperStyle={{
+        paddingTop: '20px',
+        paddingBottom: '10px'
+      }}
       formatter={(value, entry, index) => {
         if (enableTimeComparison) {
           // Legend에서도 Time1/Time2 접미사 제거하여 순수 PEG 이름만 표시
