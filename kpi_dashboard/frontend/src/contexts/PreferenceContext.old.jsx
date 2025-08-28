@@ -624,3 +624,4 @@ export const useStatisticsSettings = () => {
 }
 
 export default PreferenceContext
+
