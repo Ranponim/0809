@@ -13,8 +13,6 @@
  * - enableTimeComparison: Time1/Time2 비교 모드 활성화 여부
  * - defaultNe: 기본 NE
  * - defaultCellId: 기본 Cell ID
- * - autoRefreshInterval: 자동 새로고침 간격
- * - refreshCountdown: 새로고침 카운트다운
  * - lastRefresh: 마지막 새로고침 시간
  * - onManualRefresh: 수동 새로고침 핸들러
  */
@@ -56,8 +54,6 @@ const DashboardHeader = ({
   enableTimeComparison,
   defaultNe,
   defaultCellId,
-  autoRefreshInterval,
-  refreshCountdown,
   lastRefresh,
   onManualRefresh
 }) => {
@@ -70,8 +66,6 @@ const DashboardHeader = ({
     enableTimeComparison,
     defaultNe,
     defaultCellId,
-    autoRefreshInterval,
-    refreshCountdown,
     lastRefresh
   })
 
@@ -109,13 +103,7 @@ const DashboardHeader = ({
           </Badge>
         )}
 
-        {/* 자동 새로고침 카운트다운 */}
-        {autoRefreshInterval > 0 && refreshCountdown > 0 && (
-          <Badge variant="outline" className="text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            {refreshCountdown}초 후 새로고침
-          </Badge>
-        )}
+
 
         {/* 마지막 새로고침 시간 */}
         {lastRefresh && (

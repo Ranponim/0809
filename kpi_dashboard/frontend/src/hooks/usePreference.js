@@ -517,7 +517,7 @@ export const useDashboardSettings = () => {
       selectedPegs: [],
       defaultNe: '',
       defaultCellId: '',
-      autoRefreshInterval: 30,
+      autoRefreshInterval: 0, // 기본값을 0으로 변경 (자동 새로고침 비활성화)
       chartStyle: 'line',
       showLegend: true,
       showGrid: true,

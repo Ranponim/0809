@@ -15,6 +15,8 @@
  * - onUpdateTempTimeSetting: 임시 시간 설정 업데이트 핸들러
  * - onApplyTime1Settings: Time1 설정 적용 핸들러
  * - onApplyTime2Settings: Time2 설정 적용 핸들러
+ * - onToggleTime1Settings: Time1 설정 토글 핸들러
+ * - onToggleTime2Settings: Time2 설정 토글 핸들러
  * - onManualRefresh: 수동 새로고침 핸들러
  */
 
@@ -60,6 +62,8 @@ const DashboardSettings = ({
   onUpdateTempTimeSetting,
   onApplyTime1Settings,
   onApplyTime2Settings,
+  onToggleTime1Settings,
+  onToggleTime2Settings,
   onManualRefresh
 }) => {
   logDashboardSettings('debug', 'DashboardSettings 렌더링', {
@@ -67,6 +71,8 @@ const DashboardSettings = ({
     enableTimeComparison,
     tempTimeSettings,
     inputCompleted,
+    onToggleTime1Settings: !!onToggleTime1Settings,
+    onToggleTime2Settings: !!onToggleTime2Settings,
     loading
   })
 
@@ -120,29 +126,130 @@ const DashboardSettings = ({
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium text-blue-600">Time1 설정</h4>
                   <div className="space-y-2">
+                    {/* Time1 시작 시간 설정 */}
                     <div>
-                      <Label htmlFor="time1Start" className="text-xs text-muted-foreground">
-                        시작 시간
-                      </Label>
-                      <input
-                        type="datetime-local"
-                        id="time1Start"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                        value={tempTimeSettings.time1Start}
-                        onChange={(e) => onUpdateTempTimeSetting('time1', 'Start', e.target.value)}
-                      />
+                      <Label className="text-xs text-muted-foreground">시작 시간</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="time1StartDate" className="text-xs">날짜</Label>
+                          <input
+                            type="date"
+                            id="time1StartDate"
+                            className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs"
+                            value={tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentTime = tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[1] : '00:00';
+                              onUpdateTempTimeSetting('time1', 'Start', `${e.target.value}T${currentTime}`);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="time1StartHour" className="text-xs">시간</Label>
+                          <Select
+                            value={tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[1]?.split(':')[0] || '00' : '00'}
+                            onValueChange={(hour) => {
+                              const currentDate = tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentMinute = tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[1]?.split(':')[1] || '00' : '00';
+                              onUpdateTempTimeSetting('time1', 'Start', `${currentDate}T${hour}:${currentMinute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({length: 24}, (_, i) => (
+                                <SelectItem key={i} value={i.toString().padStart(2, '0')}>
+                                  {i.toString().padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="time1StartMinute" className="text-xs">분</Label>
+                          <Select
+                            value={tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[1]?.split(':')[1] || '00' : '00'}
+                            onValueChange={(minute) => {
+                              const currentDate = tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentHour = tempTimeSettings.time1Start ? tempTimeSettings.time1Start.split('T')[1]?.split(':')[0] || '00' : '00';
+                              onUpdateTempTimeSetting('time1', 'Start', `${currentDate}T${currentHour}:${minute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="00">00</SelectItem>
+                              <SelectItem value="15">15</SelectItem>
+                              <SelectItem value="30">30</SelectItem>
+                              <SelectItem value="45">45</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Time1 끝 시간 설정 */}
                     <div>
-                      <Label htmlFor="time1End" className="text-xs text-muted-foreground">
-                        끝 시간
-                      </Label>
-                      <input
-                        type="datetime-local"
-                        id="time1End"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                        value={tempTimeSettings.time1End}
-                        onChange={(e) => onUpdateTempTimeSetting('time1', 'End', e.target.value)}
-                      />
+                      <Label className="text-xs text-muted-foreground">끝 시간</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="time1EndDate" className="text-xs">날짜</Label>
+                          <input
+                            type="date"
+                            id="time1EndDate"
+                            className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs"
+                            value={tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentTime = tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[1] : '00:00';
+                              onUpdateTempTimeSetting('time1', 'End', `${e.target.value}T${currentTime}`);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="time1EndHour" className="text-xs">시간</Label>
+                          <Select
+                            value={tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[1]?.split(':')[0] || '00' : '00'}
+                            onValueChange={(hour) => {
+                              const currentDate = tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentMinute = tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[1]?.split(':')[1] || '00' : '00';
+                              onUpdateTempTimeSetting('time1', 'End', `${currentDate}T${hour}:${currentMinute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({length: 24}, (_, i) => (
+                                <SelectItem key={i} value={i.toString().padStart(2, '0')}>
+                                  {i.toString().padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="time1EndMinute" className="text-xs">분</Label>
+                          <Select
+                            value={tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[1]?.split(':')[1] || '00' : '00'}
+                            onValueChange={(minute) => {
+                              const currentDate = tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentHour = tempTimeSettings.time1End ? tempTimeSettings.time1End.split('T')[1]?.split(':')[0] || '00' : '00';
+                              onUpdateTempTimeSetting('time1', 'End', `${currentDate}T${currentHour}:${minute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="00">00</SelectItem>
+                              <SelectItem value="15">15</SelectItem>
+                              <SelectItem value="30">30</SelectItem>
+                              <SelectItem value="45">45</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                     <Button
                       onClick={onApplyTime1Settings}
@@ -166,29 +273,130 @@ const DashboardSettings = ({
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium text-green-600">Time2 설정</h4>
                   <div className="space-y-2">
+                    {/* Time2 시작 시간 설정 */}
                     <div>
-                      <Label htmlFor="time2Start" className="text-xs text-muted-foreground">
-                        시작 시간
-                      </Label>
-                      <input
-                        type="datetime-local"
-                        id="time2Start"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                        value={tempTimeSettings.time2Start}
-                        onChange={(e) => onUpdateTempTimeSetting('time2', 'Start', e.target.value)}
-                      />
+                      <Label className="text-xs text-muted-foreground">시작 시간</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="time2StartDate" className="text-xs">날짜</Label>
+                          <input
+                            type="date"
+                            id="time2StartDate"
+                            className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs"
+                            value={tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentTime = tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[1] : '00:00';
+                              onUpdateTempTimeSetting('time2', 'Start', `${e.target.value}T${currentTime}`);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="time2StartHour" className="text-xs">시간</Label>
+                          <Select
+                            value={tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[1]?.split(':')[0] || '00' : '00'}
+                            onValueChange={(hour) => {
+                              const currentDate = tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentMinute = tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[1]?.split(':')[1] || '00' : '00';
+                              onUpdateTempTimeSetting('time2', 'Start', `${currentDate}T${hour}:${currentMinute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({length: 24}, (_, i) => (
+                                <SelectItem key={i} value={i.toString().padStart(2, '0')}>
+                                  {i.toString().padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="time2StartMinute" className="text-xs">분</Label>
+                          <Select
+                            value={tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[1]?.split(':')[1] || '00' : '00'}
+                            onValueChange={(minute) => {
+                              const currentDate = tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentHour = tempTimeSettings.time2Start ? tempTimeSettings.time2Start.split('T')[1]?.split(':')[0] || '00' : '00';
+                              onUpdateTempTimeSetting('time2', 'Start', `${currentDate}T${currentHour}:${minute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="00">00</SelectItem>
+                              <SelectItem value="15">15</SelectItem>
+                              <SelectItem value="30">30</SelectItem>
+                              <SelectItem value="45">45</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Time2 끝 시간 설정 */}
                     <div>
-                      <Label htmlFor="time2End" className="text-xs text-muted-foreground">
-                        끝 시간
-                      </Label>
-                      <input
-                        type="datetime-local"
-                        id="time2End"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                        value={tempTimeSettings.time2End}
-                        onChange={(e) => onUpdateTempTimeSetting('time2', 'End', e.target.value)}
-                      />
+                      <Label className="text-xs text-muted-foreground">끝 시간</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="time2EndDate" className="text-xs">날짜</Label>
+                          <input
+                            type="date"
+                            id="time2EndDate"
+                            className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs"
+                            value={tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[0] : ''}
+                            onChange={(e) => {
+                              const currentTime = tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[1] : '00:00';
+                              onUpdateTempTimeSetting('time2', 'End', `${e.target.value}T${currentTime}`);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="time2EndHour" className="text-xs">시간</Label>
+                          <Select
+                            value={tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[1]?.split(':')[0] || '00' : '00'}
+                            onValueChange={(hour) => {
+                              const currentDate = tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentMinute = tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[1]?.split(':')[1] || '00' : '00';
+                              onUpdateTempTimeSetting('time2', 'End', `${currentDate}T${hour}:${currentMinute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({length: 24}, (_, i) => (
+                                <SelectItem key={i} value={i.toString().padStart(2, '0')}>
+                                  {i.toString().padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="time2EndMinute" className="text-xs">분</Label>
+                          <Select
+                            value={tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[1]?.split(':')[1] || '00' : '00'}
+                            onValueChange={(minute) => {
+                              const currentDate = tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[0] : new Date().toISOString().split('T')[0];
+                              const currentHour = tempTimeSettings.time2End ? tempTimeSettings.time2End.split('T')[1]?.split(':')[0] || '00' : '00';
+                              onUpdateTempTimeSetting('time2', 'End', `${currentDate}T${currentHour}:${minute}`);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-8 px-3 py-1 border border-gray-300 rounded-md text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="00">00</SelectItem>
+                              <SelectItem value="15">15</SelectItem>
+                              <SelectItem value="30">30</SelectItem>
+                              <SelectItem value="45">45</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                     <Button
                       onClick={onApplyTime2Settings}
@@ -220,15 +428,37 @@ const DashboardSettings = ({
                 </Button>
               </div>
 
-              {/* 입력 상태 표시 */}
-              <div className="flex justify-center gap-4 text-xs">
-                <div className={`flex items-center gap-1 ${inputCompleted.time1 ? 'text-green-600' : 'text-gray-500'}`}>
-                  {inputCompleted.time1 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                  Time1 설정 {inputCompleted.time1 ? '완료' : '대기'}
+              {/* 입력 상태 표시 및 토글 버튼 */}
+              <div className="flex justify-center gap-6 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-1 ${inputCompleted.time1 ? 'text-green-600' : 'text-gray-500'}`}>
+                    {inputCompleted.time1 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    Time1 설정 {inputCompleted.time1 ? '완료' : '대기'}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onToggleTime1Settings}
+                    className="h-6 px-2 text-xs"
+                    disabled={!onToggleTime1Settings}
+                  >
+                    {inputCompleted.time1 ? '수정' : '완료'}
+                  </Button>
                 </div>
-                <div className={`flex items-center gap-1 ${inputCompleted.time2 ? 'text-green-600' : 'text-gray-500'}`}>
-                  {inputCompleted.time2 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                  Time2 설정 {inputCompleted.time2 ? '완료' : '대기'}
+                <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-1 ${inputCompleted.time2 ? 'text-green-600' : 'text-gray-500'}`}>
+                    {inputCompleted.time2 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    Time2 설정 {inputCompleted.time2 ? '완료' : '대기'}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onToggleTime2Settings}
+                    className="h-6 px-2 text-xs"
+                    disabled={!onToggleTime2Settings}
+                  >
+                    {inputCompleted.time2 ? '수정' : '완료'}
+                  </Button>
                 </div>
               </div>
             </div>

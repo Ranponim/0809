@@ -19,8 +19,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
+import { Button } from '@/components/ui/button.jsx'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
-import { Settings } from 'lucide-react'
+import { Settings, BarChart3 } from 'lucide-react'
 import apiClient from '@/lib/apiClient.js'
 import { useDashboardSettings, usePreference } from '@/hooks/usePreference.js'
 
@@ -79,10 +80,7 @@ const Dashboard = () => {
   const [time2Data, setTime2Data] = useState(null)
   const [loading, setLoading] = useState(false) // 초기값을 false로 변경
   const [lastRefresh, setLastRefresh] = useState(null)
-  const [refreshCountdown, setRefreshCountdown] = useState(0)
   const [zoomed, setZoomed] = useState({ open: false, title: '', data: [] })
-  const refreshIntervalRef = useRef(null)
-  const countdownIntervalRef = useRef(null)
 
   // 임시 시간 입력 상태
   const [tempTimeSettings, setTempTimeSettings] = useState({
@@ -125,9 +123,7 @@ const Dashboard = () => {
     return Array.isArray(statisticsSel.selectedCellIds) ? statisticsSel.selectedCellIds : []
   }, [statisticsSel.selectedCellIds])
 
-  const autoRefreshInterval = useMemo(() => {
-    return dashboardSettings?.autoRefreshInterval || 30
-  }, [dashboardSettings?.autoRefreshInterval])
+
 
   const chartStyle = useMemo(() => {
     return dashboardSettings?.chartStyle || 'line'
@@ -216,9 +212,9 @@ const Dashboard = () => {
   // Time2 설정 적용
   const applyTime2Settings = useCallback(() => {
     if (tempTimeSettings.time2Start && tempTimeSettings.time2End) {
-      logDashboard('info', 'Time2 설정 적용', { 
-        start: tempTimeSettings.time2Start, 
-        end: tempTimeSettings.time2End 
+      logDashboard('info', 'Time2 설정 적용', {
+        start: tempTimeSettings.time2Start,
+        end: tempTimeSettings.time2End
       })
       updateSettings({
         time2Start: tempTimeSettings.time2Start,
@@ -227,6 +223,24 @@ const Dashboard = () => {
       setInputCompleted(prev => ({ ...prev, time2: true }))
     }
   }, [tempTimeSettings.time2Start, tempTimeSettings.time2End, updateSettings])
+
+  // Time1 설정 토글 (다시 입력 가능하게 만들기)
+  const toggleTime1Settings = useCallback(() => {
+    logDashboard('info', 'Time1 설정 토글', {
+      currentState: inputCompleted.time1,
+      newState: !inputCompleted.time1
+    })
+    setInputCompleted(prev => ({ ...prev, time1: !prev.time1 }))
+  }, [inputCompleted.time1])
+
+  // Time2 설정 토글 (다시 입력 가능하게 만들기)
+  const toggleTime2Settings = useCallback(() => {
+    logDashboard('info', 'Time2 설정 토글', {
+      currentState: inputCompleted.time2,
+      newState: !inputCompleted.time2
+    })
+    setInputCompleted(prev => ({ ...prev, time2: !prev.time2 }))
+  }, [inputCompleted.time2])
 
   // 데이터 fetching 함수
   const fetchKPIData = useCallback(async () => {
@@ -276,9 +290,17 @@ const Dashboard = () => {
           ne: safeSelectedNEs,
           cellid: safeSelectedCellIds,
         }
-        
-        logDashboard('debug', 'Time1 API 파라미터', time1Params)
-        
+
+        logDashboard('info', 'Time1 API 파라미터 상세', {
+          ...time1Params,
+          time1StartParsed: new Date(time1Start).toISOString(),
+          time1EndParsed: new Date(time1End).toISOString(),
+          time1DurationMinutes: `${Math.abs(new Date(time1End) - new Date(time1Start)) / (1000 * 60)}분`,
+          safeSelectedPegs,
+          safeSelectedNEs,
+          safeSelectedCellIds
+        })
+
         // Time1 데이터 가져오기
         const time1Response = await apiClient.post('/api/kpi/query', time1Params)
 
@@ -290,18 +312,105 @@ const Dashboard = () => {
           ne: safeSelectedNEs,
           cellid: safeSelectedCellIds,
         }
+
+        logDashboard('info', 'Time2 API 파라미터 상세', {
+          ...time2Params,
+          time2StartParsed: new Date(time2Start).toISOString(),
+          time2EndParsed: new Date(time2End).toISOString(),
+          time2DurationMinutes: `${Math.abs(new Date(time2End) - new Date(time2Start)) / (1000 * 60)}분`,
+          timeComparison: {
+            time1Start,
+            time1End,
+            time2Start,
+            time2End,
+            time1Duration: `${Math.abs(new Date(time1End) - new Date(time1Start)) / (1000 * 60)}분`,
+            time2Duration: `${Math.abs(new Date(time2End) - new Date(time2Start)) / (1000 * 60)}분`,
+            timeOverlap: new Date(time1End) > new Date(time2Start) ? '시간대 겹침' : '시간대 분리'
+          }
+        })
         
-        logDashboard('debug', 'Time2 API 파라미터', time2Params)
+
+
+        // 현재 설정된 시간 범위 로깅
+        logDashboard('debug', '설정된 시간 범위', {
+          time1Start,
+          time1End,
+          time2Start,
+          time2End,
+          time1Duration: `${Math.abs(new Date(time1End) - new Date(time1Start)) / (1000 * 60)}분`,
+          time2Duration: `${Math.abs(new Date(time2End) - new Date(time2Start)) / (1000 * 60)}분`
+        })
         
         // Time2 데이터 가져오기
+        logDashboard('info', 'Time2 API 호출 전 파라미터', time2Params)
         const time2Response = await apiClient.post('/api/kpi/query', time2Params)
+        logDashboard('info', 'Time2 API 호출 후 응답 상태', {
+          status: time2Response?.status,
+          statusText: time2Response?.statusText,
+          hasData: !!time2Response?.data,
+          dataKeys: time2Response?.data ? Object.keys(time2Response.data) : []
+        })
 
         const time1Data = time1Response?.data?.data || {}
         const time2Data = time2Response?.data?.data || {}
 
+        // Time2 데이터 상세 로깅
+        const targetKpiKey = safeSelectedPegs[0] || 'randomaccessproblem'
+        const time2KpiData = time2Data[targetKpiKey]
+
+        logDashboard('info', 'Time2 데이터 상세 분석', {
+          time2ResponseStatus: time2Response?.status,
+          time2ResponseHasData: !!time2Response?.data,
+          time2ResponseDataKeys: time2Response?.data ? Object.keys(time2Response.data) : [],
+          time2RawDataKeys: Object.keys(time2Data),
+          time2DataStructure: Object.keys(time2Data).reduce((acc, key) => {
+            const data = time2Data[key]
+            acc[key] = {
+              type: Array.isArray(data) ? 'array' : typeof data,
+              length: Array.isArray(data) ? data.length : 'N/A',
+              sample: Array.isArray(data) && data.length > 0 ? data.slice(0, 1) : null
+            }
+            return acc
+          }, {}),
+          targetKpiKey,
+          targetKpiInTime2Data: time2Data.hasOwnProperty(targetKpiKey),
+          targetKpiDataLength: Array.isArray(time2KpiData) ? time2KpiData.length : 'N/A',
+          targetKpiDataSample: Array.isArray(time2KpiData) && time2KpiData.length > 0 ? time2KpiData.slice(0, 3) : [],
+          comparison: {
+            time1DataLength: Array.isArray(time1Data[targetKpiKey]) ? time1Data[targetKpiKey].length : 'N/A',
+            time2DataLength: Array.isArray(time2KpiData) ? time2KpiData.length : 'N/A',
+            difference: (Array.isArray(time1Data[targetKpiKey]) ? time1Data[targetKpiKey].length : 0) - (Array.isArray(time2KpiData) ? time2KpiData.length : 0)
+          }
+        })
+
+        // Time2 데이터가 의심스러울 때 추가 분석
+        if (Array.isArray(time2KpiData) && time2KpiData.length <= 1) {
+          logDashboard('warn', 'Time2 데이터가 1개 이하입니다 - 상세 분석', {
+            time2Params,
+            time2KpiData,
+            time2FullResponse: time2Response?.data,
+            possibleIssues: [
+              'Time2 기간에 실제 데이터가 부족함',
+              'API 파라미터가 잘못됨',
+              '데이터베이스에 해당 시간대의 데이터가 없음',
+              'API 응답 구조가 예상과 다름'
+            ]
+          })
+        }
+
         setKpiData(time1Data)
         setTime2Data(time2Data)
-        
+
+        // 데이터 저장 후 확인 로그
+        logDashboard('debug', '데이터 저장 후 상태', {
+          kpiDataKeys: Object.keys(time1Data),
+          time2DataKeys: Object.keys(time2Data),
+          time2DataSample: Object.keys(time2Data).length > 0 ? {
+            firstKey: Object.keys(time2Data)[0],
+            firstKeyDataLength: time2Data[Object.keys(time2Data)[0]]?.length || 0
+          } : null
+        })
+
         logDashboard('info', 'Time1/Time2 데이터 fetching 완료', {
           time1KpiCount: Object.keys(time1Data).length,
           time1TotalRows: Object.values(time1Data).reduce((sum, arr) => sum + (arr?.length || 0), 0),
@@ -329,16 +438,16 @@ const Dashboard = () => {
 
         const response = await apiClient.post('/api/kpi/timeseries', generalParams)
 
-        const dataByKpi = response?.data?.data || {}
+      const dataByKpi = response?.data?.data || {}
 
-        setKpiData(dataByKpi)
+      setKpiData(dataByKpi)
         setTime2Data(null)
       
         logDashboard('info', '일반 모드 데이터 fetching 완료', {
-          kpiCount: Object.keys(dataByKpi).length,
+        kpiCount: Object.keys(dataByKpi).length,
           totalRows: Object.values(dataByKpi).reduce((sum, arr) => sum + (arr?.length || 0), 0),
           dataKeys: Object.keys(dataByKpi)
-        })
+      })
       }
       
       setLastRefresh(new Date())
@@ -351,55 +460,14 @@ const Dashboard = () => {
     }
   }, [selectedPegs, selectedNEs, selectedCellIds, dashboardSettings?.defaultHours, defaultNe, defaultCellId, enableTimeComparison, time1Start, time1End, time2Start, time2End])
 
-  // 자동 새로고침 설정
-  useEffect(() => {
-    logDashboard('debug', '자동 새로고침 설정 변경', { autoRefreshInterval })
-    
-    // 기존 타이머 정리
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current)
-    }
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current)
-    }
 
-    // 자동 새로고침 간격이 설정된 경우만 타이머 설정
-    if (autoRefreshInterval > 0) {
-      logDashboard('info', '자동 새로고침 설정', { interval: autoRefreshInterval })
-      
-      // 데이터 새로고침 타이머
-      refreshIntervalRef.current = setInterval(() => {
-        fetchKPIData()
-      }, autoRefreshInterval * 1000)
-
-      // 카운트다운 타이머
-      setRefreshCountdown(autoRefreshInterval)
-      countdownIntervalRef.current = setInterval(() => {
-        setRefreshCountdown(prev => {
-          if (prev <= 1) {
-            return autoRefreshInterval
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current)
-      }
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current)
-      }
-    }
-  }, [autoRefreshInterval])
 
   // 설정 변경 시 데이터 다시 로드 (초기화 완료 후)
   useEffect(() => {
     // 초기화가 완료될 때까지 기다림
     const timer = setTimeout(() => {
       logDashboard('info', '설정 변경으로 인한 데이터 로드 시작')
-      fetchKPIData()
+    fetchKPIData()
     }, 500) // 500ms 지연
 
     return () => clearTimeout(timer)
@@ -414,44 +482,200 @@ const Dashboard = () => {
   // 차트 데이터 구성 함수
   const buildChartDataByLayout = useCallback((kpiKey) => {
     logDashboard('debug', '차트 데이터 구성', { kpiKey, chartLayout })
-    
+
     const flatRows = Array.isArray(kpiData[kpiKey]) ? kpiData[kpiKey] : []
     const time2Rows = enableTimeComparison && time2Data ? (Array.isArray(time2Data[kpiKey]) ? time2Data[kpiKey] : []) : []
-    
-    if (flatRows.length === 0 && time2Rows.length === 0) return []
+
+    // Time2 데이터 상세 분석 로깅
+    if (enableTimeComparison) {
+      logDashboard('debug', 'buildChartDataByLayout - Time2 데이터 분석', {
+        kpiKey,
+        enableTimeComparison,
+        time2DataExists: !!time2Data,
+        time2DataType: typeof time2Data,
+        time2DataKeys: time2Data ? Object.keys(time2Data) : [],
+        kpiKeyInTime2Data: time2Data ? time2Data.hasOwnProperty(kpiKey) : false,
+        time2DataForKpiKey: time2Data?.[kpiKey],
+        time2DataForKpiKeyType: typeof time2Data?.[kpiKey],
+        time2DataForKpiKeyIsArray: Array.isArray(time2Data?.[kpiKey]),
+        time2RowsLength: time2Rows.length,
+        time2RowsSample: time2Rows.length > 0 ? time2Rows.slice(0, 2).map(row => ({
+          entity_id: row.entity_id,
+          timestamp: row.timestamp,
+          value: row.value,
+          hasTimestamp: !!row.timestamp,
+          hasEntityId: !!row.entity_id,
+          hasValue: row.hasOwnProperty('value')
+        })) : []
+      })
+    }
+
+    // 현재 데이터 상태 상세 로그
+    logDashboard('debug', '차트 데이터 구성 - 데이터 상태 확인', {
+      kpiKey,
+      kpiDataExists: !!kpiData,
+      time2DataExists: !!time2Data,
+      kpiDataKeys: Object.keys(kpiData || {}),
+      time2DataKeys: Object.keys(time2Data || {}),
+      kpiDataHasKey: kpiData && kpiData[kpiKey] ? true : false,
+      time2DataHasKey: time2Data && time2Data[kpiKey] ? true : false,
+      flatRowsLength: flatRows.length,
+      time2RowsLength: time2Rows.length
+    })
+
+    if (flatRows.length === 0 && time2Rows.length === 0) {
+      logDashboard('warn', '차트 데이터 없음 - 데이터 구성 실패', {
+        kpiKey,
+        flatRowsLength: flatRows.length,
+        time2RowsLength: time2Rows.length
+      })
+      return []
+    }
 
     if (chartLayout === 'byPeg') {
       // 시간축 + entity_id 별 series
       const groupedByTime = {}
-      
+
+      // Time1과 Time2 데이터를 시간순으로 정렬하여 연속적으로 표시
+      let timeIndex = 0
+
+      // Time1과 Time2 데이터 확인 로그
+      logDashboard('debug', '차트 데이터 구성 시작', {
+        kpiKey,
+        time1RowsCount: flatRows.length,
+        time2RowsCount: time2Rows.length,
+        enableTimeComparison,
+        time2DataKeys: Object.keys(time2Data || {}),
+        time2DataHasKpiKey: time2Data && time2Data[kpiKey] ? true : false
+      })
+
       // Time1 데이터 처리
       flatRows.forEach(row => {
-        const t = new Date(row.timestamp).toLocaleTimeString('ko-KR', { 
+        // Time1의 시간은 그대로 사용하되, 인덱스로 구분
+        const originalTime = new Date(row.timestamp)
+        const timeKey = `T1_${timeIndex++}_${originalTime.getTime()}`
+        const displayTime = originalTime.toLocaleTimeString('ko-KR', {
           hour: '2-digit', 
           minute: '2-digit' 
         })
-        if (!groupedByTime[t]) groupedByTime[t] = { time: t }
+
+        if (!groupedByTime[timeKey]) {
+          groupedByTime[timeKey] = { time: displayTime, _originalTime: originalTime }
+        }
+
         const entityKey = enableTimeComparison ? `${row.entity_id}_Time1` : row.entity_id
-        groupedByTime[t][entityKey] = row.value
+        groupedByTime[timeKey][entityKey] = row.value
       })
       
       // Time2 데이터 처리 (비교 모드인 경우)
-      if (enableTimeComparison) {
+      if (enableTimeComparison && time2Rows.length > 0) {
+        logDashboard('debug', 'Time2 데이터 처리 시작', {
+          time2RowsCount: time2Rows.length,
+          time2RowsSample: time2Rows.slice(0, 2).map(row => ({
+            entity_id: row.entity_id,
+            timestamp: row.timestamp,
+            value: row.value
+          }))
+        })
+        // Time2는 Time1의 마지막 시간 이후에 이어서 표시
         time2Rows.forEach(row => {
-          const t = new Date(row.timestamp).toLocaleTimeString('ko-KR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+          const originalTime = new Date(row.timestamp)
+          const timeKey = `T2_${timeIndex++}_${originalTime.getTime()}`
+
+          // Time2 표시 시간은 순수 시간만 표시 (접미사 제거)
+          const displayTime = originalTime.toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit'
           })
-          if (!groupedByTime[t]) groupedByTime[t] = { time: t }
+
+          if (!groupedByTime[timeKey]) {
+            groupedByTime[timeKey] = { time: displayTime, _originalTime: originalTime, _isTime2: true }
+          }
+
           const entityKey = `${row.entity_id}_Time2`
-          groupedByTime[t][entityKey] = row.value
+          groupedByTime[timeKey][entityKey] = row.value
+        })
+
+        logDashboard('debug', 'Time2 데이터 처리 완료', {
+          processedTime2Rows: time2Rows.length,
+          groupedByTimeKeys: Object.keys(groupedByTime).length,
+          time2KeysInGrouped: Object.keys(groupedByTime).filter(key => key.startsWith('T2_')).length
+        })
+      } else {
+        logDashboard('debug', 'Time2 데이터 처리 건너뜀', {
+          enableTimeComparison,
+          time2RowsLength: time2Rows.length,
+          reason: !enableTimeComparison ? '비교 모드 비활성화' : 'Time2 데이터 없음'
         })
       }
-      
-      return Object.values(groupedByTime)
+
+      // 시간순으로 정렬하여 연속적인 차트 생성
+      const sortedData = Object.values(groupedByTime).sort((a, b) => {
+        return a._originalTime.getTime() - b._originalTime.getTime()
+      })
+
+      // 디버그 로깅 - 상세 데이터 구조 확인
+      const time1DataPoints = sortedData.filter(d => !d._isTime2)
+      const time2DataPoints = sortedData.filter(d => d._isTime2)
+
+      logDashboard('info', 'Time1/Time2 데이터 구성 완료', {
+        kpiKey,
+        time1Count: flatRows.length,
+        time2Count: time2Rows.length,
+        totalDataPoints: sortedData.length,
+        time1DataPointsCount: time1DataPoints.length,
+        time2DataPointsCount: time2DataPoints.length,
+        timeRange: sortedData.length > 0 ? {
+          first: sortedData[0].time,
+          last: sortedData[sortedData.length - 1].time
+        } : null,
+        sampleDataPoints: sortedData.slice(0, 3).map(point => ({
+          time: point.time,
+          _isTime2: point._isTime2,
+          entityCount: Object.keys(point).filter(k => !k.startsWith('_')).length,
+          entities: Object.keys(point).filter(k => !k.startsWith('_')),
+          allKeys: Object.keys(point)
+        })),
+        time1Entities: flatRows.length > 0 ? Object.keys(flatRows[0]).filter(k => k !== 'timestamp') : [],
+        time2Entities: time2Rows.length > 0 ? Object.keys(time2Rows[0]).filter(k => k !== 'timestamp') : [],
+        // Time2 렌더링 문제 디버깅용
+        time2EntityKeys: time2DataPoints.length > 0 ?
+          Object.keys(time2DataPoints[0]).filter(k => !k.startsWith('_')) : [],
+        time2SampleData: time2DataPoints.slice(0, 2).map(point => ({
+          time: point.time,
+          _isTime2: point._isTime2,
+          entities: Object.keys(point).filter(k => !k.startsWith('_')),
+          sampleValues: Object.keys(point)
+            .filter(k => !k.startsWith('_'))
+            .slice(0, 3)
+            .map(k => ({ key: k, value: point[k] }))
+        }))
+      })
+
+      // 최종 반환 전 데이터 검증
+      logDashboard('debug', 'buildChartDataByLayout 최종 반환 데이터', {
+        kpiKey,
+        returnedDataLength: sortedData.length,
+        totalTime1Data: sortedData.filter(d => !d._isTime2).length,
+        totalTime2Data: sortedData.filter(d => d._isTime2).length,
+        returnedData: sortedData.slice(0, 3).map(data => ({
+          time: data.time,
+          _isTime2: data._isTime2,
+          entityCount: Object.keys(data).filter(k => !k.startsWith('_')).length,
+          entities: Object.keys(data).filter(k => !k.startsWith('_')),
+          sampleValues: Object.keys(data)
+            .filter(k => !k.startsWith('_'))
+            .slice(0, 2)
+            .map(k => ({ key: k, value: data[k] }))
+        }))
+      })
+
+      return sortedData
     } else {
       // byEntity: entity 기준으로 PEG 시리즈 구성 -> UI에서 카드 단위 핸들링 필요
       const byEntity = {}
+
+      // Time1 데이터 처리
       flatRows.forEach(row => {
         const t = new Date(row.timestamp).toLocaleString()
         const entity = row.entity_id
@@ -459,11 +683,23 @@ const Dashboard = () => {
         byEntity[entity][t] = byEntity[entity][t] || { time: t }
         byEntity[entity][t][row.peg_name] = row.value
       })
-      const result = {}
+
+      // Time2 데이터 처리 (비교 모드인 경우)
+      if (enableTimeComparison) {
+        time2Rows.forEach(row => {
+          const t = new Date(row.timestamp).toLocaleString() + ' (T2)'
+          const entity = row.entity_id
+          byEntity[entity] = byEntity[entity] || {}
+          byEntity[entity][t] = byEntity[entity][t] || { time: t }
+          byEntity[entity][t][row.peg_name + '_Time2'] = row.value
+        })
+      }
+
+    const result = {}
       Object.keys(byEntity).forEach(entity => {
-        result[entity] = Object.values(byEntity[entity]).sort((a,b)=> new Date(a.time)-new Date(b.time))
-      })
-      return result
+        result[entity] = Object.values(byEntity[entity]).sort((a,b)=> new Date(a.time.replace(' (T2)', ''))-new Date(b.time.replace(' (T2)', '')))
+    })
+    return result
     }
   }, [kpiData, time2Data, enableTimeComparison, chartLayout])
 
@@ -481,8 +717,6 @@ const Dashboard = () => {
           enableTimeComparison={enableTimeComparison}
           defaultNe={defaultNe}
           defaultCellId={defaultCellId}
-          autoRefreshInterval={autoRefreshInterval}
-          refreshCountdown={refreshCountdown}
           lastRefresh={lastRefresh}
           onManualRefresh={handleManualRefresh}
         />
@@ -504,7 +738,7 @@ const Dashboard = () => {
   }
 
   logDashboard('debug', 'Dashboard 메인 렌더링')
-  
+
   return (
     <div className="space-y-6">
       {/* 설정 컴포넌트 */}
@@ -519,6 +753,8 @@ const Dashboard = () => {
         onUpdateTempTimeSetting={updateTempTimeSetting}
         onApplyTime1Settings={applyTime1Settings}
         onApplyTime2Settings={applyTime2Settings}
+        onToggleTime1Settings={toggleTime1Settings}
+        onToggleTime2Settings={toggleTime2Settings}
         onManualRefresh={handleManualRefresh}
       />
 
@@ -532,8 +768,6 @@ const Dashboard = () => {
         enableTimeComparison={enableTimeComparison}
         defaultNe={defaultNe}
         defaultCellId={defaultCellId}
-        autoRefreshInterval={autoRefreshInterval}
-        refreshCountdown={refreshCountdown}
         lastRefresh={lastRefresh}
         onManualRefresh={handleManualRefresh}
       />
@@ -548,11 +782,7 @@ const Dashboard = () => {
             Time1/Time2 비교 활성화
           </Badge>
         )}
-        {autoRefreshInterval > 0 && (
-          <Badge variant="outline">
-            자동 새로고침: {autoRefreshInterval}초
-          </Badge>
-        )}
+
         <Badge variant="outline">
           차트 스타일: {chartStyle}
         </Badge>
@@ -563,12 +793,27 @@ const Dashboard = () => {
       {/* KPI 차트들 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {selectedPegs.map((key, idx) => {
+          logDashboard('debug', '차트 렌더링 시작', {
+            key,
+            idx,
+            selectedPegs,
+            totalSelectedPegs: selectedPegs.length
+          })
+
           const built = buildChartDataByLayout(key)
           if (chartLayout === 'byPeg') {
             const chartData = Array.isArray(built) ? built : []
+
+            logDashboard('debug', '차트 데이터 생성 결과', {
+              key,
+              chartDataLength: chartData.length,
+              builtType: Array.isArray(built) ? 'array' : typeof built
+            })
+
             return (
               <DashboardCard
                 key={`${key}-${idx}`}
+                chartKey={key}
                 idx={idx}
                 title={key}
                 chartData={chartData}
@@ -578,6 +823,9 @@ const Dashboard = () => {
                 showGrid={showGrid}
                 showLegend={showLegend}
                 onZoom={setZoomed}
+                loading={loading}
+                onRefresh={handleManualRefresh}
+                error={null}
               />
             )
           } else {
@@ -597,6 +845,9 @@ const Dashboard = () => {
                   showGrid={showGrid}
                   showLegend={showLegend}
                   onZoom={setZoomed}
+                  loading={loading}
+                  onRefresh={handleManualRefresh}
+                  error={null}
                 />
               )
             })
@@ -620,6 +871,9 @@ const Dashboard = () => {
                 showGrid={showGrid}
                 showLegend={showLegend}
                 enableTimeComparison={enableTimeComparison}
+                loading={false}
+                onRefresh={null}
+                error={null}
               />
             )}
           </div>
@@ -633,9 +887,41 @@ const Dashboard = () => {
             <div className="text-center py-8">
               <Settings className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">표시할 PEG가 선택되지 않았습니다</h3>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-4">
                 Preference 메뉴에서 표시할 PEG 항목을 선택하세요.
               </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Preference 메뉴로 이동하는 로직 (필요시 구현)
+                  console.log('Navigate to Preference menu')
+                }}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Preference 설정
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 로딩 중일 때의 전체 상태 표시 */}
+      {loading && selectedPegs.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <div className="animate-pulse">
+                <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">데이터 로딩 중...</h3>
+              <p className="text-muted-foreground">
+                선택한 PEG의 데이터를 불러오고 있습니다.
+              </p>
+              <div className="flex justify-center space-x-1 mt-4">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
             </div>
           </CardContent>
         </Card>

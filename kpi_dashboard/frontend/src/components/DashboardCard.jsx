@@ -1,11 +1,12 @@
 /**
  * DashboardCard 컴포넌트
- * 
+ *
  * Dashboard의 개별 차트 카드를 담당하는 컴포넌트입니다.
  * 차트 제목, 뱃지, 차트 렌더링을 포함합니다.
- * 
+ * 로딩 상태와 새로고침 기능을 지원합니다.
+ *
  * Props:
- * - key: 차트 키
+ * - chartKey: 차트 키
  * - idx: 차트 인덱스
  * - title: 차트 제목
  * - chartData: 차트 데이터
@@ -15,6 +16,9 @@
  * - showGrid: 격자 표시 여부
  * - showLegend: 범례 표시 여부
  * - onZoom: 확대 핸들러
+ * - loading: 로딩 상태 (추가)
+ * - onRefresh: 새로고침 콜백 (추가)
+ * - error: 에러 상태 (추가)
  */
 
 import React from 'react'
@@ -47,13 +51,13 @@ const logDashboardCard = (level, message, data = null) => {
 
 /**
  * PEG 제목 생성 함수
- * @param {string} key - PEG 키
+ * @param {string} chartKey - PEG 키
  * @returns {string} 표시할 제목
  */
-const titleFor = (key) => key
+const titleFor = (title) => title
 
 const DashboardCard = ({
-  key,
+  chartKey,
   idx,
   title,
   chartData,
@@ -62,22 +66,62 @@ const DashboardCard = ({
   enableTimeComparison,
   showGrid,
   showLegend,
-  onZoom
+  onZoom,
+  loading = false,
+  onRefresh,
+  error = null
 }) => {
   logDashboardCard('debug', 'DashboardCard 렌더링', {
-    key,
+    chartKey,
     idx,
     title,
     chartStyle,
     chartLayout,
     dataLength: chartData?.length,
-    enableTimeComparison
+    loading,
+    hasError: !!error,
+    enableTimeComparison,
+    chartDataType: Array.isArray(chartData) ? 'array' : typeof chartData,
+    chartDataSample: chartData?.length > 0 ? {
+      firstItem: {
+        time: chartData[0].time,
+        _isTime2: chartData[0]._isTime2,
+        entityCount: Object.keys(chartData[0]).filter(k => !k.startsWith('_')).length,
+        entities: Object.keys(chartData[0]).filter(k => !k.startsWith('_')),
+        allKeys: Object.keys(chartData[0])
+      },
+      totalItems: chartData.length,
+      // Time2 렌더링 문제 디버깅용
+      time1DataPoints: chartData.filter(d => !d._isTime2).length,
+      time2DataPoints: chartData.filter(d => d._isTime2).length,
+      time2SampleData: chartData.filter(d => d._isTime2).slice(0, 2).map(point => ({
+        time: point.time,
+        _isTime2: point._isTime2,
+        entities: Object.keys(point).filter(k => !k.startsWith('_')),
+        sampleValues: Object.keys(point)
+          .filter(k => !k.startsWith('_'))
+          .slice(0, 3)
+          .map(k => ({ key: k, value: point[k] }))
+      }))
+    } : null
   })
 
-  const entities = chartData?.length > 0 ? Object.keys(chartData[0]).filter(k => k !== 'time') : []
+  // 모든 데이터 포인트에서 엔티티 키를 수집 (Time1/Time2 모두 포함)
+  const entities = chartData?.length > 0 ? Array.from(
+    new Set(
+      chartData.flatMap(dataPoint =>
+        Object.keys(dataPoint).filter(k =>
+          k !== 'time' && k !== '_originalTime' && k !== '_isTime2'
+        )
+      )
+    )
+  ) : []
+
+  // 로딩 중이거나 에러가 있을 때 카드 스타일 변경
+  const cardClassName = `w-full ${error ? 'border-destructive' : ''} ${loading ? 'opacity-75' : ''}`
 
   return (
-    <Card key={`${key}-${idx}`}>
+    <Card key={`${chartKey}-${idx}`} className={cardClassName}>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           {titleFor(title)}
@@ -103,12 +147,15 @@ const DashboardCard = ({
         >
           <DashboardChart
             chartData={chartData}
-            key={key}
+            chartKey={chartKey}
             idx={idx}
             chartStyle={chartStyle}
             showGrid={showGrid}
             showLegend={showLegend}
             enableTimeComparison={enableTimeComparison}
+            loading={loading}
+            onRefresh={onRefresh}
+            error={error}
           />
         </div>
       </CardContent>
