@@ -1,0 +1,76 @@
+# Docker 환경 설정 파일 예제
+# 이 파일을 .env로 복사해서 실제 값으로 수정하세요
+
+# API Keys
+GOOGLE_API_KEY=your_google_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+PERPLEXITY_API_KEY=your_perplexity_api_key_here
+
+# 데이터베이스 설정
+POSTGRES_DB=kpi_db
+POSTGRES_USER=kpi_user
+POSTGRES_PASSWORD=kpi_password
+DATABASE_HOST=postgres
+DATABASE_PORT=5432
+DATABASE_NAME=kpi_db
+DATABASE_USER=kpi_user
+DATABASE_PASSWORD=kpi_password
+
+# LLM 설정
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.0-flash-exp
+LLM_MAX_TOKENS_PER_CHUNK=8000
+LLM_MAX_TOTAL_TOKENS=32000
+
+# API 설정
+BACKEND_API_URL=http://backend:8000
+API_TIMEOUT=30
+API_RETRIES=3
+API_MAX_CONNECTIONS=100
+API_MAX_KEEPALIVE=10
+
+# 로깅 설정
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+LOG_FILE=/app/logs/analysis_llm.log
+
+# MCP 서버 설정
+MCP_SERVER_NAME=analysis-llm
+MCP_SERVER_HOST=0.0.0.0
+MCP_SERVER_PORT=8000
+
+# 캐싱 설정 (Redis)
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+REDIS_TTL=3600
+
+# 모니터링 설정
+METRICS_ENABLED=true
+HEALTH_CHECK_INTERVAL=30
+
+# 보안 설정
+SECRET_KEY=your_secret_key_here
+API_KEY_HEADER=X-API-Key
+CORS_ORIGINS=*
+
+# 개발/운영 환경 설정
+ENVIRONMENT=production
+DEBUG=false
+
+# Docker 이미지 태그
+IMAGE_TAG=latest
+REGISTRY=your-registry.com
+
+# 리소스 제한
+MEMORY_LIMIT=2g
+CPU_LIMIT=1.0
+
+# 백업 설정
+BACKUP_ENABLED=true
+BACKUP_SCHEDULE=0 2 * * *
+BACKUP_RETENTION=7
+
+
+

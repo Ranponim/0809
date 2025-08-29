@@ -1,0 +1,224 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Analysis LLM 개발 환경
+  # ===========================================
+  analysis-llm-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: analysis-llm-dev
+    image: analysis-llm-mcp:latest-development
+
+    # 포트 설정
+    ports:
+      - "8000:8000"    # MCP 서버
+      - "8001:8001"    # FastAPI
+      - "8002:8002"    # 추가 API
+      - "8888:8888"    # Jupyter Lab
+      - "3000:3000"    # 프론트엔드 개발 서버 (필요시)
+
+    # 볼륨 마운트 (개발용 실시간 동기화)
+    volumes:
+      - .:/app:rw
+      - ./logs:/app/logs:rw
+      - ./data:/app/data:rw
+      - ./config:/app/config:rw
+      - ./notebooks:/app/notebooks:rw
+      - ./kpi_dashboard/frontend/node_modules:/app/kpi_dashboard/frontend/node_modules:rw
+
+    # 환경 변수
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=DEBUG
+      - TZ=Asia/Seoul
+      - PYTHONPATH=/app
+      - JUPYTER_TOKEN=dev-token
+      - NODE_ENV=development
+
+    # 개발 편의 설정
+    stdin_open: true
+    tty: true
+    working_dir: /app
+
+    # 네트워크 설정
+    networks:
+      - analysis-network
+
+    # 헬스체크
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 리소스 제한 (개발용으로 여유있게)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+    # 재시작 정책
+    restart: unless-stopped
+
+    # 개발용 명령어 (bash로 시작하여 개발 도구 사용 가능)
+    command: bash
+
+  # ===========================================
+  # PostgreSQL 데이터베이스 (개발용)
+  # ===========================================
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: analysis-postgres-dev
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: netperf
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+      TZ: Asia/Seoul
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backend/postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./logs/postgres:/var/log/postgresql:rw
+
+    networks:
+      - analysis-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d netperf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Redis 캐시 (개발용)
+  # ===========================================
+  redis-dev:
+    image: redis:7-alpine
+    container_name: analysis-redis-dev
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_dev_data:/data
+      - ./config/redis.conf:/etc/redis/redis.conf:ro
+
+    networks:
+      - analysis-network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ===========================================
+  # PgAdmin (데이터베이스 관리 도구)
+  # ===========================================
+  pgadmin-dev:
+    image: dpage/pgadmin4:latest
+    container_name: analysis-pgadmin-dev
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@analysis.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+
+    ports:
+      - "5050:80"
+
+    volumes:
+      - pgadmin_dev_data:/var/lib/pgadmin
+
+    networks:
+      - analysis-network
+
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+
+  # ===========================================
+  # Redis Commander (Redis 관리 도구)
+  # ===========================================
+  redis-commander-dev:
+    image: rediscommander/redis-commander:latest
+    container_name: analysis-redis-commander-dev
+    restart: unless-stopped
+
+    environment:
+      REDIS_HOSTS: local:redis-dev:6379
+
+    ports:
+      - "8081:8081"
+
+    networks:
+      - analysis-network
+
+    depends_on:
+      - redis-dev
+
+# ===========================================
+# 네트워크 설정
+# ===========================================
+networks:
+  analysis-network:
+    driver: bridge
+    name: analysis-dev-network
+
+# ===========================================
+# 볼륨 설정
+# ===========================================
+volumes:
+  postgres_dev_data:
+    name: analysis-postgres-dev-data
+    driver: local
+
+  redis_dev_data:
+    name: analysis-redis-dev-data
+    driver: local
+
+  pgadmin_dev_data:
+    name: analysis-pgadmin-dev-data
+    driver: local
+
+# ===========================================
+# 설정 예시
+# ===========================================
+# 사용법:
+# 1. 개발 환경 시작: docker-compose -f docker-compose.dev.yml up -d
+# 2. 개발 컨테이너 접속: docker exec -it analysis-llm-dev bash
+# 3. Jupyter Lab 시작: ./jupyter.sh (컨테이너 내부에서)
+# 4. MCP 서버 시작: python -m analysis_llm.mcp_server
+#
+# 웹 인터페이스:
+# - Jupyter Lab: http://localhost:8888 (토큰: dev-token)
+# - PgAdmin: http://localhost:5050 (admin@analysis.dev / admin123)
+# - Redis Commander: http://localhost:8081
+#
+# 데이터베이스 연결 정보:
+# - PostgreSQL: localhost:5432, DB: netperf, User: postgres, Pass: pass
+# - Redis: localhost:6379
+#
+# 개발 도구들:
+# - 코드 편집: vim, nano, emacs 설치됨
+# - 디버깅: gdb, valgrind, strace 설치됨
+# - 모니터링: htop, iotop, sysstat 설치됨
+# - 네트워크: netstat, tcpdump, nmap 설치됨
+
+
+
