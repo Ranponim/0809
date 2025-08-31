@@ -122,6 +122,7 @@ const baseURL = getBaseURL()
 const apiClient = axios.create({
   baseURL,
   timeout: 15000,
+  withCredentials: false, // 백엔드 allow_credentials=False와 일치
 })
 
 logApiClient('info', 'API 클라이언트 초기화 완료', { baseURL, timeout: 15000 })

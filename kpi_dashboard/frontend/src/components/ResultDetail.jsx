@@ -6,10 +6,11 @@
  * Task 52: LLM 분석 결과 상세 보기 및 비교 기능 UI 구현
  */
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, memo } from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog.jsx'
@@ -98,10 +99,13 @@ const ResultDetail = ({
   const [weightFilter, setWeightFilter] = useState('all') // all, high(>=8), medium(6-7.9), low(<6)
   const [trendFilter, setTrendFilter] = useState('all') // all, up, down, stable
 
+  // === 메모리 최적화: 큰 데이터 청크 단위 처리 ===
+  const [dataChunkSize] = useState(50) // 한 번에 처리할 데이터 청크 크기
+
   const isCompareMode = mode === 'compare' && resultIds.length > 1
   const isSingleMode = mode === 'single' && resultIds.length === 1
 
-  // === API 호출 ===
+  // === API 호출 (청크 단위 처리로 메모리 최적화) ===
   const fetchResultDetails = async (ids) => {
     setLoading(true)
     setError(null)
@@ -109,27 +113,43 @@ const ResultDetail = ({
     try {
       console.log('📊 분석 결과 상세 정보 요청:', ids)
 
-      const promises = ids.map(async (id) => {
-        try {
-          const response = await apiClient.get(`/api/analysis/results/${id}`)
-          return { ...response.data, id }
-        } catch (err) {
-          console.error(`❌ 결과 ${id} 로딩 실패:`, err)
-          return {
-            id,
-            error: err.message || '로딩 실패',
-            analysisDate: new Date().toISOString(),
-            neId: '-',
-            cellId: '-',
-            status: 'error'
-          }
-        }
-      })
+      // 메모리 효율을 위해 청크 단위로 처리
+      const chunks = []
+      for (let i = 0; i < ids.length; i += dataChunkSize) {
+        chunks.push(ids.slice(i, i + dataChunkSize))
+      }
 
-      const resultsData = await Promise.all(promises)
-      setResults(resultsData)
-      
-      console.log('✅ 분석 결과 상세 정보 로딩 완료:', resultsData)
+      let allResults = []
+
+      for (const chunk of chunks) {
+        const promises = chunk.map(async (id) => {
+          try {
+            const response = await apiClient.get(`/api/analysis/results/${id}`)
+            return { ...response.data, id }
+          } catch (err) {
+            console.error(`❌ 결과 ${id} 로딩 실패:`, err)
+            return {
+              id,
+              error: err.message || '로딩 실패',
+              analysisDate: new Date().toISOString(),
+              neId: '-',
+              cellId: '-',
+              status: 'error'
+            }
+          }
+        })
+
+        const chunkResults = await Promise.all(promises)
+        allResults = [...allResults, ...chunkResults]
+
+        // 메모리 효율을 위해 중간 결과 정리 (브라우저 환경에서 안전하게 처리)
+        if (typeof window !== 'undefined' && window.gc) {
+          window.gc()
+        }
+      }
+
+      setResults(allResults)
+      console.log('✅ 분석 결과 상세 정보 로딩 완료:', allResults.length, '개 항목')
 
     } catch (err) {
       console.error('❌ 분석 결과 상세 정보 로딩 실패:', err)
@@ -648,7 +668,7 @@ const ResultDetail = ({
           ))}
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {processedResults.map((result, index) => (
           <Card key={result.id} className="border-l-4" style={{ borderLeftColor: `hsl(${index * 60}, 70%, 50%)` }}>
@@ -671,6 +691,66 @@ const ResultDetail = ({
           </Card>
         ))}
       </div>
+    </div>
+  )
+
+  // === 단일 결과 개요 ===
+  const renderSingleOverview = (result) => (
+    <div className="space-y-4">
+      <Card className="border-l-4 border-l-blue-500">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">
+              분석 결과 상세 정보
+            </CardTitle>
+            <Badge variant={getStatusBadgeVariant(result.status)}>
+              {result.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-muted-foreground">분석 날짜</div>
+              <div className="text-sm">{formatDate(result.analysisDate)}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-muted-foreground">NE ID</div>
+              <div className="text-sm">{result.neId}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-muted-foreground">Cell ID</div>
+              <div className="text-sm">{result.cellId}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-muted-foreground">LLM 모델</div>
+              <div className="text-sm">{result.llmModel || 'N/A'}</div>
+            </div>
+          </div>
+
+          {result.analysisResult && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground">분석 결과</div>
+              <div className="text-sm bg-muted p-3 rounded-md max-h-32 overflow-y-auto">
+                {result.analysisResult}
+              </div>
+            </div>
+          )}
+
+          {result.recommendations && result.recommendations.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground">권장 사항</div>
+              <div className="space-y-1">
+                {result.recommendations.map((rec, index) => (
+                  <div key={index} className="text-sm bg-green-50 dark:bg-green-900/20 p-2 rounded border-l-2 border-l-green-500">
+                    {rec}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 
@@ -774,6 +854,12 @@ const ResultDetail = ({
               {/* ❌ 커스텀 닫기 버튼 제거: DialogContent 기본 X만 사용 */}
             </div>
           </div>
+          <DialogDescription className="sr-only">
+            {isCompareMode
+              ? `${processedResults.length}개의 분석 결과를 비교하고 상세 정보를 확인할 수 있습니다.`
+              : '단일 분석 결과의 상세 정보를 확인하고 다양한 탭으로 전환할 수 있습니다.'
+            }
+          </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className={`transition-all duration-300 ${
@@ -788,5 +874,5 @@ const ResultDetail = ({
   )
 }
 
-export default ResultDetail
+export default memo(ResultDetail)
 

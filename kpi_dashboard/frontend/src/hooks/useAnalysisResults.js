@@ -5,9 +5,12 @@
  * Task 40: Frontend LLM 분석 결과 목록 UI 컴포넌트 개발
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import apiClient from '@/lib/apiClient.js'
 import { toast } from 'sonner'
+
+// Axios CancelToken import
+import axios from 'axios'
 
 /**
  * 분석 결과 데이터를 관리하는 커스텀 훅
@@ -52,10 +55,18 @@ export const useAnalysisResults = ({
   const logInfo = useCallback((message, data = {}) => {
     console.log(`[useAnalysisResults] ${message}`, data)
   }, [])
-  
+
   const logError = useCallback((message, error) => {
     console.error(`[useAnalysisResults] ${message}`, error)
   }, [])
+
+  // === 디바운스 타이머 ref ===
+  const debounceTimerRef = useRef(null)
+
+  // === API 요청 취소 컨트롤러 ===
+  const abortControllerRef = useRef(null)
+  const isMountedRef = useRef(true) // 컴포넌트 마운트 상태 추적
+  const isRequestingRef = useRef(false) // 현재 요청 중인지 추적
 
   // === API 호출 함수 ===
   const fetchResults = useCallback(async ({
@@ -65,11 +76,36 @@ export const useAnalysisResults = ({
     showToast = true
   } = {}) => {
     try {
+      // 컴포넌트가 언마운트된 경우 요청하지 않음
+      if (!isMountedRef.current) {
+        logInfo('컴포넌트가 언마운트되어 API 요청을 건너뜁니다')
+        return []
+      }
+
+      // 이미 요청 중인 경우 중복 요청 방지
+      if (isRequestingRef.current) {
+        logInfo('이미 요청 중이므로 새 요청을 건너뜁니다')
+        return []
+      }
+
+      isRequestingRef.current = true
+      logInfo('요청 상태: 시작')
+
+      // 이전 요청 취소 (디버깅용 로그 추가)
+      if (abortControllerRef.current) {
+        logInfo('이전 요청 취소 시도')
+        abortControllerRef.current.abort()
+      }
+
+      // 새로운 AbortController 생성
+      abortControllerRef.current = new AbortController()
+      logInfo('새로운 AbortController 생성')
+
       setLoading(true)
       setError(null)
-      
+
       logInfo('분석 결과 조회 시작', { limit, skip, filters })
-      
+
       // API 요청 파라미터 구성 (백엔드의 snake_case 쿼리 파라미터에 맞춤)
       const params = {
         limit,
@@ -93,8 +129,11 @@ export const useAnalysisResults = ({
         params.status = filters.status.trim()
       }
       
-      // API 호출
-      const response = await apiClient.get('/api/analysis/results', { params })
+      // API 호출 (취소 신호 포함)
+      const response = await apiClient.get('/api/analysis/results', {
+        params,
+        signal: abortControllerRef.current.signal
+      })
       
       logInfo('분석 결과 조회 성공', {
         resultCount: response.data?.items?.length || 0,
@@ -134,38 +173,82 @@ export const useAnalysisResults = ({
       return newResults
       
     } catch (err) {
-      const errorMessage = err?.response?.data?.error?.message || 
-                          err?.message || 
+      // 디버깅을 위한 상세 로그
+      logInfo('API 오류 상세 정보', {
+        name: err.name,
+        code: err.code,
+        message: err.message,
+        stack: err.stack,
+        isCancel: axios.isCancel ? axios.isCancel(err) : 'axios.isCancel not available'
+      })
+
+      // 요청 취소된 경우는 무시 (정상적인 취소)
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED' ||
+          err.message?.toLowerCase().includes('canceled') ||
+          err.message?.toLowerCase().includes('cancel') ||
+          (axios.isCancel && axios.isCancel(err))) {
+        logInfo('API 요청이 취소되었습니다', { reason: err.message })
+        isRequestingRef.current = false // 취소 시에도 상태 리셋
+        return []
+      }
+
+      const errorMessage = err?.response?.data?.error?.message ||
+                          err?.message ||
                           '분석 결과를 불러오는 중 오류가 발생했습니다.'
-      
+
       logError('분석 결과 조회 실패', err)
       setError(errorMessage)
-      
+
       if (showToast) {
         toast.error(`데이터 조회 실패: ${errorMessage}`)
       }
-      
+
       return []
-      
+
     } finally {
       setLoading(false)
+      isRequestingRef.current = false
+      logInfo('요청 상태: 완료')
     }
-  }, [pagination.limit, filters, logInfo, logError])
+  }, [pagination.limit, JSON.stringify(filters), logInfo, logError])
 
-  // === 필터 관리 함수 ===
-  const updateFilters = useCallback((newFilters) => {
+  // === 필터 관리 함수 (디바운스 적용) ===
+  const updateFilters = useCallback((newFilters, debounceMs = 1000) => {
     logInfo('필터 업데이트', { 이전: filters, 새로운: newFilters })
-    
-    setFilters(prev => ({
-      ...prev,
-      ...newFilters
-    }))
-    
-    // 필터 변경 시 페이지네이션 리셋
-    setPagination(prev => ({
-      ...prev,
-      skip: 0
-    }))
+
+    // 컴포넌트가 언마운트된 경우 무시
+    if (!isMountedRef.current) {
+      logInfo('컴포넌트 언마운트 상태에서 필터 업데이트 무시')
+      return
+    }
+
+    // 기존 타이머 클리어
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    // 디바운스 적용 (시간 증가)
+    debounceTimerRef.current = setTimeout(() => {
+      // 타이머 실행 시점에도 마운트 상태 확인
+      if (!isMountedRef.current) {
+        logInfo('디바운스 실행 시점에 컴포넌트가 언마운트됨')
+        return
+      }
+
+      setFilters(prev => ({
+        ...prev,
+        ...newFilters
+      }))
+
+      // 필터 변경 시 페이지네이션 리셋
+      setPagination(prev => ({
+        ...prev,
+        skip: 0
+      }))
+
+      logInfo('필터 업데이트 완료', { 적용된필터: { ...filters, ...newFilters } })
+    }, debounceMs)
+
   }, [filters, logInfo])
 
   const clearFilters = useCallback(() => {
@@ -236,20 +319,19 @@ export const useAnalysisResults = ({
 
   // === 자동 데이터 조회 (마운트 시) ===
   useEffect(() => {
-    if (autoFetch) {
+    if (autoFetch && isMountedRef.current) {
       logInfo('컴포넌트 마운트 - 자동 데이터 조회 시작')
       fetchResults({ skip: 0, append: false, showToast: false })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch]) // fetchResults는 의존성에서 제외 (무한 루프 방지)
+  }, [autoFetch, logInfo, fetchResults]) // fetchResults 의존성 추가
 
-  // === 필터 변경 시 자동 재조회 ===
+  // === 필터 변경 시 자동 재조회 (디바운스 적용) ===
   useEffect(() => {
-    if (autoFetch) {
-      logInfo('필터 변경 감지 - 데이터 재조회')
+    if (autoFetch && isMountedRef.current) {
+      logInfo('필터 변경 감지 - 데이터 재조회', { filters: JSON.stringify(filters) })
       fetchResults({ skip: 0, append: false, showToast: false })
     }
-  }, [autoFetch, filters, fetchResults, logInfo])
+  }, [autoFetch, JSON.stringify(filters), logInfo, fetchResults]) // fetchResults 의존성 추가
 
   // === 계산된 값들 ===
   const isEmpty = useMemo(() => !loading && results.length === 0, [loading, results.length])
@@ -280,6 +362,23 @@ export const useAnalysisResults = ({
       console.log('[useAnalysisResults] Debug Info:', debugInfo)
     }
   }, [debugInfo])
+
+  // === 클린업 ===
+  useEffect(() => {
+    return () => {
+      // 컴포넌트 언마운트 시 상태 업데이트
+      isMountedRef.current = false
+      isRequestingRef.current = false
+
+      // 타이머 및 요청 클리어
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   // === 반환 값 ===
   return {

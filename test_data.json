@@ -1,0 +1,16 @@
+{
+  "db_config": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "password": "password",
+    "dbname": "postgres",
+    "table": "summary"
+  },
+  "n_minus_1": "2025-01-01_00:00~2025-01-01_23:59",
+  "n": "2025-01-02_00:00~2025-01-02_23:59",
+  "ne": "TEST_NE_001",
+  "cellid": "TEST_CELL_001",
+  "enable_mock": true,
+  "user_id": "test_user"
+}

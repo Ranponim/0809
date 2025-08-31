@@ -66,6 +66,18 @@ router = APIRouter(
     }
 )
 
+# 별도의 라우터 생성 (test-data용)
+test_router = APIRouter(
+    prefix="/api",
+    tags=["Test Data"],
+    responses={
+        400: {"description": "Bad Request"},
+        404: {"description": "Not Found"},
+        422: {"description": "Validation Error"},
+        500: {"description": "Internal Server Error"}
+    }
+)
+
 
 def _normalize_legacy_keys(doc: dict) -> dict:
     """레거시 camelCase 문서를 snake_case 우선 형태로 정규화합니다."""
@@ -272,6 +284,65 @@ async def create_analysis_result(
         }, exc_info=True)
         raise InvalidAnalysisDataException(f"Failed to create analysis result: {str(e)}")
 
+
+@test_router.post(
+    "/testdata",
+    summary="테스트 데이터 생성",
+    description="개발용 테스트 데이터를 생성합니다."
+)
+async def create_test_data():
+    """테스트 데이터를 생성합니다."""
+    from datetime import datetime
+    from bson import ObjectId
+
+    collection = get_analysis_collection()
+
+    # 기존 오류 데이터 삭제
+    await collection.delete_many({'status': 'error'})
+
+    # 새로운 테스트 데이터 생성
+    test_data = [
+        {
+            '_id': ObjectId(),
+            'neId': 'TEST_NE_001',
+            'cellId': 'TEST_CELL_001',
+            'status': 'completed',
+            'createdAt': datetime.now(),
+            'updatedAt': datetime.now(),
+            'results_count': 100,
+            'analysis_type': 'performance_analysis',
+            'results_overview': '성능 분석이 완료되었습니다.',
+            'analysis_summary': {
+                'total_analyzed': 100,
+                'success_count': 95,
+                'error_count': 5,
+                'performance_score': 85.5
+            }
+        },
+        {
+            '_id': ObjectId(),
+            'neId': 'TEST_NE_002',
+            'cellId': 'TEST_CELL_002',
+            'status': 'completed',
+            'createdAt': datetime.now(),
+            'updatedAt': datetime.now(),
+            'results_count': 150,
+            'analysis_type': 'performance_analysis',
+            'results_overview': '성능 분석이 완료되었습니다.',
+            'analysis_summary': {
+                'total_analyzed': 150,
+                'success_count': 140,
+                'error_count': 10,
+                'performance_score': 78.9
+            }
+        }
+    ]
+
+    result = await collection.insert_many(test_data)
+    return {
+        "message": f"테스트 데이터 {len(result.inserted_ids)}개 생성 완료",
+        "created_ids": [str(id) for id in result.inserted_ids]
+    }
 
 @router.get(
     "/",
@@ -493,14 +564,22 @@ async def get_analysis_result(result_id: PyObjectId, includeRaw: bool = Query(Fa
                 })
 
         # 레거시 키 정규화 (camelCase → snake_case 우선)
+        req_logger.info("레거시 키 정규화 시작", extra={
+            "result_id": str(result_id),
+            "document_keys": list(document.keys())
+        })
         document = _normalize_legacy_keys(document)
 
         # includeRaw=false인 경우 압축 원본 제외하여 경량 응답 (두 케이스 모두 제거)
         if not includeRaw:
             document.pop("analysis_raw_compact", None)
             document.pop("analysisRawCompact", None)
-        
+
         # 응답 모델로 변환
+        req_logger.info("AnalysisResultModel 변환 시작", extra={
+            "result_id": str(result_id),
+            "document_keys_after_normalize": list(document.keys())
+        })
         analysis_model = AnalysisResultModel.from_mongo(document)
         
         # 캐시에 저장 (includeRaw=False인 경우만)
@@ -901,3 +980,5 @@ async def get_analysis_summary():
         logger.error(f"분석 결과 통계 조회 중 오류: {e}")
         raise DatabaseConnectionException(f"Failed to retrieve analysis summary: {str(e)}")
 
+# 라우터 export (main.py에서 사용)
+__all__ = ["router", "test_router"]
