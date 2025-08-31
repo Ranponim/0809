@@ -6,7 +6,9 @@
 ## 🔍 테스트 환경
 - **Frontend**: React (Vite) - http://localhost:5173
 - **Backend**: FastAPI - http://localhost:8000
-- **Database**: MongoDB - localhost:27017
+- **Databases**:
+  - **PostgreSQL**: Raw KPI 데이터 - localhost:5432 (netperf DB)
+  - **MongoDB**: Backend 저장소 - localhost:27017 (kpi DB)
 - **실제 데이터**: 테스트용 PEG 마스터 데이터 및 KPI 데이터 사용
 
 ---

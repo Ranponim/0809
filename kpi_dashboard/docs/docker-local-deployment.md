@@ -7,11 +7,11 @@
 
 ### 전제 조건
 - 양쪽 PC에 Docker Desktop(Windows) 또는 Docker Engine(리눅스/맥) 설치
-- 현재 PC에 빌드된 이미지 존재: `kpi-backend:latest`, `kpi-frontend:latest` (권장: `mongo:7` 포함)
+- 현재 PC에 빌드된 이미지 존재: `kpi-backend:latest`, `kpi-frontend:latest` (권장: `postgres:15`, `mongo:7` 포함)
 - 프로젝트 디렉터리와 `docker-compose.yml`(및 필요한 `.env`)을 함께 이전
 
 ### 이동할 산출물
-- Docker 이미지: `kpi-backend:latest`, `kpi-frontend:latest`, `mongo:7`
+- Docker 이미지: `kpi-backend:latest`, `kpi-frontend:latest`, `postgres:15`, `mongo:7`
 - 프로젝트 폴더: `kpi_dashboard/` (앱 소스, compose 파일, 설정 등)
 - 필요 시 비밀키/환경 파일: `.env` 등(별도 안전 경로로 전달 권장)
 
@@ -22,6 +22,7 @@
 이미지 확인
 ```powershell
 docker images | findstr kpi-
+docker images | findstr postgres
 docker images | findstr mongo
 ```
 
@@ -29,12 +30,13 @@ docker images | findstr mongo
 ```powershell
 docker save -o kpi-backend_latest.tar kpi-backend:latest
 docker save -o kpi-frontend_latest.tar kpi-frontend:latest
+docker save -o postgres_latest.tar postgres:15
 docker save -o mongo_latest.tar mongo:7
 ```
 
 번들 저장(권장, 한 파일로 이동)
 ```powershell
-docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest mongo:7
+docker save -o kpi_images_bundle.tar kpi-backend:latest kpi-frontend:latest postgres:15 mongo:7
 ```
 
 선택: 압축(전송 최적화)
@@ -52,16 +54,20 @@ tar -a -c -f kpi_images_bundle.zip kpi_images_bundle.tar
 BACKEND_BASE_URL=http://localhost:8000
 VITE_API_BASE_URL=http://localhost:8000
 
-# --- Backend (Mongo) ---
-MONGO_URL=mongodb://mongo:27017/kpi
-MONGO_DB_NAME=kpi
-
-# --- PostgreSQL(선택) ---
-DB_HOST=host.docker.internal
+# --- PostgreSQL (Raw KPI Data) ---
+DB_HOST=postgres
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=pass
 DB_NAME=netperf
+
+# --- MongoDB (Backend Storage) ---
+MONGO_URL=mongodb://mongo:27017
+MONGO_DB_NAME=kpi
+
+# --- MCP (옵션) ---
+MCP_ANALYZER_URL=http://mcp-host:8001/analyze
+MCP_API_KEY=optional-key
 ```
 
 ---
@@ -82,12 +88,14 @@ docker load -i kpi_images_bundle.tar
 ```powershell
 docker load -i kpi-backend_latest.tar
 docker load -i kpi-frontend_latest.tar
+docker load -i postgres_latest.tar
 docker load -i mongo_latest.tar
 ```
 
 로드 확인
 ```powershell
 docker images | findstr kpi-
+docker images | findstr postgres
 docker images | findstr mongo
 ```
 
@@ -122,18 +130,37 @@ MCP_API_KEY=optional-key
 
 볼륨 생성(데이터 지속화)
 ```powershell
+docker volume create postgres_data
 docker volume create mongo_data
+```
+
+PostgreSQL (기본 bridge 네트워크 사용)
+```powershell
+docker run -d --name kpi-postgres -p 5432:5432 ^
+  -e POSTGRES_DB=netperf ^
+  -e POSTGRES_USER=postgres ^
+  -e POSTGRES_PASSWORD=pass ^
+  -v postgres_data:/var/lib/postgresql/data ^
+  postgres:15
 ```
 
 MongoDB (기본 bridge 네트워크 사용)
 ```powershell
-docker run -d --name kpi-mongo -p 27017:27017 -v mongo_data:/data/db mongo:7
+docker run -d --name kpi-mongo -p 27017:27017 ^
+  -v mongo_data:/data/db ^
+  mongo:7
 ```
 
 Backend (환경변수는 실제 환경에 맞게 조정)
 ```powershell
 docker run -d --name kpi-backend -p 8000:8000 ^
+  --link kpi-postgres:postgres ^
   --link kpi-mongo:mongo ^
+  -e DB_HOST="postgres" ^
+  -e DB_PORT="5432" ^
+  -e DB_USER="postgres" ^
+  -e DB_PASSWORD="pass" ^
+  -e DB_NAME="netperf" ^
   -e MONGO_URL="mongodb://mongo:27017" ^
   -e MONGO_DB_NAME="kpi" ^
   -e BACKEND_LOG_LEVEL="info" ^
@@ -320,15 +347,16 @@ MCP_API_KEY=optional-key
 - "Cannot connect to the Docker daemon": Docker Desktop이 실행 중인지 확인. `docker context ls`로 컨텍스트가 `default`(desktop)인지 확인 후 `docker context use default` 시도
 - PowerShell에서 `grep`, `sed` 미인식: 해당 유틸은 리눅스 도구입니다. 반드시 `wsl -e bash -lc "... | grep ..."` 형태로 WSL 내부에서 실행하세요
 - 경로 이슈: Windows 경로는 WSL에서 `/mnt/d/...`로 접근. 공백/특수문자는 작은따옴표 또는 이스케이프 처리
-- Mongo 버전 불일치로 pull/빌드 시도: 위의 "버전 태그 맞추기" 절차로 `mongo:7` 태그를 보정
+- Mongo/PostgreSQL 버전 불일치로 pull/빌드 시도: 위의 "버전 태그 맞추기" 절차로 `mongo:7`, `postgres:15` 태그를 보정
 
 ---
 
 ## 참고 및 권장 사항
-- 완전 오프라인 환경이면 `mongo:7` 이미지도 반드시 함께 save/load 하세요.
+- 완전 오프라인 환경이면 `postgres:15`, `mongo:7` 이미지도 반드시 함께 save/load 하세요.
 - `docker-compose.yml`의 `image` 태그가 로드된 태그와 일치해야 `--no-build`로 바로 실행됩니다.
-- 환경변수(`MONGO_URL`, `MONGO_DB_NAME`, `CORS_ORIGINS`, 프론트의 `BACKEND_BASE_URL`, 백엔드의 `MCP_ANALYZER_URL`)는 대상 환경에 맞게 조정하세요.
+- 환경변수(`DB_*` for PostgreSQL, `MONGO_*` for MongoDB, `CORS_ORIGINS`, 프론트의 `BACKEND_BASE_URL`, 백엔드의 `MCP_ANALYZER_URL`)는 대상 환경에 맞게 조정하세요.
 - 비밀정보(.env)는 소스관리 제외 및 안전한 방법으로 전달하세요.
+- **데이터베이스 분리**: PostgreSQL은 Raw KPI 데이터를, MongoDB는 분석 결과/설정을 저장합니다.
 
 
 
