@@ -13,7 +13,7 @@ def get_db_connection_details():
     환경 변수 또는 기본값에서 DB 연결 정보를 가져옵니다.
     """
     return {
-        "host": os.getenv("DB_HOST", "127.0.0.1"),
+        "host": os.getenv("DB_HOST", "postgres"),
         "port": os.getenv("DB_PORT", 5432),
         "user": os.getenv("DB_USER", "postgres"),
         "password": os.getenv("DB_PASSWORD", "pass"),

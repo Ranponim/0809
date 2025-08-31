@@ -23,8 +23,12 @@
     "perf:baseline:full": "node scripts/performance-baseline.js",
     "perf:lighthouse": "lhci autorun",
     "perf:analyze": "npm run build && npm run perf:lighthouse",
-    "analyze:bundle": "ANALYZE=true npm run build",
-    "analyze:bundle:win": "set ANALYZE=true&& npm run build"
+    "analyze:bundle": "cross-env ANALYZE=true npm run build",
+    "analyze:bundle:win": "cross-env ANALYZE=true npm run build",
+    "build:analyze": "npm run analyze:bundle && echo '번들 분석 완료: dist/bundle-analysis.html 파일 확인'",
+    "build:optimized": "vite build --mode production",
+    "dev:analyze": "npm run analyze:bundle && npm run dev",
+    "perf:compare": "npm run perf:baseline && echo '성능 측정 완료 - 이전 결과와 비교하세요'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
@@ -86,6 +90,7 @@
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
     "@web/dev-server": "^0.4.6",
+    "cross-env": "^10.0.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",

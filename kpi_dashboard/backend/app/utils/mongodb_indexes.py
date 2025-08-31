@@ -326,7 +326,7 @@ if __name__ == "__main__":
     import os
     
     # 환경변수에서 MongoDB 연결 정보 읽기
-    mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    mongo_url = os.getenv("MONGODB_URL", "mongodb://mongo:27017")
     db_name = os.getenv("MONGODB_DATABASE", "kpi_dashboard")
     
     print("MongoDB Host 필터링 인덱스 설정 시작...")

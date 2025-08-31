@@ -4,7 +4,7 @@
  * Frontend Database Setting을 활용하여 LLM 분석을 요청하고 결과를 관리합니다.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,9 +28,18 @@ import { triggerLLMAnalysis, getLLMAnalysisResult, testDatabaseConnection } from
 import { usePreference } from '@/hooks/usePreference.js'
 
 const LLMAnalysisManager = () => {
-  // Preference에서 DB 설정 사용 (공통)
+  // Preference에서 DB 설정 사용 (공통) - useMemo로 최적화
   const { settings } = usePreference()
-  const dbConfig = settings?.databaseSettings || { host: '', port: 5432, user: 'postgres', password: '', dbname: 'postgres', table: 'summary' }
+  const dbConfig = useMemo(() =>
+    settings?.databaseSettings || {
+      host: '',
+      port: 5432,
+      user: 'postgres',
+      password: '',
+      dbname: 'postgres',
+      table: 'summary'
+    }, [settings?.databaseSettings]
+  )
 
   // 분석 파라미터 상태
   const [analysisParams, setAnalysisParams] = useState({
@@ -58,8 +67,8 @@ const LLMAnalysisManager = () => {
 
   
 
-  // LLM 분석 실행
-  const handleStartAnalysis = async () => {
+  // LLM 분석 실행 - useCallback으로 최적화
+  const handleStartAnalysis = useCallback(async () => {
     // 필수 파라미터 검증
     if (!analysisParams.n_minus_1 || !analysisParams.n) {
       toast.error('분석 기간(N-1, N)을 모두 입력해주세요.')
@@ -96,7 +105,7 @@ const LLMAnalysisManager = () => {
       toast.error(`분석 요청 실패: ${error.message}`)
       setIsAnalyzing(false)
     }
-  }
+  }, [analysisParams, connectionStatus, dbConfig])
 
   // 분석 결과 폴링
   const pollAnalysisResult = (analysisId) => {

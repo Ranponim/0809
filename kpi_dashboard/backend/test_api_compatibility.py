@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # 테스트 설정
 API_BASE_URL = "http://localhost:8000"
-MONGO_URL = "mongodb://localhost:27017"
+MONGO_URL = "mongodb://mongo:27017"
 MONGO_DB_NAME = "kpi_test"
 
 # analysis_llm.py 스타일의 샘플 payload

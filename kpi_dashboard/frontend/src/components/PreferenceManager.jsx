@@ -97,6 +97,7 @@ const PreferenceManager = () => {
       options: getCurrentPegOptions(),
       placeholder: 'Database PEG에서 선택하세요'
     },
+
     {
       key: 'chartLayout',
       label: '그래프 정렬 방식',
@@ -694,9 +695,7 @@ const PreferenceManager = () => {
                 <p className="text-xs text-muted-foreground">
                   차트 스타일: {settings?.dashboardSettings?.chartStyle || 'line'}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  자동 새로고침: {settings?.dashboardSettings?.autoRefreshInterval || 0}초
-                </p>
+
               </div>
             </div>
             

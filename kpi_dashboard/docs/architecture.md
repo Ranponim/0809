@@ -6,19 +6,21 @@ graph LR
   A["User Browser"] --> B["Frontend (React + Vite)"]
   B --> C["API Client (axios)"]
   C --> D["Backend (FastAPI)"]
-  D --> E(("MongoDB: Persistence"))
+  D --> E(("PostgreSQL: Raw KPI Data"))
+  D --> F(("MongoDB: Backend Storage"))
   subgraph Analysis
-    F["MCP Server: analysis_llm.py (optional)"]
-    G["LLM Endpoints (vLLM)"]
+    G["MCP Server: analysis_llm.py (optional)"]
+    H["LLM Endpoints (vLLM)"]
   end
-  F -- "HTTP POST (analyze)" --> D
-  F -- "Read/Write Files" --> H["HTML Reports"]
-  F -- "Call" --> G
+  G -- "HTTP POST (analyze)" --> D
+  G -- "Read/Write Files" --> I["HTML Reports"]
+  G -- "Call" --> H
 ```
 
-- Persistence DB: 분석결과/환경설정 영구 저장. `MONGO_URL`, `MONGO_DB_NAME`
-- Preference: `user_preferences.database_settings`에 PostgreSQL 설정(host/port/user/password/dbname/table)
-- LLM 호출: `MCP_ANALYZER_URL` 설정 시 실제 호출, 미설정/실패 시 Mock 폴백
+- **PostgreSQL (Raw KPI Data)**: 실시간 KPI/PEG 데이터 저장 및 조회. 환경변수: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- **MongoDB (Backend Storage)**: 분석결과/사용자설정/통계결과 영구 저장. 환경변수: `MONGO_URL`, `MONGO_DB_NAME`
+- **Preference**: `user_preferences.database_settings`에 PostgreSQL 연결 설정 저장
+- **LLM 호출**: `MCP_ANALYZER_URL` 설정 시 실제 호출, 미설정/실패 시 Mock 폴백
 
 ## KPI Data Flow (Dashboard/Statistics)
 ```mermaid
@@ -26,12 +28,15 @@ sequenceDiagram
   participant U as "User"
   participant FE as "Frontend (React)"
   participant BE as "Backend (FastAPI)"
-  participant DB as "Query DB (PostgreSQL via Preference)"
+  participant PG as "PostgreSQL (Raw KPI Data)"
+  participant MG as "MongoDB (Backend Storage)"
 
   U->>FE: Select KPIs / Date Range / NE / CellID
   FE->>BE: POST /api/statistics/compare
-  BE->>DB: Query by Preference.database_settings
-  DB-->>BE: Rows/Aggregations
+  BE->>MG: Load DB config from user_preferences
+  BE->>PG: Query KPI data by loaded config
+  PG-->>BE: KPI Data Rows
+  BE->>MG: Save analysis results
   BE-->>FE: { data, summary }
   FE->>U: Render comparisons
 ```
@@ -41,24 +46,42 @@ sequenceDiagram
 sequenceDiagram
   participant FE as "Frontend"
   participant BE as "FastAPI"
-  participant Pref as "Preference.database_settings"
+  participant MG as "MongoDB (Backend Storage)"
+  participant PG as "PostgreSQL (Raw KPI Data)"
   participant MCP as "MCP Analyzer"
-  participant MDB as "MongoDB"
 
   FE->>BE: POST /api/analysis/trigger-llm-analysis { user_id, n_minus_1, n }
-  BE->>Pref: Load DB config by user_id (merge with request if provided)
+  BE->>MG: Load DB config from user_preferences
+  BE->>PG: Query KPI data using loaded config
   alt MCP URL set & reachable
-    BE->>MCP: HTTP analyze with effective DB config
-    MCP-->>BE: JSON analysis
+    BE->>MCP: HTTP analyze with KPI data
+    MCP-->>BE: JSON analysis result
   else Mock fallback
     BE->>BE: Generate mock result
   end
-  BE->>MDB: Save analysis_results
+  BE->>MG: Save analysis_results & metadata
   FE->>BE: GET /api/analysis/llm-analysis/{id}
-  BE-->>FE: Analysis result (includes source_metadata)
+  BE->>MG: Retrieve analysis result
+  BE-->>FE: Analysis result with source_metadata
 ```
 
 ## Key Endpoints (excerpt)
-- POST `/api/analysis/trigger-llm-analysis`: Preference 기반 DB 설정 자동 주입, MCP 우선/Mock 폴백
-- GET `/api/analysis/llm-analysis/{id}`: 단건 결과 조회
-- Preferences: `GET/PUT /api/preference/settings?user_id=...` (databaseSettings 포함)
+- **POST `/api/analysis/trigger-llm-analysis`**: MongoDB에서 사용자 설정 로드 → PostgreSQL에서 KPI 데이터 조회 → MCP 분석 실행 → MongoDB에 결과 저장
+- **GET `/api/analysis/llm-analysis/{id}`**: MongoDB에서 분석 결과 조회 (KPI 데이터는 PostgreSQL에서 실시간 조회)
+- **POST `/api/statistics/compare`**: MongoDB에서 설정 로드 → PostgreSQL에서 KPI 비교 분석 → MongoDB에 결과 저장
+- **Preferences**: `GET/PUT /api/preference/settings?user_id=...` (PostgreSQL 연결 설정을 MongoDB에 저장)
+
+## Database Architecture
+```mermaid
+graph TD
+  A["PostgreSQL (Raw KPI Data)"] --> B["Real-time KPI Queries"]
+  A --> C["Statistics Analysis"]
+  A --> D["LLM Analysis Input"]
+
+  E["MongoDB (Backend Storage)"] --> F["Analysis Results"]
+  E --> G["User Preferences"]
+  E --> H["Statistics Results"]
+  E --> I["System Metadata"]
+```
+
+*문서 업데이트: 2025-01-14 (PostgreSQL+KPI + MongoDB+Storage 구조 반영)*

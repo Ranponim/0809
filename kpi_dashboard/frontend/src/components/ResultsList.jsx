@@ -6,7 +6,7 @@
  * Task 40: Frontend LLM 분석 결과 목록 UI 컴포넌트 개발
  */
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 
@@ -30,20 +30,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog.jsx'
-import { 
-  Search, 
-  Filter, 
-  RefreshCcw, 
-  Trash2, 
+import {
+  Eye,
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  BarChart3,
   Download,
+  Filter,
+  RefreshCw,
+  RefreshCcw,
+  Trash2,
   Calendar,
   Loader2,
-  AlertCircle,
   ChevronDown,
-  X
+  X,
+  Search
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAnalysisResults } from '@/hooks/useAnalysisResults.js'
+import apiClient from '@/lib/apiClient.js'
 import ResultFilter from './ResultFilter.jsx'
 import ResultDetail from './ResultDetail.jsx'
 
@@ -238,6 +245,8 @@ const ResultsList = () => {
     })
   }, [])
 
+
+
   // === 데이터 내보내기 ===
   const handleExport = useCallback(() => {
     if (!sortedResults?.length) {
@@ -363,19 +372,21 @@ const ResultsList = () => {
             </>
           )}
           
-          <Button 
-            variant="outline" 
-            size="sm" 
+
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleExport}
             disabled={!sortedResults?.length}
           >
             <Download className="h-4 w-4 mr-2" />
             내보내기
           </Button>
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter className="h-4 w-4 mr-2" />
@@ -410,45 +421,82 @@ const ResultsList = () => {
       {/* 메인 컨텐츠 */}
       <Card>
         <CardContent className="p-0">
-          {/* 에러 상태 */}
+          {/* 에러 상태 (개선된 UX) */}
           {error && (
-            <div className="p-6 text-center">
-              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">데이터 로딩 오류</h3>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={refresh} variant="outline">
-                <RefreshCcw className="h-4 w-4 mr-2" />
-                다시 시도
-              </Button>
+            <div className="p-6 text-center border border-destructive/20 rounded-lg bg-destructive/5">
+              <div className="flex flex-col items-center">
+                <div className="relative mb-4">
+                  <AlertCircle className="h-12 w-12 text-destructive" />
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full animate-pulse"></div>
+                </div>
+                <h3 className="text-lg font-semibold mb-2 text-destructive">데이터 로딩 오류</h3>
+                <p className="text-muted-foreground mb-4 max-w-md">{error}</p>
+                <div className="flex gap-2">
+                  <Button onClick={refresh} variant="outline" size="sm">
+                    <RefreshCcw className="h-4 w-4 mr-2" />
+                    다시 시도
+                  </Button>
+                  <Button onClick={clearFilters} variant="ghost" size="sm">
+                    <X className="h-4 w-4 mr-2" />
+                    필터 초기화
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  문제가 지속되면 관리자에게 문의해주세요
+                </p>
+              </div>
             </div>
           )}
 
-          {/* 로딩 상태 */}
+          {/* 로딩 상태 (개선된 UX) */}
           {loading && isEmpty && (
             <div className="p-12 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">분석 결과를 불러오는 중...</p>
+              <div className="relative">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-pulse"></div>
+              </div>
+              <p className="text-muted-foreground mb-2">분석 결과를 불러오는 중...</p>
+              <p className="text-xs text-muted-foreground/70">잠시만 기다려주세요</p>
             </div>
           )}
 
-          {/* 빈 상태 */}
+          {/* 부분 로딩 상태 (더 많은 데이터 로딩 중) */}
+          {loading && !isEmpty && (
+            <div className="flex items-center justify-center py-4 border-t bg-muted/30">
+              <Loader2 className="h-4 w-4 animate-spin mr-2 text-primary" />
+              <span className="text-sm text-muted-foreground">더 많은 데이터를 불러오는 중...</span>
+            </div>
+          )}
+
+          {/* 빈 상태 (개선된 UX) */}
           {!loading && isEmpty && !error && (
             <div className="p-12 text-center">
-              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <div className="relative mb-6">
+                <Search className="h-12 w-12 text-muted-foreground mx-auto" />
+                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-16 h-1 bg-muted-foreground/20 rounded-full"></div>
+              </div>
               <h3 className="text-lg font-semibold mb-2">
-                {isFiltered ? '검색 결과가 없습니다' : '분석 결과가 없습니다'}
+                {isFiltered ? '🔍 검색 결과가 없습니다' : '📊 분석 결과가 없습니다'}
               </h3>
-              <p className="text-muted-foreground mb-4">
-                {isFiltered 
-                  ? '다른 조건으로 검색해보세요.' 
+              <p className="text-muted-foreground mb-6 max-w-md">
+                {isFiltered
+                  ? '현재 필터 조건에 맞는 분석 결과가 없습니다. 다른 조건으로 검색해보세요.'
                   : '아직 생성된 분석 결과가 없습니다.'}
               </p>
-              {isFiltered && (
-                <Button onClick={clearFilters} variant="outline">
-                  <X className="h-4 w-4 mr-2" />
-                  필터 초기화
-                </Button>
-              )}
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                {isFiltered ? (
+                  <>
+                    <Button onClick={clearFilters} variant="outline">
+                      <X className="h-4 w-4 mr-2" />
+                      필터 초기화
+                    </Button>
+                    <Button onClick={() => setShowFilters(true)} variant="default">
+                      <Filter className="h-4 w-4 mr-2" />
+                      필터 수정
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -614,4 +662,6 @@ const ResultsList = () => {
   )
 }
 
-export default ResultsList
+
+
+export default memo(ResultsList)

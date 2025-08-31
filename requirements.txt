@@ -11,3 +11,50 @@ pydantic>=2.0.0          # 데이터 검증 및 직렬화
 ipaddress                # IP 주소 검증 (Python 표준 라이브러리)
 validators>=0.20.0       # 추가 검증 함수 (호스트명, URL 등)
 dnspython>=2.3.0         # DNS 조회 및 호스트명 검증
+<<<<<<< HEAD
+
+# API 및 비동기 처리
+aiohttp>=3.9.0
+httpx>=0.25.0
+backoff>=2.2.1          # 재시도 로직
+tenacity>=8.2.0         # 견고성 향상
+
+# 로깅 및 모니터링
+structlog>=23.1.0
+loguru>=0.7.0
+sentry-sdk>=1.30.0
+
+# 데이터베이스 및 캐싱
+redis>=4.5.0
+sqlalchemy>=2.0.0
+
+# 보안 및 암호화
+cryptography>=41.0.0
+bcrypt>=4.0.0
+
+# 성능 및 최적화
+uvloop>=0.17.0
+gunicorn>=21.2.0
+uvicorn>=0.23.0
+# Note: uvloop는 Windows에서 지원되지 않음 - Linux에서만 사용
+# Note: gunicorn은 Windows에서 uvicorn으로 대체
+
+# 개발 및 테스트 도구
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# 머신러닝 및 데이터 분석
+scikit-learn>=1.3.0
+numpy>=1.24.0
+seaborn>=0.12.0
+plotly>=5.15.0
+
+# 문서화
+sphinx>=6.0.0
+sphinx-rtd-theme>=1.2.0
+=======
+>>>>>>> parent of 882294c (대시보드 및 분석 기능 개선)

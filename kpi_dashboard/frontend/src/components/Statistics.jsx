@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { BarChart3, TrendingUp } from 'lucide-react'
@@ -12,13 +12,17 @@ const Statistics = () => {
     settings: statisticsSettings,
   } = useStatisticsSettings()
 
-  // 설정에서 기본값 추출
-  const defaultDateRange = statisticsSettings.defaultDateRange || 7
-  const defaultNe = statisticsSettings.defaultNe || ''
-  const defaultCellId = statisticsSettings.defaultCellId || ''
-  const decimalPlaces = statisticsSettings.decimalPlaces || 2
-  const showComparisonOptions = statisticsSettings.showComparisonOptions !== false
-  const autoCalculateStats = statisticsSettings.autoCalculateStats !== false
+  // 설정에서 기본값 추출 (useMemo로 최적화)
+  const settings = useMemo(() => ({
+    defaultDateRange: statisticsSettings.defaultDateRange || 7,
+    defaultNe: statisticsSettings.defaultNe || '',
+    defaultCellId: statisticsSettings.defaultCellId || '',
+    decimalPlaces: statisticsSettings.decimalPlaces || 2,
+    showComparisonOptions: statisticsSettings.showComparisonOptions !== false,
+    autoCalculateStats: statisticsSettings.autoCalculateStats !== false
+  }), [statisticsSettings])
+
+  const { defaultDateRange, defaultNe, defaultCellId, decimalPlaces, showComparisonOptions, autoCalculateStats } = settings
 
   return (
     <div className="space-y-6">

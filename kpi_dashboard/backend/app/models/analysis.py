@@ -257,25 +257,45 @@ class AnalysisResultModel(AnalysisResultBase):
     def from_mongo(cls, data: dict):
         """
         MongoDB 문서를 AnalysisResultModel로 변환
-        
+
         Args:
             data: MongoDB에서 조회된 문서
-            
+
         Returns:
             AnalysisResultModel: 변환된 모델 인스턴스
         """
         if not data:
             return None
-        
-        # _id를 id로 변환
-        if "_id" in data:
-            data["id"] = data["_id"]
-            
-        # metadata 처리 - 없으면 기본값 생성
-        if "metadata" not in data:
-            data["metadata"] = AnalysisMetadata().model_dump()
-            
-        return cls(**data)
+
+        try:
+            # _id를 id로 변환
+            if "_id" in data:
+                data["id"] = data["_id"]
+
+            # metadata 처리 - 없으면 기본값 생성
+            if "metadata" not in data:
+                data["metadata"] = AnalysisMetadata().model_dump()
+
+            # 분석 결과가 없는 경우 빈 객체로 초기화
+            if "analysis_result" not in data:
+                data["analysis_result"] = None
+
+            # 권장사항이 없는 경우 빈 리스트로 초기화
+            if "recommendations" not in data:
+                data["recommendations"] = []
+
+            # 상태 필드가 없는 경우 기본값 설정
+            if "status" not in data:
+                data["status"] = "pending"
+
+            return cls(**data)
+
+        except Exception as e:
+            logger.error(f"AnalysisResultModel 변환 중 오류: {e}", extra={
+                "error_type": type(e).__name__,
+                "data_keys": list(data.keys()) if isinstance(data, dict) else "not_dict"
+            })
+            raise
 
 
 class AnalysisResultSummary(BaseModel):

@@ -40,7 +40,7 @@ COPY --from=build /app/dist .
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-EXPOSE 5173 80
+EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # === 프로덕션 런타임 ===
