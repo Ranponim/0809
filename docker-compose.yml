@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./kpi_dashboard/backend/postgres-init:/docker-entrypoint-initdb.d:ro
 
   mongo:
     image: mongo:7
@@ -22,7 +22,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./kpi_dashboard/backend
     image: kpi-backend:latest
     container_name: kpi-backend
     depends_on:
@@ -48,7 +48,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./kpi_dashboard/frontend
       target: runtime
       args:
         # 빌드 타임에 API 엔드포인트 주입 (Nginx 정적 배포)
