@@ -16,13 +16,15 @@
  * ```
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense, lazy } from 'react'
 import Layout from './components/Layout.jsx'
-import Dashboard from './components/Dashboard.optimized.jsx'
-import Statistics from './components/Statistics.jsx'
-import PreferenceManager from './components/PreferenceManager.jsx'
-import ResultsList from './components/ResultsList.jsx'
-import LLMAnalysisManager from './components/LLMAnalysisManager.jsx'
+
+// 큰 컴포넌트들을 lazy loading으로 로드
+const Dashboard = lazy(() => import('./components/Dashboard.optimized.jsx'))
+const Statistics = lazy(() => import('./components/Statistics.jsx'))
+const PreferenceManager = lazy(() => import('./components/PreferenceManager.jsx'))
+const ResultsList = lazy(() => import('./components/ResultsList.jsx'))
+const LLMAnalysisManager = lazy(() => import('./components/LLMAnalysisManager.jsx'))
 import { PreferenceProvider } from './contexts/PreferenceContext.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './App.css'
@@ -290,7 +292,14 @@ function App() {
     <ErrorBoundary>
       <PreferenceProvider>
         <Layout activeMenu={activeMenu} setActiveMenu={setActiveMenu}>
-          {renderContent()}
+          <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <span className="ml-2 text-gray-600">컴포넌트 로드 중...</span>
+            </div>
+          }>
+            {renderContent()}
+          </Suspense>
         </Layout>
       </PreferenceProvider>
     </ErrorBoundary>
