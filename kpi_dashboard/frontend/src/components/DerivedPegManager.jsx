@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
@@ -25,13 +25,30 @@ import {
   Database
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { SettingsSaveStatus } from './SettingsSaveStatus.jsx'
+import { usePreference as usePreferenceContext } from '@/contexts/PreferenceContext.jsx'
 
-const DerivedPegManager = ({ 
-  derivedPegSettings, 
-  updateDerivedPegSettings, 
+const DerivedPegManager = ({
+  derivedPegSettings,
+  updateDerivedPegSettings,
   availablePegs = [],
-  saving = false 
+  saving: savingProp = false,
+  dashboardSettings,
+  updateDashboardSettings
 }) => {
+  // 저장 상태 관리
+  const { saveSettings, hasUnsavedChanges, error: saveError, saving, lastSaved, settings: currentSettings } = usePreferenceContext()
+
+  // 로컬 저장 상태 (자동 저장용)
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState(lastSaved ? new Date(lastSaved) : null)
+
+  // 초기 로딩 시 마지막 저장 시간 설정
+  useEffect(() => {
+    if (lastSaved && !lastSavedAt) {
+      setLastSavedAt(new Date(lastSaved))
+    }
+  }, [lastSaved, lastSavedAt])
   // 상태 관리
   const [selectedFormula, setSelectedFormula] = useState(null)
   const [editingFormula, setEditingFormula] = useState(null)
@@ -42,11 +59,59 @@ const DerivedPegManager = ({
   // 기본 데이터
   const formulas = derivedPegSettings?.formulas || []
   const settings = derivedPegSettings?.settings || {
-    autoValidate: true,
-    showInDashboard: true,
-    showInStatistics: true,
+    autoValidate: false,
+    showInDashboard: false,
+    showInStatistics: false,
     evaluationPrecision: 4
   }
+
+  // 디버깅용 로그
+  useEffect(() => {
+    console.log('[DerivedPegManager] 현재 설정 상태:', {
+      formulasCount: formulas.length,
+      settings,
+      hasUnsavedChanges,
+      saving,
+      isAutoSaving,
+      lastSavedAt: lastSavedAt?.toISOString()
+    })
+  }, [formulas.length, settings, hasUnsavedChanges, saving, isAutoSaving, lastSavedAt])
+
+  // 자동 저장을 위한 useEffect (디바운싱 적용)
+  useEffect(() => {
+    const autoSave = async () => {
+      if (derivedPegSettings && Object.keys(derivedPegSettings).length > 0 && hasUnsavedChanges) {
+        setIsAutoSaving(true)
+        try {
+          // 직접 localStorage에 저장하여 비동기 상태 업데이트 문제 해결
+          const updatedSettings = {
+            ...currentSettings,
+            derivedPegSettings: derivedPegSettings
+          }
+
+          const STORAGE_KEY = 'kpi-dashboard-preferences'
+          const dataToSave = {
+            settings: updatedSettings,
+            lastSaved: new Date().toISOString(),
+            version: 1
+          }
+
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+          setLastSavedAt(new Date())
+          // 자동 저장 성공 시 토스트는 표시하지 않음 (사용자 경험 개선)
+        } catch (error) {
+          console.error('Auto-save failed:', error)
+          toast.error('자동 저장 실패: ' + error.message)
+        } finally {
+          setIsAutoSaving(false)
+        }
+      }
+    }
+
+    // 디바운싱 적용 (1초 지연)
+    const timeoutId = setTimeout(autoSave, 1000)
+    return () => clearTimeout(timeoutId)
+  }, [derivedPegSettings, currentSettings, hasUnsavedChanges])
 
   // 템플릿 정의
   const formulaTemplates = [
@@ -242,8 +307,10 @@ const DerivedPegManager = ({
   }
 
   // 수식 저장
-  const handleSaveFormula = () => {
+  const handleSaveFormula = async () => {
     if (!editingFormula) return
+
+    console.log('[handleSaveFormula] 저장 시작', { editingFormula })
 
     const validation = validateFormula(editingFormula.formula)
     if (!validation.isValid) {
@@ -258,40 +325,129 @@ const DerivedPegManager = ({
       updatedAt: new Date().toISOString()
     }
 
+    console.log('[handleSaveFormula] 업데이트된 수식', { updatedFormula })
+
     const existingIndex = formulas.findIndex(f => f.id === editingFormula.id)
     let updatedFormulas
 
     if (existingIndex >= 0) {
       updatedFormulas = [...formulas]
       updatedFormulas[existingIndex] = updatedFormula
+      console.log('[handleSaveFormula] 기존 수식 업데이트', { existingIndex, updatedFormula })
     } else {
       updatedFormulas = [...formulas, updatedFormula]
+      console.log('[handleSaveFormula] 새 수식 추가', { updatedFormula })
     }
 
-    updateDerivedPegSettings({
+    // 새로운 설정 객체 생성
+    const newDerivedSettings = {
       ...derivedPegSettings,
       formulas: updatedFormulas
-    })
+    }
 
-    setEditingFormula(null)
-    toast.success('수식이 저장되었습니다')
+    console.log('[handleSaveFormula] 새로운 설정', { newDerivedSettings })
+
+    // 설정 업데이트 (동기적으로 처리)
+    updateDerivedPegSettings(newDerivedSettings)
+
+    // Dashboard에 표시 설정이 활성화되어 있고 수식이 활성화된 경우 selectedPegs 업데이트
+    if (settings.showInDashboard && updatedFormula.active) {
+      const derivedPegName = updatedFormula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+      const currentSelectedPegs = dashboardSettings?.selectedPegs || []
+      if (!currentSelectedPegs.includes(derivedPegName)) {
+        console.log('[handleSaveFormula] Dashboard selectedPegs 업데이트', { derivedPegName })
+        updateDashboardSettings({
+          selectedPegs: [...currentSelectedPegs, derivedPegName]
+        })
+      }
+    }
+
+    // 즉시 localStorage에 저장 (비동기 상태 업데이트 문제 해결)
+    try {
+      console.log('[handleSaveFormula] 즉시 localStorage 저장 시작')
+
+      // 현재 설정 상태를 가져와서 새로운 값으로 업데이트
+      const updatedSettings = {
+        ...currentSettings,
+        derivedPegSettings: newDerivedSettings
+      }
+
+      // 직접 localStorage에 저장
+      const STORAGE_KEY = 'kpi-dashboard-preferences'
+      const dataToSave = {
+        settings: updatedSettings,
+        lastSaved: new Date().toISOString(),
+        version: 1
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+      console.log('[handleSaveFormula] localStorage에 직접 저장 완료', dataToSave)
+
+      // 저장 성공 후 편집 모드 종료
+      setEditingFormula(null)
+      setLastSavedAt(new Date())
+      toast.success('수식이 저장되었습니다')
+      console.log('[handleSaveFormula] 저장 성공 및 편집 모드 종료')
+
+    } catch (error) {
+      console.error('[handleSaveFormula] 저장 실패', error)
+      toast.error('저장 실패: ' + error.message)
+    }
   }
 
   // 수식 삭제
-  const handleDeleteFormula = (formulaId) => {
+  const handleDeleteFormula = async (formulaId) => {
+    const deletedFormula = formulas.find(f => f.id === formulaId)
     const updatedFormulas = formulas.filter(f => f.id !== formulaId)
+
     updateDerivedPegSettings({
       ...derivedPegSettings,
       formulas: updatedFormulas
     })
-    
-    if (selectedFormula === formulaId) {
+
+    // 삭제된 수식이 Dashboard에 표시되고 있었으면 selectedPegs에서 제거
+    if (deletedFormula && deletedFormula.active) {
+      const derivedPegName = deletedFormula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+      const currentSelectedPegs = dashboardSettings?.selectedPegs || []
+      const newSelectedPegs = currentSelectedPegs.filter(peg => peg !== derivedPegName)
+
+      if (newSelectedPegs.length !== currentSelectedPegs.length) {
+        updateDashboardSettings({
+          selectedPegs: newSelectedPegs
+        })
+      }
+    }
+
+        if (selectedFormula === formulaId) {
       setSelectedFormula(null)
     }
     if (editingFormula?.id === formulaId) {
       setEditingFormula(null)
     }
-    
+
+    // 즉시 localStorage에 저장
+    try {
+      const updatedSettings = {
+        ...currentSettings,
+        derivedPegSettings: {
+          ...derivedPegSettings,
+          formulas: updatedFormulas
+        }
+      }
+
+      const STORAGE_KEY = 'kpi-dashboard-preferences'
+      const dataToSave = {
+        settings: updatedSettings,
+        lastSaved: new Date().toISOString(),
+        version: 1
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+      setLastSavedAt(new Date())
+    } catch (error) {
+      console.error('Auto-save failed:', error)
+    }
+
     toast.success('수식이 삭제되었습니다')
   }
 
@@ -308,15 +464,104 @@ const DerivedPegManager = ({
     }
   }
 
+  // 테스트용 함수 (개발 중에만 사용)
+  const handleTestSaveState = () => {
+    console.log('[TEST] 현재 저장 상태:', {
+      derivedPegSettings,
+      hasUnsavedChanges,
+      saving,
+      isAutoSaving,
+      lastSavedAt,
+      settings
+    })
+    toast.info('콘솔에서 현재 상태를 확인하세요')
+  }
+
   return (
     <div className="space-y-6">
       {/* 헤더 및 설정 */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
-            Derived PEG 관리
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Derived PEG 관리
+              {isAutoSaving && (
+                <Badge variant="secondary" className="text-xs animate-pulse">
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  자동 저장 중...
+                </Badge>
+              )}
+            </CardTitle>
+            {lastSavedAt && (
+              <p className="text-xs text-muted-foreground mt-1">
+                마지막 저장: {lastSavedAt.toLocaleString('ko-KR')}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              {/* 저장 상태 표시 */}
+              <SettingsSaveStatus
+                position="inline"
+                variant="compact"
+                showToast={false}
+                className="mr-2"
+              />
+              {/* 수동 저장 버튼 */}
+              {(hasUnsavedChanges || saving || isAutoSaving) && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      // 직접 localStorage에 저장
+                      const updatedSettings = {
+                        ...currentSettings,
+                        derivedPegSettings: derivedPegSettings
+                      }
+
+                      const STORAGE_KEY = 'kpi-dashboard-preferences'
+                      const dataToSave = {
+                        settings: updatedSettings,
+                        lastSaved: new Date().toISOString(),
+                        version: 1
+                      }
+
+                      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+                      setLastSavedAt(new Date())
+                      toast.success('Derived PEG 설정이 저장되었습니다')
+                    } catch (error) {
+                      toast.error('저장 실패: ' + error.message)
+                    }
+                  }}
+                  disabled={saving || isAutoSaving}
+                  size="sm"
+                  className="h-8"
+                >
+                  {(saving || isAutoSaving) ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      저장 중...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3 w-3 mr-1" />
+                      저장
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* 테스트 버튼 (개발 중에만 표시) */}
+              {process.env.NODE_ENV === 'development' && (
+                <Button
+                  onClick={handleTestSaveState}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                >
+                  🔧 테스트
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -324,12 +569,33 @@ const DerivedPegManager = ({
               <Switch
                 id="auto-validate"
                 checked={settings.autoValidate}
-                onCheckedChange={(checked) => 
-                  updateDerivedPegSettings({
+                onCheckedChange={async (checked) => {
+                  const newSettings = {
                     ...derivedPegSettings,
                     settings: { ...settings, autoValidate: checked }
-                  })
-                }
+                  }
+                  updateDerivedPegSettings(newSettings)
+
+                  // 즉시 localStorage에 저장
+                  try {
+                    const updatedSettings = {
+                      ...currentSettings,
+                      derivedPegSettings: newDerivedSettings
+                    }
+
+                    const STORAGE_KEY = 'kpi-dashboard-preferences'
+                    const dataToSave = {
+                      settings: updatedSettings,
+                      lastSaved: new Date().toISOString(),
+                      version: 1
+                    }
+
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+                    setLastSavedAt(new Date())
+                  } catch (error) {
+                    console.error('Auto-save failed:', error)
+                  }
+                }}
               />
               <Label htmlFor="auto-validate">실시간 검증</Label>
             </div>
@@ -337,12 +603,63 @@ const DerivedPegManager = ({
               <Switch
                 id="show-dashboard"
                 checked={settings.showInDashboard}
-                onCheckedChange={(checked) => 
-                  updateDerivedPegSettings({
+                onCheckedChange={async (checked) => {
+                  // Derived PEG 설정 업데이트
+                  const newDerivedSettings = {
                     ...derivedPegSettings,
                     settings: { ...settings, showInDashboard: checked }
-                  })
-                }
+                  }
+                  updateDerivedPegSettings(newDerivedSettings)
+
+                  // Dashboard의 selectedPegs 업데이트
+                  if (checked) {
+                    // Dashboard에 표시할 때: 활성화된 Derived PEG들을 selectedPegs에 추가
+                    const activeDerivedPegs = formulas
+                      .filter(formula => formula.active)
+                      .map(formula => formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase())
+
+                    const currentSelectedPegs = dashboardSettings?.selectedPegs || []
+                    const newSelectedPegs = [...new Set([...currentSelectedPegs, ...activeDerivedPegs])]
+
+                    updateDashboardSettings({
+                      selectedPegs: newSelectedPegs
+                    })
+                  } else {
+                    // Dashboard에서 제거할 때: 모든 Derived PEG들을 selectedPegs에서 제거
+                    const activeDerivedPegs = formulas
+                      .filter(formula => formula.active)
+                      .map(formula => formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase())
+
+                    const currentSelectedPegs = dashboardSettings?.selectedPegs || []
+                    const newSelectedPegs = currentSelectedPegs.filter(peg =>
+                      !activeDerivedPegs.includes(peg)
+                    )
+
+                    updateDashboardSettings({
+                      selectedPegs: newSelectedPegs
+                    })
+                  }
+
+                  // 즉시 localStorage에 저장
+                  try {
+                    const updatedSettings = {
+                      ...currentSettings,
+                      derivedPegSettings: newDerivedSettings
+                    }
+
+                    const STORAGE_KEY = 'kpi-dashboard-preferences'
+                    const dataToSave = {
+                      settings: updatedSettings,
+                      lastSaved: new Date().toISOString(),
+                      version: 1
+                    }
+
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+                    setLastSavedAt(new Date())
+                  } catch (error) {
+                    console.error('Auto-save failed:', error)
+                  }
+                }}
               />
               <Label htmlFor="show-dashboard">Dashboard에 표시</Label>
             </div>
@@ -350,12 +667,33 @@ const DerivedPegManager = ({
               <Switch
                 id="show-statistics"
                 checked={settings.showInStatistics}
-                onCheckedChange={(checked) => 
-                  updateDerivedPegSettings({
+                onCheckedChange={async (checked) => {
+                  const newSettings = {
                     ...derivedPegSettings,
                     settings: { ...settings, showInStatistics: checked }
-                  })
-                }
+                  }
+                  updateDerivedPegSettings(newSettings)
+
+                  // 즉시 localStorage에 저장
+                  try {
+                    const updatedSettings = {
+                      ...currentSettings,
+                      derivedPegSettings: newDerivedSettings
+                    }
+
+                    const STORAGE_KEY = 'kpi-dashboard-preferences'
+                    const dataToSave = {
+                      settings: updatedSettings,
+                      lastSaved: new Date().toISOString(),
+                      version: 1
+                    }
+
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+                    setLastSavedAt(new Date())
+                  } catch (error) {
+                    console.error('Auto-save failed:', error)
+                  }
+                }}
               />
               <Label htmlFor="show-statistics">Statistics에 표시</Label>
             </div>
@@ -363,12 +701,33 @@ const DerivedPegManager = ({
               <Label>계산 정밀도</Label>
               <Select
                 value={settings.evaluationPrecision?.toString()}
-                onValueChange={(value) => 
-                  updateDerivedPegSettings({
+                onValueChange={async (value) => {
+                  const newSettings = {
                     ...derivedPegSettings,
                     settings: { ...settings, evaluationPrecision: parseInt(value) }
-                  })
-                }
+                  }
+                  updateDerivedPegSettings(newSettings)
+
+                  // 즉시 localStorage에 저장
+                  try {
+                    const updatedSettings = {
+                      ...currentSettings,
+                      derivedPegSettings: newDerivedSettings
+                    }
+
+                    const STORAGE_KEY = 'kpi-dashboard-preferences'
+                    const dataToSave = {
+                      settings: updatedSettings,
+                      lastSaved: new Date().toISOString(),
+                      version: 1
+                    }
+
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave))
+                    setLastSavedAt(new Date())
+                  } catch (error) {
+                    console.error('Auto-save failed:', error)
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -612,10 +971,37 @@ const DerivedPegManager = ({
                   <Switch
                     id="formula-active"
                     checked={editingFormula.active}
-                    onCheckedChange={(checked) => setEditingFormula({
-                      ...editingFormula,
-                      active: checked
-                    })}
+                    onCheckedChange={(checked) => {
+                      setEditingFormula({
+                        ...editingFormula,
+                        active: checked
+                      })
+
+                      // Dashboard에 표시 설정이 활성화되어 있는 경우 selectedPegs 업데이트
+                      if (settings.showInDashboard) {
+                        const derivedPegName = editingFormula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
+                        const currentSelectedPegs = dashboardSettings?.selectedPegs || []
+
+                        if (checked) {
+                          // 활성화: selectedPegs에 추가
+                          if (!currentSelectedPegs.includes(derivedPegName)) {
+                            updateDashboardSettings({
+                              selectedPegs: [...currentSelectedPegs, derivedPegName]
+                            })
+                          }
+                        } else {
+                          // 비활성화: selectedPegs에서 제거
+                          const newSelectedPegs = currentSelectedPegs.filter(peg => peg !== derivedPegName)
+                          if (newSelectedPegs.length !== currentSelectedPegs.length) {
+                            updateDashboardSettings({
+                              selectedPegs: newSelectedPegs
+                            })
+                          }
+                        }
+                      }
+
+                      // 자동 저장은 useEffect에서 처리
+                    }}
                   />
                   <Label htmlFor="formula-active">수식 활성화</Label>
                 </div>

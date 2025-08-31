@@ -24,6 +24,10 @@ const Dashboard = () => {
     error: settingsError
   } = useDashboardSettings()
 
+  // Derived PEG 설정 가져오기
+  const { settings: allSettings } = usePreference()
+  const derivedPegSettings = allSettings?.derivedPegSettings || {}
+
   // 하드코딩된 KPI 제거: 실제 설정(선택된 PEG)만 사용 - 안전한 접근
   const selectedPegs = Array.isArray(dashboardSettings?.selectedPegs) ? dashboardSettings.selectedPegs : []
   // Preference > Statistics의 데이터 선택 반영
@@ -70,16 +74,87 @@ const Dashboard = () => {
       const end = new Date()
       const start = new Date(end.getTime() - (dashboardSettings?.defaultHours || 1) * 60 * 60 * 1000)
 
+      // 기본 PEG만 API로 요청 (Derived PEG 제외)
+      const basicPegs = selectedPegs.filter(peg =>
+        !derivedPegSettings.formulas?.some(formula =>
+          formula.active && formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() === peg
+        )
+      )
+
       const response = await apiClient.post('/api/kpi/timeseries', {
-        kpi_types: selectedPegs,
+        kpi_types: basicPegs,
         ne: selectedNEs,
         cellid: selectedCellIds,
         start: start.toISOString(),
         end: end.toISOString()
       })
 
-      const dataByKpi = response?.data?.data || {}
-      
+      let dataByKpi = response?.data?.data || {}
+
+      // Derived PEG 계산 및 추가
+      if (derivedPegSettings.formulas && derivedPegSettings.formulas.length > 0) {
+        const activeDerivedPegs = selectedPegs.filter(peg =>
+          derivedPegSettings.formulas.some(formula =>
+            formula.active && formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() === peg
+          )
+        )
+
+        if (activeDerivedPegs.length > 0) {
+          console.log('[Dashboard] Derived PEG 계산 시작', {
+            activeDerivedPegs,
+            availableBaseData: Object.keys(dataByKpi)
+          })
+
+          // 각 타임스탬프별로 Derived PEG 계산
+          const derivedPegData = {}
+
+          // 기본 데이터의 타임스탬프 구조 파악 (첫 번째 기본 PEG 사용)
+          const firstBasicPeg = Object.keys(dataByKpi)[0]
+          if (firstBasicPeg && dataByKpi[firstBasicPeg]) {
+            dataByKpi[firstBasicPeg].forEach((row, index) => {
+              const timestamp = row.timestamp
+              const entityId = row.entity_id
+
+              // 해당 타임스탬프의 모든 기본 PEG 값 수집
+              const pegValues = {}
+              Object.keys(dataByKpi).forEach(pegKey => {
+                const pegData = dataByKpi[pegKey]
+                if (pegData && pegData[index] && pegData[index].entity_id === entityId) {
+                  pegValues[pegKey] = pegData[index].value
+                }
+              })
+
+              // Derived PEG 계산
+              const calculatedDerivedPegs = calculateAllDerivedPegs(
+                derivedPegSettings.formulas,
+                pegValues,
+                derivedPegSettings.settings?.evaluationPrecision || 4
+              )
+
+              // 계산된 Derived PEG을 데이터에 추가
+              Object.entries(calculatedDerivedPegs).forEach(([derivedPegKey, value]) => {
+                if (!derivedPegData[derivedPegKey]) {
+                  derivedPegData[derivedPegKey] = []
+                }
+                derivedPegData[derivedPegKey].push({
+                  timestamp: timestamp,
+                  entity_id: entityId,
+                  value: value
+                })
+              })
+            })
+          }
+
+          // Derived PEG 데이터를 기본 데이터에 병합
+          dataByKpi = { ...dataByKpi, ...derivedPegData }
+
+          console.log('[Dashboard] Derived PEG 계산 완료', {
+            addedDerivedPegs: Object.keys(derivedPegData),
+            totalKpiCount: Object.keys(dataByKpi).length
+          })
+        }
+      }
+
       setKpiData(dataByKpi)
       setLastRefresh(new Date())
       

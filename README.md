@@ -13,7 +13,7 @@
 네트워크 KPI 대시보드(React + FastAPI)와 셀 성능 LLM 분석기(MCP)를 함께 제공하는 저장소입니다.
 
 - 백엔드: FastAPI 기반 KPI/리포트/Preference API, MongoDB 영구 저장 사용 (`MONGO_URL`, `MONGO_DB_NAME`)
-- 프론트엔드: Vite + React, Dashboard/Statistics/AdvancedChart/Preference UI 제공
+- 프론트엔드: Vite + React, Dashboard/Statistics/AdvancedChart/Preference UI 제공, 고급 LLM 분석 결과 뷰어 포함
 - 분석기: `analysis_llm.py` MCP 서버, 두 기간(N-1/N) 비교·시각화·LLM 종합 분석/HTML 리포트
 
 빠르게 시작하려면 아래 문서를 참고하세요.

@@ -481,7 +481,7 @@ const ResultsList = () => {
               <p className="text-muted-foreground mb-6 max-w-md">
                 {isFiltered
                   ? '현재 필터 조건에 맞는 분석 결과가 없습니다. 다른 조건으로 검색해보세요.'
-                  : '아직 생성된 분석 결과가 없습니다.'}
+                  : ''}
               </p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 {isFiltered ? (

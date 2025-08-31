@@ -8,13 +8,14 @@ import { Label } from '@/components/ui/label.jsx'
 import SettingBox from './SettingBox.jsx'
 import ImportExportBox from './ImportExportBox.jsx'
 import DerivedPegManager from './DerivedPegManager.jsx'
-import { usePreference } from '@/hooks/usePreference.js'
+import { usePreference, useDashboardSettings } from '@/hooks/usePreference.js'
 import apiClient from '@/lib/apiClient.js'
 import { formatPegOptionsForUI } from '@/lib/derivedPegUtils.js'
 import { CardDescription } from '@/components/ui/card.jsx'
 
 const PreferenceManager = () => {
   const { settings, isLoading, isSaving, error, lastSaved, updateSettings, saveSettings, resetSettings } = usePreference()
+  const { settings: dashboardSettings, updateSettings: updateDashboardSettings } = useDashboardSettings()
   
   // DB PEG 관련 상태
   const [dbPegOptions, setDbPegOptions] = useState([])
@@ -567,7 +568,15 @@ const PreferenceManager = () => {
 
         <TabsContent value="derived-peg" className="space-y-6">
           <DerivedPegManager
-            derivedPegSettings={settings?.derivedPegSettings || { formulas: [], settings: {} }}
+            derivedPegSettings={settings?.derivedPegSettings || {
+              formulas: [],
+              settings: {
+                autoValidate: false,
+                showInDashboard: false,
+                showInStatistics: false,
+                evaluationPrecision: 4
+              }
+            }}
             updateDerivedPegSettings={(newSettings) => {
               updateSettings({
                 derivedPegSettings: newSettings
@@ -575,6 +584,8 @@ const PreferenceManager = () => {
             }}
             availablePegs={getCurrentPegOptions()}
             saving={isSaving}
+            dashboardSettings={dashboardSettings}
+            updateDashboardSettings={updateDashboardSettings}
           />
         </TabsContent>
 

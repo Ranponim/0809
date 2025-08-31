@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Settings, BarChart3 } from 'lucide-react'
 import apiClient from '@/lib/apiClient.js'
 import { useDashboardSettings, usePreference } from '@/hooks/usePreference.js'
+import { calculateAllDerivedPegs } from '@/lib/derivedPegUtils.js'
 
 // 분리된 컴포넌트들 import
 import DashboardHeader from './DashboardHeader.jsx'
@@ -105,6 +106,7 @@ const Dashboard = () => {
   } = useDashboardSettings()
 
   const { settings: pref = {} } = usePreference()
+  const derivedPegSettings = pref?.derivedPegSettings || {}
 
   // 안전한 설정 값 추출
   const selectedPegs = useMemo(() => {
@@ -371,8 +373,80 @@ const Dashboard = () => {
           dataKeys: time2Response?.data ? Object.keys(time2Response.data) : []
         })
 
-        const time1Data = time1Response?.data?.data || {}
-        const time2Data = time2Response?.data?.data || {}
+        let time1Data = time1Response?.data?.data || {}
+        let time2Data = time2Response?.data?.data || {}
+
+        // Derived PEG 계산을 위한 헬퍼 함수
+        const calculateDerivedPegsForDataset = (baseData, timeLabel) => {
+          if (!derivedPegSettings.formulas || derivedPegSettings.formulas.length === 0) {
+            return baseData
+          }
+
+          const activeDerivedPegs = safeSelectedPegs.filter(peg =>
+            derivedPegSettings.formulas.some(formula =>
+              formula.active && formula.name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() === peg
+            )
+          )
+
+          if (activeDerivedPegs.length === 0) {
+            return baseData
+          }
+
+          console.log(`[Dashboard] ${timeLabel} Derived PEG 계산 시작`, {
+            activeDerivedPegs,
+            availableBaseData: Object.keys(baseData)
+          })
+
+          const derivedPegData = {}
+          const firstBasicPeg = Object.keys(baseData)[0]
+
+          if (firstBasicPeg && baseData[firstBasicPeg]) {
+            baseData[firstBasicPeg].forEach((row, index) => {
+              const timestamp = row.timestamp
+              const entityId = row.entity_id
+
+              // 해당 타임스탬프의 모든 기본 PEG 값 수집
+              const pegValues = {}
+              Object.keys(baseData).forEach(pegKey => {
+                const pegData = baseData[pegKey]
+                if (pegData && pegData[index] && pegData[index].entity_id === entityId) {
+                  pegValues[pegKey] = pegData[index].value
+                }
+              })
+
+              // Derived PEG 계산
+              const calculatedDerivedPegs = calculateAllDerivedPegs(
+                derivedPegSettings.formulas,
+                pegValues,
+                derivedPegSettings.settings?.evaluationPrecision || 4
+              )
+
+              // 계산된 Derived PEG을 데이터에 추가
+              Object.entries(calculatedDerivedPegs).forEach(([derivedPegKey, value]) => {
+                if (!derivedPegData[derivedPegKey]) {
+                  derivedPegData[derivedPegKey] = []
+                }
+                derivedPegData[derivedPegKey].push({
+                  timestamp: timestamp,
+                  entity_id: entityId,
+                  value: value
+                })
+              })
+            })
+          }
+
+          const resultData = { ...baseData, ...derivedPegData }
+          console.log(`[Dashboard] ${timeLabel} Derived PEG 계산 완료`, {
+            addedDerivedPegs: Object.keys(derivedPegData),
+            totalKpiCount: Object.keys(resultData).length
+          })
+
+          return resultData
+        }
+
+        // Time1과 Time2에 대해 Derived PEG 계산 적용
+        time1Data = calculateDerivedPegsForDataset(time1Data, 'Time1')
+        time2Data = calculateDerivedPegsForDataset(time2Data, 'Time2')
 
         // Time2 데이터 상세 로깅
         const targetKpiKey = safeSelectedPegs[0] || 'randomaccessproblem'
@@ -458,9 +532,12 @@ const Dashboard = () => {
 
         const response = await apiClient.post('/api/kpi/timeseries', generalParams)
 
-      const dataByKpi = response?.data?.data || {}
+        let dataByKpi = response?.data?.data || {}
 
-      setKpiData(dataByKpi)
+        // 일반 모드에서도 Derived PEG 계산 적용
+        dataByKpi = calculateDerivedPegsForDataset(dataByKpi, '일반 모드')
+
+        setKpiData(dataByKpi)
         setTime2Data(null)
       
         logDashboard('info', '일반 모드 데이터 fetching 완료', {

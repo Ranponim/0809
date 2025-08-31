@@ -135,7 +135,17 @@ export const createDefaultSettings = () => {
     // PEG 설정
     pegConfigurations: [],
     // 통계 설정
-    statisticsConfigurations: []
+    statisticsConfigurations: [],
+    // Derived PEG 설정
+    derivedPegSettings: {
+      formulas: [],
+      settings: {
+        autoValidate: false,
+        showInDashboard: false,
+        showInStatistics: false,
+        evaluationPrecision: 4
+      }
+    }
   }
   
   logPreference('info', '기본 설정값 생성 완료', {
