@@ -1,0 +1,8 @@
+warning: in the working copy of 'kpi_dashboard/docs/docker-local-deployment.md', LF will be replaced by CRLF the next time Git touches it
+kpi_dashboard/docs/architecture.md
+kpi_dashboard/docs/docker-local-deployment.md
+kpi_dashboard/docs/e2e-test-cases-enhanced.md
+kpi_dashboard/docs/e2e-test-cases.md
+kpi_dashboard/docs/frontend.md
+kpi_dashboard/docs/llm-analysis-integration.md
+kpi_dashboard/docs/llm-payload-schema.md
