@@ -616,5 +616,3 @@ export default TrendAnalysis
 
 
 
-
-

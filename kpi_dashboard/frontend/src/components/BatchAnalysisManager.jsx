@@ -718,5 +718,3 @@ export default BatchAnalysisManager
 
 
 
-
-
