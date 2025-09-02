@@ -1382,7 +1382,10 @@ def post_results_to_backend(url: str, payload: dict, timeout: int = 15) -> Optio
             # 수치형: 넘파이 포함을 float()로 흡수
             if isinstance(value, (int, float)):
                 return value if math.isfinite(float(value)) else None
-            # 기타 타입: 넘파이 스칼라 등은 float() 시도
+            # 문자열 타입은 float 변환하지 않음 (cellid, ne 등 ID 값 보존)
+            if isinstance(value, str):
+                return value
+            # 기타 타입: 넘파이 스칼라 등은 float() 시도 (단, 문자열 제외)
             try:
                 f = float(value)  # numpy.float64 등
                 return f if math.isfinite(f) else None
