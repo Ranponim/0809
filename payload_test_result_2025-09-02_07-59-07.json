@@ -1,0 +1,132 @@
+{
+  "timestamp": "2025-09-02_07-59-07",
+  "test_result": {
+    "status": "error",
+    "message": "요청 타임아웃"
+  },
+  "payload_used": {
+    "analysis_type": "llm_analysis",
+    "analysisDate": "2025-09-02T07:58:46.914860+09:00",
+    "neId": "nvgnb#10000",
+    "cellId": "2010",
+    "status": "success",
+    "report_path": "./analysis_output/Cell_Analysis_Report_2025-08-15_14-30.html",
+    "results": [],
+    "stats": [
+      {
+        "period": "N-1",
+        "kpi_name": "Random_access_preamble_count",
+        "avg": 1250.5,
+        "std": 45.2,
+        "min": 1100.0,
+        "max": 1400.0,
+        "count": 1440
+      },
+      {
+        "period": "N-1",
+        "kpi_name": "Random_access_response",
+        "avg": 1200.8,
+        "std": 38.7,
+        "min": 1050.0,
+        "max": 1350.0,
+        "count": 1440
+      },
+      {
+        "period": "N",
+        "kpi_name": "Random_access_preamble_count",
+        "avg": 1180.3,
+        "std": 42.1,
+        "min": 1000.0,
+        "max": 1300.0,
+        "count": 1440
+      },
+      {
+        "period": "N",
+        "kpi_name": "Random_access_response",
+        "avg": 1150.6,
+        "std": 35.9,
+        "min": 980.0,
+        "max": 1250.0,
+        "count": 1440
+      }
+    ],
+    "analysis": {
+      "executive_summary": "N-1과 N 기간 동안의 셀 성능 분석 결과입니다. RACH 성공률에 약간의 감소가 관찰되었으나 전체적으로 안정적인 성능을 유지하고 있습니다.",
+      "diagnostic_findings": [
+        {
+          "primary_hypothesis": "트래픽 증가로 인한 RACH 부하 증가",
+          "supporting_evidence": "N 기간의 preamble count가 N-1에 비해 약 5.6% 감소하였으나, response 또한 비례적으로 감소하여 성공률은 유지됨",
+          "confounding_factors_assessment": "동일한 시험환경 가정 하에 트래픽 증가가 가장 가능성이 높은 원인으로 판단됨"
+        }
+      ],
+      "recommended_actions": [
+        {
+          "priority": "P2",
+          "action": "RACH 파라미터 최적화 검토",
+          "details": "preambleFormat, ra-ResponseWindowSize 등 파라미터 조정 검토"
+        }
+      ],
+      "assumptions": {
+        "same_environment": true
+      },
+      "source_metadata": {
+        "db_config": {
+          "host": "127.0.0.1",
+          "port": 5432,
+          "user": "postgres",
+          "dbname": "netperf"
+        },
+        "table": "summary",
+        "columns": {
+          "time": "datetime",
+          "peg_name": "peg_name",
+          "value": "value"
+        },
+        "ne_id": "nvgnb#10000",
+        "cell_id": "2010"
+      }
+    },
+    "resultsOverview": {
+      "summary": "N-1과 N 기간의 PEG 데이터를 분석한 결과입니다.",
+      "key_findings": [
+        "RACH preamble count: 5.6% 감소",
+        "RACH response: 4.2% 감소",
+        "전체 성공률: 안정적 유지"
+      ],
+      "recommended_actions": [
+        "RACH 파라미터 모니터링 강화",
+        "트래픽 패턴 분석",
+        "필요시 파라미터 튜닝"
+      ]
+    },
+    "analysisRawCompact": {
+      "executive_summary": "압축된 분석 요약...",
+      "key_metrics": {
+        "rach_success_rate": 96.5,
+        "total_samples": 2880
+      }
+    },
+    "request_params": {
+      "n_minus_1": "2025-08-14_00:00~2025-08-14_23:59",
+      "n": "2025-08-15_00:00~2025-08-15_23:59",
+      "output_dir": "./analysis_output",
+      "db": {
+        "host": "127.0.0.1",
+        "port": 5432,
+        "user": "postgres",
+        "password": "****",
+        "dbname": "netperf"
+      },
+      "table": "summary",
+      "columns": {
+        "time": "datetime",
+        "peg_name": "peg_name",
+        "value": "value"
+      },
+      "preference": "Random_access_preamble_count,Random_access_response",
+      "peg_definitions": {
+        "telus_RACH_Success": "Random_access_preamble_count/Random_access_response*100"
+      }
+    }
+  }
+}

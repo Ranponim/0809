@@ -1494,7 +1494,10 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             cellid_filters = to_list(cell_raw)
             host_filters = to_list(host_raw)
 
-            logging.info("입력 필터: ne=%s, cellid=%s, host=%s", ne_filters, cellid_filters, host_filters)
+            logging.info("입력 필터: ne=%s (type: %s), cellid=%s (type: %s), host=%s (type: %s)",
+                        ne_filters, [type(x).__name__ for x in ne_filters] if ne_filters else '[]',
+                        cellid_filters, [type(x).__name__ for x in cellid_filters] if cellid_filters else '[]',
+                        host_filters, [type(x).__name__ for x in host_filters] if host_filters else '[]')
 
             n1_df = fetch_cell_averages_for_period(conn, table, columns, n1_start, n1_end, "N-1", ne_filters=ne_filters, cellid_filters=cellid_filters, host_filters=host_filters)
             n_df = fetch_cell_averages_for_period(conn, table, columns, n_start, n_end, "N", ne_filters=ne_filters, cellid_filters=cellid_filters, host_filters=host_filters)
@@ -1698,9 +1701,11 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             "peg_definitions": request.get("peg_definitions")
         }
 
-        # 대표 ne/cell ID (없으면 ALL)
-        ne_id_repr = ne_filters[0] if ne_filters else "ALL"
-        cell_id_repr = cellid_filters[0] if cellid_filters else "ALL"
+        # 대표 ne/cell ID (없으면 ALL) - 명시적 string 변환으로 타입 보장
+        ne_id_repr = str(ne_filters[0]).strip() if ne_filters else "ALL"
+        cell_id_repr = str(cellid_filters[0]).strip() if cellid_filters else "ALL"
+        logging.info("대표 ID 설정: ne_id_repr=%s (type: %s), cell_id_repr=%s (type: %s)",
+                    ne_id_repr, type(ne_id_repr).__name__, cell_id_repr, type(cell_id_repr).__name__)
 
         # 분석 섹션에 LLM 결과 + 차트/가정/원본 메타 포함
         analysis_section = {
@@ -1723,13 +1728,13 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
             max_array=int(request.get('max_raw_array', DEFAULT_MAX_RAW_ARRAY)),
         )
 
-        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId)
+        # 최종 payload (모델 alias를 사용: analysisDate, neId, cellId) - 타입 보장
         result_payload = {
             # 서버 Pydantic 모델은 by_alias=False로 저장하므로 snake_case 보장
             "analysis_type": "llm_analysis",
             "analysisDate": datetime.datetime.now(tz=_get_default_tzinfo()).isoformat(),
-            "neId": ne_id_repr,
-            "cellId": cell_id_repr,
+            "neId": str(ne_id_repr).strip() if ne_id_repr != "ALL" else "ALL",
+            "cellId": str(cell_id_repr).strip() if cell_id_repr != "ALL" else "ALL",
             "status": "success",
             "report_path": report_path,
             "results": [],
@@ -1747,7 +1752,10 @@ def _analyze_cell_performance_logic(request: dict) -> dict:
                 logging.warning("payload 크기 1MB 초과: %dB", payload_size)
         except Exception as _e:
             logging.warning("payload 크기 계산 실패: %s", _e)
-        logging.info("payload 준비 완료: stats_rows=%d", len(result_payload.get("stats", [])))
+        logging.info("payload 준비 완료: stats_rows=%d, neId=%s (type: %s), cellId=%s (type: %s)",
+                    len(result_payload.get("stats", [])),
+                    result_payload.get("neId"), type(result_payload.get("neId")).__name__,
+                    result_payload.get("cellId"), type(result_payload.get("cellId")).__name__)
 
         backend_response = None
         if backend_url:

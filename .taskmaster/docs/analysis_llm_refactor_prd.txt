@@ -1,0 +1,500 @@
+<context>
+# Overview
+analysis_llm.py 리팩토링 프로젝트는 MCP 기반 셀 성능 LLM 분석기를 보다 효율적이고 유지보수하기 쉬운 코드베이스로 개선하는 것을 목표로 합니다. 현재 1800줄 이상의 단일 파일에서 복잡한 로직이 혼재되어 있어 코드 가독성과 유지보수성이 저하되어 있습니다.
+
+## 해결하는 문제
+- 단일 파일에 1800줄 이상의 코드가 집중되어 있어 가독성과 유지보수성이 저하됨
+- 중복된 유틸리티 함수들이 여러 곳에 분산되어 있어 일관성 없는 동작 발생
+- 토큰 계산 로직이 복잡하고 비효율적
+- 마크다운 입력에서 '~' 구분자가 취소선으로 인식되어 가독성 저하
+- 구 버전 스키마 호환성 코드가 불필요하게 남아 있어 코드 복잡도 증가
+- HTML 생성 로직이 메인 분석 로직과 결합되어 있어 분리 필요
+
+## 대상 사용자
+- **개발자**: 코드 유지보수 및 기능 확장을 담당하는 개발팀
+- **운영팀**: 시스템 안정성과 성능 모니터링을 담당
+- **품질관리팀**: 코드 품질과 표준 준수를 검토
+
+## 가치 제안
+- 코드 모듈성 향상으로 유지보수성 및 확장성 개선
+- 불필요한 코드 제거로 성능 향상
+- 일관된 로깅과 주석으로 디버깅 및 문제 해결 시간 단축
+- 유연한 입력 처리로 사용자 경험 개선
+
+# Core Features
+
+## 1. 코드 구조 최적화
+- **모듈 분리**: 단일 파일을 기능별로 분리하여 모듈화
+- **중복 제거**: 공통 유틸리티 함수들을 통합하여 일관성 확보
+- **성능 개선**: 불필요한 연산 제거 및 효율적인 알고리즘 적용
+
+## 2. 토큰 계산 간소화
+- **간단한 토큰 계산**: 복잡한 휴리스틱 대신 간단한 토큰 수 추정
+- **메모리 효율성**: 대용량 텍스트 처리 시 메모리 사용 최적화
+
+## 3. 유연한 입력 처리
+- **범위 구분자 유연화**: '-', '/', '_' 입력을 '~'로 자동 변환
+- **입력 검증 강화**: 다양한 입력 형식에 대한 포괄적 검증
+
+## 4. 코드 품질 향상
+- **포괄적 주석**: 모든 함수와 주요 로직에 상세한 주석 추가
+- **단계별 로깅**: 분석 과정의 각 단계에 상세한 로그 기록
+- **에러 처리 개선**: 명확한 에러 메시지와 복구 메커니즘
+
+# User Experience
+
+## 주요 페르소나
+- **백엔드 개발자**: API 개발 및 데이터베이스 연동 담당
+- **DevOps 엔지니어**: 배포 및 모니터링 시스템 관리
+- **QA 엔지니어**: 테스트 케이스 작성 및 품질 검증
+
+## 주요 워크플로우
+1. **코드 분석**: 현재 코드베이스 구조 및 의존성 분석
+2. **모듈 설계**: 기능별 모듈 분리 및 인터페이스 설계
+3. **리팩토링 구현**: 단계별 코드 개선 및 최적화
+4. **테스트 검증**: 각 모듈의 기능 및 성능 검증
+5. **배포 및 모니터링**: 개선된 코드의 안정적 배포
+
+## UX 고려사항
+- **명확한 인터페이스**: 모듈 간 명확한 책임 분리
+- **확장성**: 새로운 기능 추가가 용이한 구조
+- **안정성**: 변경사항이 기존 기능에 미치는 영향 최소화
+</context>
+<PRD>
+# Technical Architecture
+
+## 시스템 구성 요소
+### 현재 구조
+```
+analysis_llm.py (1800+ lines)
+├── MCP 서버 설정
+├── 데이터베이스 연결
+├── 데이터 집계 로직
+├── LLM 분석 프롬프트 생성
+├── HTML 리포트 생성
+├── 유틸리티 함수들
+└── 에러 처리
+```
+
+### 목표 구조
+```
+analysis_llm/
+├── __init__.py
+├── __main__.py                 # 메인 진입점 (MCP 서버 실행)
+├── core/
+│   ├── mcp_server.py          # MCP 서버 인스턴스 및 설정
+│   ├── database.py             # DB 연결 및 쿼리
+│   ├── data_processor.py       # 데이터 집계 및 처리
+│   └── analyzer.py             # LLM 분석 로직 및 도구 함수
+├── utils/
+│   ├── tokenizer.py            # 토큰 계산 유틸리티
+│   ├── validators.py           # 입력 검증 유틸리티
+│   │   ├── validate_ne_cell_host_filters() # 강화된 검증 로직
+│   │   └── TargetFilters 클래스
+│   ├── compressors.py          # 데이터 압축 유틸리티
+│   │   ├── _compact_value()     # 재귀적 데이터 압축
+│   │   ├── compact_analysis_raw() # LLM 결과 압축
+│   │   └── build_results_overview() # 결과 요약 생성
+│   ├── formatters.py           # 출력 포맷터
+│   └── host_enhancement.py     # Host 진단 컨텍스트 유틸리티
+│       ├── create_host_diagnostic_context()
+│       ├── enhance_llm_prompt_with_host_context()
+│       └── enhance_result_payload_with_host_metadata()
+├── generators/
+│   ├── html_generator.py       # HTML 리포트 생성기
+│   └── prompt_generator.py     # LLM 프롬프트 생성기
+├── config/
+│   └── settings.py             # 설정 및 상수
+└── logging/
+    └── logger.py               # 로깅 설정
+```
+
+### MCP 서버 설정 방법
+
+#### 1. 메인 진입점 (__main__.py)
+```python
+# analysis_llm/__main__.py
+from analysis_llm.core.mcp_server import create_mcp_server
+from analysis_llm.core.analyzer import register_analysis_tools
+
+def main():
+    # MCP 서버 생성
+    mcp = create_mcp_server()
+
+    # 분석 도구 등록
+    register_analysis_tools(mcp)
+
+    # 서버 실행 (현재와 동일하게 stdio 모드)
+    mcp.run(transport="stdio")
+
+if __name__ == "__main__":
+    main()
+```
+
+#### 2. MCP 서버 모듈 (core/mcp_server.py)
+```python
+# analysis_llm/core/mcp_server.py
+from fastmcp import FastMCP
+
+def create_mcp_server() -> FastMCP:
+    """MCP 서버 인스턴스 생성"""
+    return FastMCP(name="Cell LLM 종합 분석기")
+
+def setup_server_config(mcp: FastMCP) -> None:
+    """서버 설정 및 초기화"""
+    # 로깅 설정, 환경 변수 등
+    pass
+```
+
+#### 3. 분석기 모듈 (core/analyzer.py)
+```python
+# analysis_llm/core/analyzer.py
+from fastmcp import FastMCP
+from .database import DatabaseManager
+from .data_processor import DataProcessor
+from ..generators.prompt_generator import PromptGenerator
+
+def register_analysis_tools(mcp: FastMCP) -> None:
+    """MCP 서버에 분석 도구들을 등록"""
+
+    @mcp.tool
+    def analyze_cell_performance_with_llm(request: dict) -> dict:
+        """시간 범위 기반 통합 셀 성능 분석 실행"""
+        return _analyze_cell_performance_logic(request)
+
+def _analyze_cell_performance_logic(request: dict) -> dict:
+    """메인 분석 로직 (현재 _analyze_cell_performance_logic와 유사)"""
+    # 데이터베이스 연결
+    db_manager = DatabaseManager()
+    # 데이터 처리
+    processor = DataProcessor()
+    # 프롬프트 생성
+    prompt_gen = PromptGenerator()
+
+    # 분석 실행...
+    pass
+```
+
+#### 4. 실행 방법
+```bash
+# 리팩토링 전: 단일 파일 실행
+python analysis_llm.py
+
+# 리팩토링 후: 패키지로 실행 (동일한 인터페이스 유지)
+python -m analysis_llm
+
+# 또는 직접 실행
+python analysis_llm/__main__.py
+```
+
+### 핵심 유지사항
+- ✅ **실행 인터페이스 동일**: `python -m analysis_llm`으로 실행 가능
+- ✅ **MCP 프로토콜 유지**: stdio 전송 방식 그대로 사용
+- ✅ **도구 인터페이스 유지**: `@mcp.tool` 데코레이터 사용 방식 동일
+- ✅ **CLI 모드 지원**: `--request` 옵션 등 기존 CLI 기능 유지
+
+### 모듈별 역할 및 의존성
+```
+analysis_llm/
+├── __main__.py              # 메인 진입점 - 서버 실행
+├── core/
+│   ├── mcp_server.py       # MCP 인스턴스 생성/설정
+│   ├── database.py          # DB 연결 관리 (psycopg2)
+│   ├── data_processor.py    # 데이터 집계/처리 (pandas)
+│   └── analyzer.py          # LLM 분석 로직 + 도구 등록
+├── utils/
+│   ├── tokenizer.py         # 토큰 계산 (단순화)
+│   ├── validators.py        # 입력 검증 (범위 구분자 변환)
+│   ├── compressors.py       # 데이터 압축 (통합)
+│   └── formatters.py        # 출력 포맷팅
+├── generators/
+│   ├── html_generator.py    # HTML 리포트 생성 (분리)
+│   └── prompt_generator.py  # LLM 프롬프트 생성
+├── config/
+│   └── settings.py          # 상수 및 설정
+└── logging/
+    └── logger.py            # 로깅 설정
+```
+
+### 구현 시 주의사항
+1. **MCP 인스턴스 공유**: 모든 모듈에서 동일한 `mcp` 인스턴스 사용
+2. **Import 순서**: `__main__.py` → `mcp_server.py` → `analyzer.py` 순서로 import
+3. **환경 변수**: 기존 환경 변수 지원 유지 (`LLM_ENDPOINTS`, `DB_HOST` 등)
+4. **CLI 호환성**: `python analysis_llm.py --request {...}` 방식 유지
+5. **에러 처리**: 각 모듈에서 적절한 예외 처리 및 로깅
+
+## Host 강화 기능 세부 사항
+
+### Host 진단 컨텍스트 생성
+- **Host 타입 분석**: IP 주소, 호스트명, 기타 형식 자동 분류
+- **필터 조합 분석**: NE/Cell/Host 필터의 다차원적 관계 분석
+- **데이터 커버리지 분석**: N-1/N 기간 데이터 균형 및 신뢰도 평가
+- **타겟 설명 생성**: 필터 조합에 따른 분석 범위 자동 설명
+
+### LLM 프롬프트 Host 컨텍스트 통합
+- **Host 특정 분석 지침 추가**: Host 기반 분석 시 고려사항 명시
+- **타겟 특화 컨텍스트 삽입**: "[Host 타겟 분석 컨텍스트]" 섹션 자동 삽입
+- **Host 메타데이터 포함**: IP 주소, 호스트명, 필터 타입 정보 제공
+
+### 결과 Payload Host 메타데이터 강화
+- **target_scope 필드**: Host 관련 타겟 정보 구조화
+- **filter_metadata 필드**: Host 타입 분포 및 필터 통계
+- **host_analysis_context 필드**: 분석 범위 및 커버리지 정보
+
+## 검증 로직 개선 세부 사항
+
+### 강화된 필터 검증
+- **NE ID 검증**: 정규식 기반 형식 검증 (예: "nvgnb#10000")
+- **Cell ID 검증**: 숫자 범위 및 NE 내 존재 여부 확인
+- **Host ID 검증**: IP 주소, 호스트명, 도메인 형식 구분 검증
+- **데이터베이스 존재 검증**: 실제 DB에 존재하는 값인지 확인
+
+### 폴백 메커니즘
+- **새로운 검증 유틸리티 우선 사용**: `validate_ne_cell_host_filters()` 함수 활용
+- **Import 실패 시 기존 로직 사용**: 하위 호환성 보장
+- **상세한 검증 결과 메타데이터**: 유효/무효 항목 수 및 검증 통계 제공
+
+### 함수 시그니처 확장
+```python
+# 기존
+def fetch_cell_averages_for_period(conn, table, columns, start_dt, end_dt, period_label,
+                                   ne_filters=None, cellid_filters=None)
+
+# 확장
+def fetch_cell_averages_for_period(conn, table, columns, start_dt, end_dt, period_label,
+                                   ne_filters=None, cellid_filters=None, host_filters=None)
+```
+
+## 데이터 모델
+### 토큰 계산 모델
+```python
+class SimpleTokenizer:
+    """간소화된 토큰 계산기"""
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """간단한 토큰 수 추정 (4 chars = 1 token)"""
+        return len(text) // 4
+```
+
+### 압축 유틸리티 모델
+```python
+class DataCompressor:
+    """통합 데이터 압축 유틸리티"""
+    def compact_value(self, value, max_depth: int = 3) -> Any:
+        """재귀적 데이터 압축"""
+        pass
+    
+    def build_results_overview(self, analysis: dict) -> dict:
+        """결과 요약 생성"""
+        pass
+    
+    def compact_analysis_raw(self, raw: dict) -> dict:
+        """LLM 결과 압축"""
+        pass
+```
+
+## API 설계
+### 주요 모듈 인터페이스
+```python
+# mcp_server.py
+class MCPServer:
+    def initialize_server(self) -> FastMCP:
+        """MCP 서버 초기화"""
+    
+    def register_tools(self) -> None:
+        """MCP 도구 등록"""
+
+# database.py
+class DatabaseManager:
+    def get_connection(self, config: dict) -> psycopg2.Connection:
+        """데이터베이스 연결 획득"""
+    
+    def fetch_cell_averages(self, params: dict) -> pd.DataFrame:
+        """셀 평균 데이터 조회"""
+
+# analyzer.py
+class LLMAnalyzer:
+    def analyze_performance(self, data: dict) -> dict:
+        """LLM 분석 실행"""
+    
+    def generate_prompt(self, data: pd.DataFrame) -> str:
+        """분석 프롬프트 생성"""
+```
+
+# Development Roadmap
+
+## Phase 1: 코드 구조 분석 및 설계 (1주)
+### 목표: 현재 코드베이스 완전 분석 및 모듈 설계
+- [ ] 코드 의존성 및 함수 호출 관계 분석
+- [ ] 기능별 책임 분리 및 모듈 경계 정의
+- [ ] 인터페이스 설계 및 데이터 흐름 다이어그램 작성
+- [ ] 단위 테스트 케이스 설계
+- [ ] 마이그레이션 계획 수립
+- [ ] Host 강화 기능 (analysis_llm_host_enhancement.py) 분석 및 통합 계획
+- [ ] 검증 로직 개선 (analysis_llm_validation_patch.py) 분석 및 적용 계획
+- [ ] 기존 코드의 1460-1477 라인 필터 처리 로직 교체 계획
+
+## Phase 2: 코어 모듈 분리 (2주)
+### 목표: 주요 기능을 독립 모듈로 분리
+- [ ] MCP 서버 모듈 (mcp_server.py) 분리 및 최적화
+- [ ] 데이터베이스 모듈 (database.py) 분리 및 연결 풀 적용
+- [ ] 데이터 처리 모듈 (data_processor.py) 분리 및 최적화
+- [ ] 분석 로직 모듈 (analyzer.py) 분리 및 프롬프트 개선
+
+## Phase 3: 유틸리티 모듈 통합 (2주)
+### 목표: 분산된 유틸리티 함수들을 통합 및 강화
+- [ ] 토큰 계산기 간소화 및 통합 (tokenizer.py)
+- [ ] 입력 검증 유틸리티 통합 및 강화 (validators.py)
+  - [ ] NE ID 형식 검증 (정규식 기반)
+  - [ ] Cell ID 범위 검증
+  - [ ] Host ID 형식 검증 (IP/도메인/호스트명)
+  - [ ] 데이터베이스 존재 여부 확인
+  - [ ] 타겟 간 관계 검증
+  - [ ] 검증 결과 메타데이터 제공
+- [ ] 데이터 압축 유틸리티 통합 (compressors.py)
+- [ ] 출력 포맷터 통합 (formatters.py)
+- [ ] Host 진단 컨텍스트 유틸리티 (host_enhancement.py)
+  - [ ] Host 타입 분석 (IP 주소 vs 호스트명)
+  - [ ] 필터 조합 분석
+  - [ ] 데이터 커버리지 분석
+  - [ ] LLM 프롬프트 Host 컨텍스트 추가
+  - [ ] 결과 payload Host 메타데이터 추가
+
+## Phase 4: 생성기 모듈 분리 (1주)
+### 목표: HTML 및 프롬프트 생성 로직 분리
+- [ ] HTML 생성기 모듈 (html_generator.py) 외부 파일로 분리
+- [ ] 프롬프트 생성기 모듈 (prompt_generator.py) 분리 및 최적화
+- [ ] 템플릿 엔진 적용으로 유지보수성 향상
+
+## Phase 5: 입력 처리 유연화 (1주)
+### 목표: 범위 구분자 및 입력 형식 유연화, 검증 로직 강화
+- [ ] 범위 구분자 변환 로직 구현 (-, /, _ → ~)
+- [ ] 입력 형식 검증 강화 및 폴백 메커니즘 구현
+- [ ] 기존 analysis_llm.py 필터 처리 로직 교체 (1460-1477 라인)
+- [ ] 강화된 NE/Cell/Host 검증 유틸리티 통합
+- [ ] fetch_cell_averages_for_period 함수 시그니처 확장 (host_filters 추가)
+- [ ] 검증 메타데이터 수집 및 결과 포함
+- [ ] 에러 메시지 개선 및 사용자 피드백 강화
+
+## Phase 6: 로깅 및 문서화 (1주)
+### 목표: 포괄적 로깅 및 문서화
+- [ ] 전체 함수 및 클래스에 상세 주석 추가
+- [ ] 단계별 로깅 시스템 구현
+- [ ] API 문서 자동 생성
+- [ ] 코드 변경 이력 문서화
+
+## Phase 7: 테스트 및 최적화 (2주)
+### 목표: 품질 검증 및 성능 최적화
+- [ ] 단위 테스트 작성 및 실행
+- [ ] 통합 테스트 수행
+- [ ] Host 강화 기능 통합 테스트
+- [ ] 검증 로직 개선 테스트
+- [ ] 성능 벤치마킹 및 최적화
+- [ ] 메모리 사용량 최적화
+- [ ] 범위 구분자 변환 테스트
+- [ ] 폴백 메커니즘 검증
+
+# Logical Dependency Chain
+
+## Foundation Layer (Phase 1-2)
+1. **모듈 아키텍처 설계**
+   - 현재 코드베이스 완전 분석
+   - 기능별 책임 분리 계획 수립
+   - 인터페이스 및 데이터 흐름 설계
+
+2. **코어 모듈 구현**
+   - MCP 서버 모듈 분리
+   - 데이터베이스 연결 모듈 구현
+   - 데이터 처리 파이프라인 구축
+
+## Enhancement Layer (Phase 3-4)
+3. **유틸리티 통합**
+   - 공통 함수들을 모듈별로 그룹화
+   - 중복 코드 제거 및 표준화
+   - 재사용 가능한 컴포넌트 개발
+
+4. **생성기 분리**
+   - HTML 생성 로직 외부화
+   - 프롬프트 생성 로직 모듈화
+   - 템플릿 기반 접근 방식 적용
+
+## Optimization Layer (Phase 5-7)
+5. **입력 처리 개선**
+   - 유연한 입력 형식 지원
+   - 강화된 검증 메커니즘
+   - 사용자 경험 중심 에러 처리
+
+6. **품질 향상**
+   - 포괄적 로깅 시스템 구축
+   - 상세한 문서화 및 주석 추가
+   - 성능 및 안정성 최적화
+
+# Risks and Mitigations
+
+## 기술적 리스크
+### 모듈 분리 중 기능 손실
+**리스크**: 모듈 분리 과정에서 기존 기능이 손상될 수 있음
+**완화**: 단계별 마이그레이션, 포괄적 테스트, 롤백 계획 수립
+
+### 성능 저하
+**리스크**: 모듈화로 인한 오버헤드 증가
+**완화**: 성능 벤치마킹, 최적화 우선순위 설정, 메모리 프로파일링
+
+### 호환성 문제
+**리스크**: 외부 시스템과의 인터페이스 변경으로 인한 호환성 이슈
+**완화**: 인터페이스 버전 관리, 하위 호환성 유지, 점진적 배포
+
+## 운영 리스크
+### 테스트 커버리지 부족
+**리스크**: 리팩토링 과정에서 테스트가 불충분할 수 있음
+**완화**: TDD 접근 방식 적용, 자동화된 테스트 파이프라인 구축
+
+### 배포 복잡성
+**리스크**: 모듈 분리로 인한 배포 복잡도 증가
+**완화**: CI/CD 파이프라인 개선, 블루-그린 배포 전략 적용
+
+# Appendix
+
+## 현재 코드 구조 분석
+### 주요 함수 및 역할
+- `_analyze_cell_performance_logic()`: 메인 분석 로직 (500+ lines)
+- `parse_time_range()`: 시간 범위 파싱
+- `query_llm()`: LLM API 호출
+- `generate_multitab_html_report()`: HTML 리포트 생성
+- `compact_analysis_raw()`, `build_results_overview()`: 데이터 압축 유틸리티
+
+### 개선 필요 영역
+- 단일 파일 구조 → 모듈별 분리
+- 중복된 유틸리티 함수 통합
+- 복잡한 토큰 계산 로직 간소화
+- 구 스키마 호환성 코드 제거
+- HTML 생성 로직 외부화
+
+## 성능 목표
+### 현재 성능
+- 파일 크기: 1,814 lines
+- 메모리 사용량: 분석당 ~100MB
+- 응답 시간: LLM 호출 포함 ~30초
+
+### 목표 성능
+- 모듈 수: 10개 미만의 독립 모듈
+- 메모리 사용량: 20% 감소
+- 응답 시간: 15% 개선
+- 코드 커버리지: 90%+
+
+## 테스트 전략
+### 단위 테스트
+- 각 모듈별 독립적 테스트
+- Mock을 활용한 외부 의존성 격리
+- 경계값 및 예외 상황 테스트
+
+### 통합 테스트
+- 모듈 간 상호작용 검증
+- End-to-end 시나리오 테스트
+- 성능 및 부하 테스트
+
+### 품질 지표
+- 코드 복잡도: 순환 복잡도 < 10
+- 중복 코드: 0%
+- 유지보수성 지수: A 등급
+</PRD>
